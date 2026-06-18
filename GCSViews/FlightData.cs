@@ -241,6 +241,25 @@ namespace MissionPlanner.GCSViews
 
             InitializeComponent();
 
+            // Restructure layout: tabs span full screen width at bottom; HUD and Map side-by-side at top
+            MainH.Orientation = Orientation.Horizontal;     // outer split becomes top/bottom
+            SubMainLeft.Orientation = Orientation.Vertical; // inner split becomes left/right (HUD | Map)
+            MainH.FixedPanel = FixedPanel.Panel2;           // bottom tabs stay fixed; top area grows with window
+            SubMainLeft.FixedPanel = FixedPanel.None;       // HUD and Map resize proportionally
+
+            // Move tableMap: MainH.Panel2 → SubMainLeft.Panel2
+            MainH.Panel2.Controls.Remove(tableMap);
+            SubMainLeft.Panel2.Controls.Remove(tabControlactions);
+            SubMainLeft.Panel2.Controls.Remove(panel_persistent);
+            SubMainLeft.Panel2.Controls.Add(tableMap);
+
+            // Move tabs to MainH.Panel2 (full-width bottom panel)
+            // Order matters for docking: panel_persistent (Dock=Top) is added last so it docks first
+            MainH.Panel2.Controls.Add(tabControlactions);
+            MainH.Panel2.Controls.Add(panel_persistent);
+            MainH.Panel2.ContextMenuStrip = contextMenuStripactionstab;
+            SubMainLeft.Panel2.ContextMenuStrip = null;
+
             log.Info("Components Done");
 
             instance = this;
@@ -423,6 +442,43 @@ namespace MissionPlanner.GCSViews
 
             tabControlactions.Multiline = Settings.Instance.GetBoolean("tabControlactions_Multiline", false);
 
+            // Owner-draw tab headers to match Denel theme
+            tabControlactions.DrawMode = TabDrawMode.OwnerDrawFixed;
+            tabControlactions.BackColor = ThemeManager.ControlBGColor;
+            MainH.Panel2.BackColor = ThemeManager.ControlBGColor;
+            tabControlactions.DrawItem += tabControlactions_DrawItem;
+            tabControlactions.Paint += tabControlactions_Paint;
+
+            // Add Gauges undock option to the tab panel right-click menu
+            var undockGaugesItem = new ToolStripMenuItem("Undock Gauges") { Name = "undockGaugesToolStripMenuItem" };
+            undockGaugesItem.Click += undockGaugesToolStripMenuItem_Click;
+            contextMenuStripactionstab.Items.Add(undockGaugesItem);
+
+
+        }
+
+        private void tabControlactions_Paint(object sender, PaintEventArgs e)
+        {
+            var tc = (TabControl)sender;
+            using (var brush = new System.Drawing.SolidBrush(ThemeManager.ControlBGColor))
+                e.Graphics.FillRectangle(brush, tc.ClientRectangle);
+        }
+
+        private void tabControlactions_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            var tab = (TabControl)sender;
+            var page = tab.TabPages[e.Index];
+            bool selected = (tab.SelectedIndex == e.Index);
+
+            Color backColor = selected ? ThemeManager.ButBG : ThemeManager.ControlBGColor;
+            Color textColor = selected ? ThemeManager.ButtonTextColor : ThemeManager.TextColor;
+
+            using (var brush = new System.Drawing.SolidBrush(backColor))
+                e.Graphics.FillRectangle(brush, e.Bounds);
+
+            var textRect = new System.Drawing.Rectangle(e.Bounds.X, e.Bounds.Y + 2, e.Bounds.Width, e.Bounds.Height);
+            TextRenderer.DrawText(e.Graphics, page.Text, e.Font, textRect, textColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
 
         public void Activate()
@@ -3288,9 +3344,10 @@ namespace MissionPlanner.GCSViews
 
             if (hud1.Parent == this.SubMainLeft.Panel1)
             {
-                var ht = SubMainLeft.SplitterDistance;
-                if (ht >= hud1.Height + 5 || ht <= hud1.Height - 5)
-                    SubMainLeft.SplitterDistance = hud1.Height;
+                // SubMainLeft is now Vertical (left/right), so track width not height
+                var wd = SubMainLeft.SplitterDistance;
+                if (wd >= hud1.Width + 5 || wd <= hud1.Width - 5)
+                    SubMainLeft.SplitterDistance = hud1.Width;
             }
         }
 
@@ -5122,22 +5179,22 @@ namespace MissionPlanner.GCSViews
             if (this.huddropout)
                 return;
 
-            MainH.Panel2.SuspendLayout();
+            SubMainLeft.Panel2.SuspendLayout();
 
             if (this.SubMainLeft.Panel1.Controls.Contains(hud1))
             {
                 Settings.Instance["HudSwap"] = "true";
-                MainH.Panel2.Controls.Add(hud1);
-                SubMainLeft.Panel1.Controls.Add(tableMap);
+                SubMainLeft.Panel2.Controls.Add(hud1);    // moves hud1 to right panel (Map slot)
+                SubMainLeft.Panel1.Controls.Add(tableMap); // moves tableMap to left panel (HUD slot)
             }
             else
             {
                 Settings.Instance["HudSwap"] = "false";
-                MainH.Panel2.Controls.Add(tableMap);
-                SubMainLeft.Panel1.Controls.Add(hud1);
+                SubMainLeft.Panel2.Controls.Add(tableMap); // moves tableMap back to right
+                SubMainLeft.Panel1.Controls.Add(hud1);    // moves hud1 back to left
             }
 
-            MainH.Panel2.ResumeLayout();
+            SubMainLeft.Panel2.ResumeLayout();
         }
 
         private void swapWithMapToolStripMenuItem_Click(object sender, EventArgs e)
@@ -6120,6 +6177,52 @@ namespace MissionPlanner.GCSViews
             hud1.displayCellVoltage = true;
             hud1.batterycellcount = iCellCount;
         }
+        private bool tabGaugesDetached = false;
+
+        private void undockGaugesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Form dropout = new Form();
+            TabControl tab = new TabControl();
+            dropout.FormBorderStyle = FormBorderStyle.Sizable;
+            dropout.ShowInTaskbar = true;
+            tabGaugesDetached = true;
+            tab.Appearance = TabAppearance.FlatButtons;
+            tab.ItemSize = new Size(0, 0);
+            tab.SizeMode = TabSizeMode.Fixed;
+            tab.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+
+            dropout.Text = "Gauges";
+            dropout.BackColor = ThemeManager.BGColor;
+            tabControlactions.Controls.Remove(tabGauges);
+            tab.Controls.Add(tabGauges);
+            tabGauges.BorderStyle = BorderStyle.None;
+            dropout.FormClosed += dropoutGauges_FormClosed;
+            dropout.Controls.Add(tab);
+
+            // Open on second screen if available, otherwise center on primary
+            if (Screen.AllScreens.Length > 1)
+            {
+                dropout.StartPosition = FormStartPosition.Manual;
+                dropout.Bounds = Screen.AllScreens[1].WorkingArea;
+            }
+            else
+            {
+                dropout.Size = new Size(700, 550);
+                dropout.StartPosition = FormStartPosition.CenterScreen;
+            }
+
+            dropout.Show();
+            (sender as ToolStripMenuItem).Visible = false;
+        }
+
+        private void dropoutGauges_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            tabControlactions.Controls.Add(tabGauges);
+            tabControlactions.SelectedTab = tabGauges;
+            tabGaugesDetached = false;
+            contextMenuStripactionstab.Items["undockGaugesToolStripMenuItem"].Visible = true;
+        }
+
         private bool tabQuickDetached = false;
         private bool tuningwasrightclick;
 

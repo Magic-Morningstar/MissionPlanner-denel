@@ -24,11 +24,11 @@
     <ThemeColor><strColorItemName>BackStageView Button Area</strColorItemName><clrColor Web="#0E0F10" /><strVariableName>BSVButtonAreaBGColor</strVariableName></ThemeColor>
     <ThemeColor><strColorItemName>BSV Unselected Text</strColorItemName><clrColor Web="WhiteSmoke" /><strVariableName>UnselectedTextColour</strVariableName></ThemeColor>
     <ThemeColor><strColorItemName>Horizontal ProgressBar</strColorItemName><clrColor Web="#00BFFF" /><strVariableName>HorizontalPBValueColor</strVariableName></ThemeColor>
-    <ThemeColor><strColorItemName>HUD text and drawings</strColorItemName><clrColor Web="#D4DCE2" /><strVariableName>HudText</strVariableName></ThemeColor>
-    <ThemeColor><strColorItemName>HUD Ground top</strColorItemName><clrColor Web="#2A2620" /><strVariableName>HudGroundTop</strVariableName></ThemeColor>
-    <ThemeColor><strColorItemName>HUD Ground bottom</strColorItemName><clrColor Web="#1C1812" /><strVariableName>HudGroundBot</strVariableName></ThemeColor>
-    <ThemeColor><strColorItemName>HUD Sky top</strColorItemName><clrColor Web="#1A1D20" /><strVariableName>HudSkyTop</strVariableName></ThemeColor>
-    <ThemeColor><strColorItemName>HUD Sky bottom</strColorItemName><clrColor Web="#23282D" /><strVariableName>HudSkyBot</strVariableName></ThemeColor>
+    <ThemeColor><strColorItemName>HUD text and drawings</strColorItemName><clrColor Web="#F5ECD7" /><strVariableName>HudText</strVariableName></ThemeColor>
+    <ThemeColor><strColorItemName>HUD Ground top</strColorItemName><clrColor Web="#C8A96E" /><strVariableName>HudGroundTop</strVariableName></ThemeColor>
+    <ThemeColor><strColorItemName>HUD Ground bottom</strColorItemName><clrColor Web="#8B6914" /><strVariableName>HudGroundBot</strVariableName></ThemeColor>
+    <ThemeColor><strColorItemName>HUD Sky top</strColorItemName><clrColor Web="#87CEEB" /><strVariableName>HudSkyTop</strVariableName></ThemeColor>
+    <ThemeColor><strColorItemName>HUD Sky bottom</strColorItemName><clrColor Web="#D4EAF7" /><strVariableName>HudSkyBot</strVariableName></ThemeColor>
   </colors>
   <iconSet>BurnKermitIconSet</iconSet>
   <terminalTheming>true</terminalTheming>
