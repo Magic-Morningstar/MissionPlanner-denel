@@ -5296,7 +5296,7 @@ namespace MissionPlanner.GCSViews
             if (tabGauges.Width < 500)
             {
                 Gvspeed.Visible = false;
-                mywidth = tabGauges.Width / 3;
+                mywidth = Math.Min(tabGauges.Width / 3, tabGauges.Height);
 
                 Gspeed.Width   = mywidth; Gspeed.Height   = mywidth;
                 Galt.Width     = mywidth; Galt.Height     = mywidth;
@@ -5307,7 +5307,7 @@ namespace MissionPlanner.GCSViews
             else
             {
                 Gvspeed.Visible = true;
-                mywidth = tabGauges.Width / 4;
+                mywidth = Math.Min(tabGauges.Width / 4, tabGauges.Height);
 
                 Gvspeed.Width  = mywidth; Gvspeed.Height  = mywidth;
                 Gspeed.Width   = mywidth; Gspeed.Height   = mywidth;
@@ -6196,15 +6196,17 @@ namespace MissionPlanner.GCSViews
             tab.Appearance = TabAppearance.FlatButtons;
             tab.ItemSize = new Size(0, 0);
             tab.SizeMode = TabSizeMode.Fixed;
-            tab.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dropout.Text = "Messages";
             dropout.BackColor = ThemeManager.BGColor;
             tabControlactions.Controls.Remove(tabPagemessages);
             tab.Controls.Add(tabPagemessages);
             tabPagemessages.BorderStyle = BorderStyle.None;
             dropout.FormClosed += dropoutMessages_FormClosed;
-            dropout.Controls.Add(tab);
             dropout.Size = new Size(600, 400);
+            dropout.Controls.Add(tab);
+            tab.Location = new Point(0, -22);
+            tab.Size = new Size(dropout.ClientSize.Width, dropout.ClientSize.Height + 22);
+            tab.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dropout.StartPosition = FormStartPosition.CenterScreen;
             dropout.Show();
             (sender as ToolStripMenuItem).Visible = false;
@@ -6228,7 +6230,6 @@ namespace MissionPlanner.GCSViews
             tab.Appearance = TabAppearance.FlatButtons;
             tab.ItemSize = new Size(0, 0);
             tab.SizeMode = TabSizeMode.Fixed;
-            tab.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
             dropout.Text = "Gauges";
             dropout.BackColor = ThemeManager.BGColor;
@@ -6236,7 +6237,6 @@ namespace MissionPlanner.GCSViews
             tab.Controls.Add(tabGauges);
             tabGauges.BorderStyle = BorderStyle.None;
             dropout.FormClosed += dropoutGauges_FormClosed;
-            dropout.Controls.Add(tab);
 
             // Open on second screen if available, otherwise center on primary
             if (Screen.AllScreens.Length > 1)
@@ -6249,6 +6249,11 @@ namespace MissionPlanner.GCSViews
                 dropout.Size = new Size(700, 550);
                 dropout.StartPosition = FormStartPosition.CenterScreen;
             }
+
+            dropout.Controls.Add(tab);
+            tab.Location = new Point(0, -22);
+            tab.Size = new Size(dropout.ClientSize.Width, dropout.ClientSize.Height + 22);
+            tab.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
             dropout.Show();
             (sender as ToolStripMenuItem).Visible = false;
