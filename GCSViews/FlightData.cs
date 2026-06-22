@@ -278,6 +278,8 @@ namespace MissionPlanner.GCSViews
             myhud = hud1;
             MainHcopy = MainH;
 
+            SubMainLeft.Resize += SubMainLeft_Resize;
+
             mymap.Paint += mymap_Paint;
 
             // populate the unmodified base list
@@ -3347,15 +3349,15 @@ namespace MissionPlanner.GCSViews
 
         private void hud1_Resize(object sender, EventArgs e)
         {
-            Console.WriteLine("HUD resize " + hud1.Width + " " + hud1.Height); // +"\n"+ System.Environment.StackTrace);
+            Console.WriteLine("HUD resize " + hud1.Width + " " + hud1.Height);
+        }
 
-            if (hud1.Parent == this.SubMainLeft.Panel1)
-            {
-                // SubMainLeft is now Vertical (left/right), so track width not height
-                var wd = SubMainLeft.SplitterDistance;
-                if (wd >= hud1.Width + 5 || wd <= hud1.Width - 5)
-                    SubMainLeft.SplitterDistance = hud1.Width;
-            }
+        private void SubMainLeft_Resize(object sender, EventArgs e)
+        {
+            if (SubMainLeft.Width <= 0 || SubMainLeft.Height <= 0) return;
+            int target = Math.Min(SubMainLeft.Height, SubMainLeft.Width / 2);
+            if (Math.Abs(SubMainLeft.SplitterDistance - target) > 4)
+                SubMainLeft.SplitterDistance = target;
         }
 
         private void hud1_vibeclick(object sender, EventArgs e)
