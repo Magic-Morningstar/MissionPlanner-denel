@@ -454,6 +454,11 @@ namespace MissionPlanner.GCSViews
             undockGaugesItem.Click += undockGaugesToolStripMenuItem_Click;
             contextMenuStripactionstab.Items.Add(undockGaugesItem);
 
+            // Add Messages undock option to the tab panel right-click menu
+            var undockMessagesItem = new ToolStripMenuItem("Undock Messages") { Name = "undockMessagesToolStripMenuItem" };
+            undockMessagesItem.Click += undockMessagesToolStripMenuItem_Click;
+            contextMenuStripactionstab.Items.Add(undockMessagesItem);
+
 
         }
 
@@ -2738,6 +2743,8 @@ namespace MissionPlanner.GCSViews
 
         private void FlightData_Load(object sender, EventArgs e)
         {
+            tabPage1_Resize(tabGauges, EventArgs.Empty);
+
             POI.POIModified += POI_POIModified;
 
             if (!Settings.Instance.ContainsKey("ShowNoFly") || Settings.Instance.GetBoolean("ShowNoFly"))
@@ -5272,14 +5279,13 @@ namespace MissionPlanner.GCSViews
                 else
                     myheight = tabGauges.Width / 2;
 
-                Gvspeed.Height = myheight;
-                Gspeed.Height = myheight;
-                Galt.Height = myheight;
-                Gheading.Height = myheight;
+                Gvspeed.Width = myheight; Gvspeed.Height = myheight;
+                Gspeed.Width  = myheight; Gspeed.Height  = myheight;
+                Galt.Width    = myheight; Galt.Height    = myheight;
+                Gheading.Width= myheight; Gheading.Height= myheight;
 
                 Gvspeed.Location = new Point(0, 0);
                 Gspeed.Location = new Point(Gvspeed.Right, 0);
-
 
                 Galt.Location = new Point(0, Gspeed.Bottom);
                 Gheading.Location = new Point(Galt.Right, Gspeed.Bottom);
@@ -5292,9 +5298,9 @@ namespace MissionPlanner.GCSViews
                 Gvspeed.Visible = false;
                 mywidth = tabGauges.Width / 3;
 
-                Gspeed.Height = mywidth;
-                Galt.Height = mywidth;
-                Gheading.Height = mywidth;
+                Gspeed.Width   = mywidth; Gspeed.Height   = mywidth;
+                Galt.Width     = mywidth; Galt.Height     = mywidth;
+                Gheading.Width = mywidth; Gheading.Height = mywidth;
 
                 Gspeed.Location = new Point(0, 0);
             }
@@ -5303,10 +5309,10 @@ namespace MissionPlanner.GCSViews
                 Gvspeed.Visible = true;
                 mywidth = tabGauges.Width / 4;
 
-                Gvspeed.Height = mywidth;
-                Gspeed.Height = mywidth;
-                Galt.Height = mywidth;
-                Gheading.Height = mywidth;
+                Gvspeed.Width  = mywidth; Gvspeed.Height  = mywidth;
+                Gspeed.Width   = mywidth; Gspeed.Height   = mywidth;
+                Galt.Width     = mywidth; Galt.Height     = mywidth;
+                Gheading.Width = mywidth; Gheading.Height = mywidth;
 
                 Gvspeed.Location = new Point(0, 0);
                 Gspeed.Location = new Point(Gvspeed.Right, 0);
@@ -6178,6 +6184,39 @@ namespace MissionPlanner.GCSViews
             hud1.batterycellcount = iCellCount;
         }
         private bool tabGaugesDetached = false;
+        private bool tabMessagesDetached = false;
+
+        private void undockMessagesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Form dropout = new Form();
+            TabControl tab = new TabControl();
+            dropout.FormBorderStyle = FormBorderStyle.Sizable;
+            dropout.ShowInTaskbar = true;
+            tabMessagesDetached = true;
+            tab.Appearance = TabAppearance.FlatButtons;
+            tab.ItemSize = new Size(0, 0);
+            tab.SizeMode = TabSizeMode.Fixed;
+            tab.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            dropout.Text = "Messages";
+            dropout.BackColor = ThemeManager.BGColor;
+            tabControlactions.Controls.Remove(tabPagemessages);
+            tab.Controls.Add(tabPagemessages);
+            tabPagemessages.BorderStyle = BorderStyle.None;
+            dropout.FormClosed += dropoutMessages_FormClosed;
+            dropout.Controls.Add(tab);
+            dropout.Size = new Size(600, 400);
+            dropout.StartPosition = FormStartPosition.CenterScreen;
+            dropout.Show();
+            (sender as ToolStripMenuItem).Visible = false;
+        }
+
+        private void dropoutMessages_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            tabControlactions.Controls.Add(tabPagemessages);
+            tabControlactions.SelectedTab = tabPagemessages;
+            tabMessagesDetached = false;
+            contextMenuStripactionstab.Items["undockMessagesToolStripMenuItem"].Visible = true;
+        }
 
         private void undockGaugesToolStripMenuItem_Click(object sender, EventArgs e)
         {

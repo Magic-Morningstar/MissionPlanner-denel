@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
 
@@ -9,6 +10,9 @@ namespace MissionPlanner
         public Splash()
         {
             InitializeComponent();
+
+            label1.Text = "By Denel Aerospace";
+            label1.ForeColor = Color.FromArgb(0x00, 0xBF, 0xFF);
 
             string strVersion = typeof(Splash).GetType().Assembly.GetName().Version.ToString();
 
