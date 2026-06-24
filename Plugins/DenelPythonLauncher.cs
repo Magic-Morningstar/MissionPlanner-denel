@@ -21,12 +21,12 @@ namespace MissionPlanner.Plugin
             try
             {
                 string exeDir    = Path.GetDirectoryName(Application.ExecutablePath);
-                string scriptDir = Path.Combine(exeDir, "plugins", "Misson_PlannerScripts");
-                string scriptPath = Path.Combine(scriptDir, "Heart.py");
+                string scriptDir = Path.Combine(exeDir, "plugins", "UAV_");
+                string scriptPath = Path.Combine(scriptDir, "main.py");
 
                 if (!File.Exists(scriptPath))
                 {
-                    Console.WriteLine("[DenelPythonLauncher] Heart.py not found at: " + scriptPath);
+                    Console.WriteLine("[DenelPythonLauncher] main.py not found at: " + scriptPath);
                     return true;
                 }
 
@@ -35,7 +35,7 @@ namespace MissionPlanner.Plugin
                 var psi = new ProcessStartInfo
                 {
                     FileName               = "python",
-                    Arguments              = "-u Heart.py",   // -u = unbuffered so log updates in real time
+                    Arguments              = "-u main.py",   // -u = unbuffered so log updates in real time
                     WorkingDirectory       = scriptDir,
                     UseShellExecute        = false,
                     CreateNoWindow         = true,
@@ -52,13 +52,13 @@ namespace MissionPlanner.Plugin
                 _pythonProcess.BeginOutputReadLine();
                 _pythonProcess.BeginErrorReadLine();
 
-                Console.WriteLine("[DenelPythonLauncher] Heart.py started (PID " + _pythonProcess.Id + "), log: " + logPath);
+                Console.WriteLine("[DenelPythonLauncher] main.py started (PID " + _pythonProcess.Id + "), log: " + logPath);
 
                 Application.ApplicationExit += (s, e) => KillScript();
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[DenelPythonLauncher] Failed to start Heart.py: " + ex.Message);
+                Console.WriteLine("[DenelPythonLauncher] Failed to start main.py: " + ex.Message);
             }
 
             return true;
@@ -77,7 +77,7 @@ namespace MissionPlanner.Plugin
                 if (_pythonProcess != null && !_pythonProcess.HasExited)
                 {
                     _pythonProcess.Kill();
-                    Console.WriteLine("[DenelPythonLauncher] Heart.py terminated");
+                    Console.WriteLine("[DenelPythonLauncher] main.py terminated");
                 }
             }
             catch { }
