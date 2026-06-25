@@ -529,9 +529,10 @@ namespace MissionPlanner.GCSViews
             Galt.BackColor     = Color.Transparent;
             Gspeed.BackColor   = Color.Transparent;
             Gvspeed.BackColor  = Color.Transparent;
-            Gheading.BackColor = Color.Transparent;
+            Gheading.BackColor = Color.Black;
             tabGauges.UseVisualStyleBackColor = false;
             tabGauges.BackColor = gaugeBg;
+            tabGauges.Paint += (s, e) => e.Graphics.FillRectangle(Brushes.Black, tabGauges.ClientRectangle);
 
             // Add Gauges undock option to the tab panel right-click menu
             var undockGaugesItem = new ToolStripMenuItem("Undock Gauges") { Name = "undockGaugesToolStripMenuItem" };
