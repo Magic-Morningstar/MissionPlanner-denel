@@ -526,10 +526,10 @@ namespace MissionPlanner.GCSViews
             Gvspeed.BackgroundImage  = null;
             Gheading.BackgroundImage = null;
             Color gaugeBg = ThemeManager.ControlBGColor;
-            Galt.BackColor     = gaugeBg;
-            Gspeed.BackColor   = gaugeBg;
-            Gvspeed.BackColor  = gaugeBg;
-            Gheading.BackColor = gaugeBg;
+            Galt.BackColor     = Color.Transparent;
+            Gspeed.BackColor   = Color.Transparent;
+            Gvspeed.BackColor  = Color.Transparent;
+            Gheading.BackColor = Color.Transparent;
             tabGauges.UseVisualStyleBackColor = false;
             tabGauges.BackColor = gaugeBg;
 
