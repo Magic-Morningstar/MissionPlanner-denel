@@ -281,9 +281,9 @@ Compress-Archive -Path "bin\Release\net461\*" -DestinationPath "DenelGCS_Release
 
 ---
 
-### Buzzer notification system (planned — not yet implemented)
+### Buzzer notification system (GCS side — COMPLETE)
 
-A hardware buzzer attached to the STM32 will be controlled by the Python script. When the buzzer fires, the GCS must show a dismissible alert; when the operator dismisses it, the Python script stops the buzzer.
+A hardware buzzer attached to the STM32 is controlled by the Python script. When a flight condition is detected, the Python script sends an alert to the GCS; the GCS shows a dismissible dialog; after the operator dismisses it, the Python script stops the buzzer.
 
 **Communication channel:** TCP socket on `127.0.0.1:5764` (separate from MAVLink on 5763).
 
@@ -291,18 +291,26 @@ A hardware buzzer attached to the STM32 will be controlled by the Python script.
 
 | Direction | Message | Meaning |
 |---|---|---|
-| Python → GCS | `BUZZER_ALERT:some message\n` | Activate buzzer + show dialog |
+| Python → GCS | `BUZZER_ALERT:some message\n` | Show alert dialog |
 | GCS → Python | `BUZZER_ACK\n` | Operator dismissed — stop buzzer |
 
-**C# side (`plugins/DenelPythonLauncher.cs`):**
-- Start a `TcpListener` on `127.0.0.1:5764` in a background thread launched from `Loaded()`
-- On connection: read lines; on `BUZZER_ALERT:msg` call `MainV2.instance.Invoke(...)` to show `CustomMessageBox.Show(msg, "GCS Alert", OK, Warning)` — `Invoke` (synchronous) blocks until user clicks OK
-- After `Invoke` returns, write `BUZZER_ACK\n` back to the client
-- Set `_notifRunning = false` and stop listener in `Exit()`
+**C# side — `plugins/DenelPythonLauncher.cs` (implemented):**
+- `_notifThread` starts unconditionally at the top of `Loaded()` — server always runs even if UAV_ scripts are absent
+- `TcpListener` on `127.0.0.1:5764`; each connection handled in its own background thread
+- On `BUZZER_ALERT:msg`: calls `MainV2.instance.Invoke(...)` → `ShowBuzzerAlert(msg)` — synchronous, blocks until operator dismisses
+- After dismiss: writes `BUZZER_ACK\n` back to client
+- `_notifRunning = false` + listener stopped in `Exit()`
 
-**Python side (`plugins/UAV_/main.py` or a new `notifications.py`):**
+**Alert dialog (`ShowBuzzerAlert` in `DenelPythonLauncher.cs`):**
+- 500×280px borderless form; 3px border = `frm.BackColor`
+- Flashes cyan (`#00BFFF`) ↔ red (`#FF3300`) at 500ms using `System.Windows.Forms.Timer`
+- Cyan title strip "GCS ALERT" at top
+- Windows warning icon (48×48) left of message text
+- Cyan OK button, dark text; Enter/Escape also close the dialog
+- Always centred on `Screen.PrimaryScreen` regardless of HUD/secondary screen
+
+**Python side — `plugins/UAV_/notifications.py` (implemented):**
 ```python
-import socket
 from config import GCS_NOTIFICATION_PORT  # = 5764
 
 def send_buzzer_alert(message: str) -> bool:
@@ -311,12 +319,74 @@ def send_buzzer_alert(message: str) -> bool:
         ack = s.makefile().readline().strip()
         return ack == "BUZZER_ACK"
 ```
-Call `send_buzzer_alert(...)` when the buzzer condition is detected; after it returns `True`, send the stop-buzzer command to the STM32.
 
-**Testing without hardware:**
+**Test without hardware (MissionPlanner must be running):**
 ```powershell
 python -c "import socket; s=socket.create_connection(('127.0.0.1',5764)); s.sendall(b'BUZZER_ALERT:Test alert\n'); print(s.makefile().readline())"
 ```
-Expected: dialog appears in GCS; terminal prints `BUZZER_ACK` after OK is clicked.
+Expected: themed flashing dialog appears; terminal prints `BUZZER_ACK` after OK is clicked.
 
-**Note:** The specific flight condition that triggers the buzzer (low battery, GPS loss, STM32 bitmask bit, etc.) is a flight-operations decision to be confirmed before implementation.
+---
+
+### Buzzer hardware wiring (PENDING — Python + STM32 side)
+
+Everything below still needs to be done when the STM32 hardware and buzzer are available.
+
+#### 1. Define a buzzer bit in the STM32 bitmask
+No buzzer bit is currently defined. Agree on the bit number with the STM32 firmware developer and add it to both the firmware and:
+```python
+# plugins/UAV_/protocol/bit_definitions.py
+BUZZER_BIT = 14  # confirm with STM32 firmware developer
+```
+
+#### 2. Add buzzer on/off helpers to the packet builder
+`plugins/UAV_/serial/packet_builder.py` already handles the bitmask for arm/RTL etc. Add two helpers that set/clear `BUZZER_BIT` using the same pattern.
+
+#### 3. Wire the trigger into the Python control loop (`main.py`)
+
+Three things are needed:
+
+**a) Detect the MAVLink condition** (battery is the most likely first trigger):
+```python
+battery = vehicle.battery_remaining  # from MAVLink SYS_STATUS
+if battery < config.SAFE_BATTERY_LEVEL and not _buzzer_active:
+    ...
+```
+
+**b) Prevent repeat alerts** — without a debounce flag every loop cycle fires an alert:
+```python
+_buzzer_active = False  # module-level flag
+
+if battery < config.SAFE_BATTERY_LEVEL and not _buzzer_active:
+    _buzzer_active = True
+    send_buzzer_on_to_stm32()
+    send_buzzer_alert("Low Battery!")   # blocks until operator clicks OK
+    send_buzzer_off_to_stm32()
+    _buzzer_active = False
+```
+
+**c) Run the alert in a background thread** — `send_buzzer_alert()` blocks while the dialog is open. Calling it on the main control loop thread pauses MAVLink heartbeats during the alert:
+```python
+import threading
+threading.Thread(
+    target=_handle_buzzer_alert,
+    args=("Low Battery!",),
+    daemon=True
+).start()
+```
+
+#### 4. Config changes on the day
+
+| Setting | File | What to change |
+|---|---|---|
+| `SERIAL_PORT` | `config.py` | `COM7` → actual STM32 COM port |
+| `MAVLINK_CONNECTION` | `config.py` | Keep `tcp:127.0.0.1:5763` for hardware; use `5762` for SITL only |
+| `SAFE_BATTERY_LEVEL` | `config.py` | Confirm `20`% threshold with flight team |
+| `BUZZER_BIT` | `bit_definitions.py` | New entry — confirm bit number with STM32 firmware |
+
+#### Potential issues to watch for
+
+- **Threading:** Always call `send_buzzer_alert()` from a background thread, never the main MAVLink loop.
+- **Debounce reset:** Decide when `_buzzer_active` resets — after dismiss (current plan) or after condition clears. Resetting only after dismiss prevents re-alerts while the condition still exists.
+- **Multiple conditions:** Each alert condition (low battery, GPS loss, etc.) needs its own flag to avoid one condition's flag-reset unblocking another.
+- **STM32 buzzer timeout:** If the serial connection drops while the buzzer is on, it may stay on indefinitely. The STM32 firmware should auto-stop the buzzer if no packet is received within a few seconds.
