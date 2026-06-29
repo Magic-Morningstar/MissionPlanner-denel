@@ -151,6 +151,8 @@ MainH (top/bottom SplitContainer — FixedPanel.Panel2 keeps tabs fixed)
 
 **HUD proportional resize:** `SubMainLeft_Resize` handler sets `SplitterDistance = Math.Min(SubMainLeft.Height, SubMainLeft.Width / 2)` — keeps the HUD panel square, map gets the rest.
 
+**HUD auto-undock on startup:** When two monitors are detected (`Screen.AllScreens.Length > 1`), `FlightData_Load` calls `AutoUndockHUD()` via `BeginInvoke` (deferred until after first paint). `AutoUndockHUD()` collapses `SubMainLeft.Panel1`, creates a borderless `Form`, moves `hud1` (Dock=Fill) into it, positions it at `Screen.AllScreens[1].Bounds.Location`, and maximizes it. `dropout_FormClosed` re-attaches `hud1` and un-collapses the panel. The `huddropout` bool prevents double-undocking.
+
 ---
 
 ### Tab strip (`GCSViews/FlightData.cs`)
@@ -162,12 +164,28 @@ tabControlactions.DrawItem += tabControlactions_DrawItem;
 ```
 Selected tabs paint in `ThemeManager.ButBG` (cyan); unselected in `ThemeManager.ControlBGColor`. Right-clicking the tab strip shows the undock context menu.
 
-### Gauges tab resize (`GCSViews/FlightData.cs` — `tabPage1_Resize`)
+### Gauges tab (`GCSViews/FlightData.cs`)
 
-Gauges resize proportionally. Size is capped so they never exceed the available panel height:
-- Wide mode (≥500px): `mywidth = Math.Min(tabGauges.Width / 4, tabGauges.Height)`
-- Narrow mode (<500px): `mywidth = Math.Min(tabGauges.Width / 3, tabGauges.Height)`
-- Square mode (aspect ratio 0.5–1.9): `myheight = min(Height, Width) / 2`
+Seven gauges are present — four from the designer, three added programmatically in the constructor:
+
+| Field | Label | Binding | Scale |
+|---|---|---|---|
+| `Gvspeed` | VSI | `verticalspeed` | designer |
+| `Gspeed` | Speed | `airspeed`/`groundspeed` | designer |
+| `Galt` | Alt | `alt` | designer |
+| `Gheading` | Heading (HSI) | compass | designer |
+| `Gwpdist` | WP Dist | `wp_dist` | 0–1000 m |
+| `GdistHome` | Home | `DistToHome` | 0–2000 m |
+| `GbattRemaining` | Batt % | `battery_remaining` | 0–100 % |
+
+**Background:** The four designer gauges had embedded JPEG face images in `FlightData.resx` that painted over `BackColor`. These are nulled at runtime (`BackgroundImage = null`). All AGauge controls use `BackColor = Color.Transparent` (renders black via their UserPaint offscreen bitmap). The HSI (`Gheading`) does not use UserPaint so it gets `BackColor = Color.Black` explicitly. The tab itself gets a `Paint` event that force-fills black to override WinForms visual-style rendering.
+
+**Scale line radii:** All gauges use `ScaleLinesMajorOuterRadius = 60`, `ScaleLinesInterOuterRadius = 60`, `ScaleLinesMinorOuterRadius = 60` — matching the designer gauges. Do not set these to 70 (BaseArcRadius) or the tick marks will be overlong.
+
+**Resize (`tabPage1_Resize`):** Null-guarded on `Gwpdist`. Three layout branches:
+- Wide (≥500px): all 7 in a row — `mywidth = Math.Min(Width/7, Height)`
+- Narrow (<500px): 3 visible (Gspeed, Galt, Gheading) — `mywidth = Math.Min(Width/3, Height)`
+- Square (aspect ratio 0.5–1.9): 4+3 grid — top row (Gvspeed, Gspeed, Galt, Gheading), bottom row (Gwpdist, GdistHome, GbattRemaining); `myheight = Math.Min(Height/2, Width/4)`
 
 ### Undock — Gauges and Messages (`GCSViews/FlightData.cs`)
 
@@ -260,3 +278,45 @@ Compress-Archive -Path "bin\Release\net461\*" -DestinationPath "DenelGCS_Release
 **Target machine requirements:** Windows 10/11, Python 3 + `pip install pymavlink pyserial`. No installer needed — unzip and run `MissionPlanner.exe`. Apply Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
 
 **Auto-connect (future):** `ExtLibs/Utilities/AutoConnect.cs` already supports TCP auto-connect. To enable it, set `Enabled = true` on the relevant `ConnectionInfo` entry and set the target IP/port. No other code changes needed.
+
+---
+
+### Buzzer notification system (planned — not yet implemented)
+
+A hardware buzzer attached to the STM32 will be controlled by the Python script. When the buzzer fires, the GCS must show a dismissible alert; when the operator dismisses it, the Python script stops the buzzer.
+
+**Communication channel:** TCP socket on `127.0.0.1:5764` (separate from MAVLink on 5763).
+
+**Protocol (simple text lines):**
+
+| Direction | Message | Meaning |
+|---|---|---|
+| Python → GCS | `BUZZER_ALERT:some message\n` | Activate buzzer + show dialog |
+| GCS → Python | `BUZZER_ACK\n` | Operator dismissed — stop buzzer |
+
+**C# side (`plugins/DenelPythonLauncher.cs`):**
+- Start a `TcpListener` on `127.0.0.1:5764` in a background thread launched from `Loaded()`
+- On connection: read lines; on `BUZZER_ALERT:msg` call `MainV2.instance.Invoke(...)` to show `CustomMessageBox.Show(msg, "GCS Alert", OK, Warning)` — `Invoke` (synchronous) blocks until user clicks OK
+- After `Invoke` returns, write `BUZZER_ACK\n` back to the client
+- Set `_notifRunning = false` and stop listener in `Exit()`
+
+**Python side (`plugins/UAV_/main.py` or a new `notifications.py`):**
+```python
+import socket
+from config import GCS_NOTIFICATION_PORT  # = 5764
+
+def send_buzzer_alert(message: str) -> bool:
+    with socket.create_connection(('127.0.0.1', GCS_NOTIFICATION_PORT), timeout=5) as s:
+        s.sendall(f"BUZZER_ALERT:{message}\n".encode())
+        ack = s.makefile().readline().strip()
+        return ack == "BUZZER_ACK"
+```
+Call `send_buzzer_alert(...)` when the buzzer condition is detected; after it returns `True`, send the stop-buzzer command to the STM32.
+
+**Testing without hardware:**
+```powershell
+python -c "import socket; s=socket.create_connection(('127.0.0.1',5764)); s.sendall(b'BUZZER_ALERT:Test alert\n'); print(s.makefile().readline())"
+```
+Expected: dialog appears in GCS; terminal prints `BUZZER_ACK` after OK is clicked.
+
+**Note:** The specific flight condition that triggers the buzzer (low battery, GPS loss, STM32 bitmask bit, etc.) is a flight-operations decision to be confirmed before implementation.
