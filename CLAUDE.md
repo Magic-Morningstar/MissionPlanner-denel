@@ -330,63 +330,107 @@ Expected: themed flashing dialog appears; terminal prints `BUZZER_ACK` after OK 
 
 ### Buzzer hardware wiring (PENDING — Python + STM32 side)
 
-Everything below still needs to be done when the STM32 hardware and buzzer are available.
+Everything below still needs to be done when the STM32 hardware and buzzer are available.  
+Requirements sourced from `C:\Users\denel\Desktop\VTOL\Copy of vtol_control.xlsx`.
 
-#### 1. Define a buzzer bit in the STM32 bitmask
-No buzzer bit is currently defined. Agree on the bit number with the STM32 firmware developer and add it to both the firmware and:
-```python
-# plugins/UAV_/protocol/bit_definitions.py
-BUZZER_BIT = 14  # confirm with STM32 firmware developer
+#### Severity scale (from spec)
+
+| Scale | Buzzer behaviour | GCS popup? |
+|---|---|---|
+| 10 | Very loud buzzer for X seconds | Yes |
+| 8–9 | Very loud buzzer | Yes |
+| 7 | Loud 3-beep sound | Yes |
+| 6 | 2 high beeps | Yes |
+| 5 | 1 high beep | Yes |
+| 4 | Medium beep | Yes |
+| 3 | Low beep | Yes |
+| 2 | No buzzer | Error msg only |
+| 1 | Nothing | No notification |
+
+#### All alerts requiring buzzer + GCS popup
+
+**Performance (sheet 4.3.1):**
+
+| Req | Condition | Scale | MAVLink source | Threshold |
+|---|---|---|---|---|
+| PF001 | Airspeed too high | 10 | `VFR_HUD.airspeed` | ≥ 33.33 m/s (120 km/h) |
+| PF002 | Airspeed too low / near stall | 10 | `VFR_HUD.airspeed` | ≤ 16.0 m/s (57.6 km/h) |
+| PF003 | Altitude > service ceiling | 10 | `VFR_HUD.alt` (ASL) | ≥ 3000 m |
+| PF007 | Height > standard operating ceiling | 4 | AGL estimate | > 120 m AGL |
+| PF008 | Height > extended operating ceiling | 6 | AGL estimate | > 300 m AGL |
+| PF009 | Climb rate excessive | **1** | `VFR_HUD.climb` | > 4 m/s — **no action** |
+
+**Environmental (sheet 4.3.2):**
+
+| Req | Condition | Scale | MAVLink source | Threshold |
+|---|---|---|---|---|
+| ENV001 | Wind speed too high | 8 | `WIND.speed` | > 12 m/s |
+
+**Navigation (sheet 4.3.6):**
+
+| Req | Condition | Scale | MAVLink source | Threshold |
+|---|---|---|---|---|
+| NAV002 | Geo-fence breach | 10 | `FENCE_STATUS.breach_status` | != 0 |
+| NAV004 | Air traffic within 500 m | 8 | `ADSB_VEHICLE` | distance < 500 m |
+| NAV003 | Altitude too low — ground proximity | 7 | AGL estimate | < 10 m AGL |
+| NAV001 | Deviation from flight path | 5 | `NAV_CONTROLLER_OUTPUT.xtrack_error` | > 3 m |
+
+**AGL note:** ArduPilot does not expose a direct AGL field. Best approaches in order of preference:
+1. `TERRAIN_REPORT.current_height` (requires terrain data loaded on vehicle)
+2. `RANGEFINDER.distance` if a rangefinder is fitted
+3. `VFR_HUD.alt` minus home altitude (least accurate — ASL-based estimate)
+
+#### Protocol change required
+
+The current protocol `BUZZER_ALERT:message\n` carries no severity. Change to:
 ```
-
-#### 2. Add buzzer on/off helpers to the packet builder
-`plugins/UAV_/serial/packet_builder.py` already handles the bitmask for arm/RTL etc. Add two helpers that set/clear `BUZZER_BIT` using the same pattern.
-
-#### 3. Wire the trigger into the Python control loop (`main.py`)
-
-Three things are needed:
-
-**a) Detect the MAVLink condition** (battery is the most likely first trigger):
-```python
-battery = vehicle.battery_remaining  # from MAVLink SYS_STATUS
-if battery < config.SAFE_BATTERY_LEVEL and not _buzzer_active:
-    ...
+BUZZER_ALERT:<scale>:<message>\n
 ```
+e.g. `BUZZER_ALERT:10:Airspeed critical — 125 km/h\n`
 
-**b) Prevent repeat alerts** — without a debounce flag every loop cycle fires an alert:
-```python
-_buzzer_active = False  # module-level flag
+**Files to update:**
+- `plugins/UAV_/notifications.py` — add `scale` parameter to `send_buzzer_alert(scale, message)`
+- `plugins/DenelPythonLauncher.cs` — parse scale from the message; vary dialog flash speed for scale ≥ 8 vs lower
+- `plugins/UAV_/config.py` — add threshold constants (speeds, altitudes) alongside existing `SAFE_BATTERY_LEVEL`
 
-if battery < config.SAFE_BATTERY_LEVEL and not _buzzer_active:
-    _buzzer_active = True
-    send_buzzer_on_to_stm32()
-    send_buzzer_alert("Low Battery!")   # blocks until operator clicks OK
-    send_buzzer_off_to_stm32()
-    _buzzer_active = False
-```
+#### Python implementation steps
 
-**c) Run the alert in a background thread** — `send_buzzer_alert()` blocks while the dialog is open. Calling it on the main control loop thread pauses MAVLink heartbeats during the alert:
-```python
-import threading
-threading.Thread(
-    target=_handle_buzzer_alert,
-    args=("Low Battery!",),
-    daemon=True
-).start()
-```
+1. **Define a buzzer bit in the STM32 bitmask** — agree bit number with STM32 firmware developer, add `BUZZER_BIT` to `plugins/UAV_/protocol/bit_definitions.py`
+2. **Add buzzer on/off helpers** to `plugins/UAV_/serial/packet_builder.py` (same pattern as arm/disarm)
+3. **Add threshold constants** to `config.py`:
+   - `MAX_AIRSPEED_MS = 33.33` (120 km/h)
+   - `MIN_AIRSPEED_MS = 16.0` (57.6 km/h)
+   - `MAX_ALT_ASL = 3000`
+   - `MAX_ALT_AGL_STD = 120`, `MAX_ALT_AGL_EXT = 300`, `MIN_ALT_AGL = 10`
+   - `MAX_WIND_MS = 12`
+   - `MAX_XTRACK_ERROR = 3`
+   - `ADSB_DANGER_DIST = 500`
+4. **Wire each condition** in the MAVLink monitoring loop with:
+   - Per-condition `_active` flag (debounce)
+   - `threading.Thread(target=..., daemon=True).start()` so alerts don't block the loop
+   - Call `send_buzzer_alert(scale, message)` from the thread
+   - Send buzzer-off to STM32 after ACK received
+5. **Implementation priority** (highest severity first):
+   1. NAV002 — Geo-fence breach (scale 10)
+   2. PF001/PF002 — Overspeed / stall (scale 10)
+   3. PF003 — Altitude ceiling (scale 10)
+   4. NAV004 — ADS-B traffic (scale 8)
+   5. ENV001 — High wind (scale 8)
+   6. NAV003 — Low altitude (scale 7)
+   7. NAV001 — Path deviation (scale 5)
+   8. PF007/PF008 — Height ceiling warnings (scale 4/6)
 
-#### 4. Config changes on the day
+#### Config changes on the day
 
 | Setting | File | What to change |
 |---|---|---|
 | `SERIAL_PORT` | `config.py` | `COM7` → actual STM32 COM port |
 | `MAVLINK_CONNECTION` | `config.py` | Keep `tcp:127.0.0.1:5763` for hardware; use `5762` for SITL only |
-| `SAFE_BATTERY_LEVEL` | `config.py` | Confirm `20`% threshold with flight team |
-| `BUZZER_BIT` | `bit_definitions.py` | New entry — confirm bit number with STM32 firmware |
+| `BUZZER_BIT` | `bit_definitions.py` | New — confirm bit number with STM32 firmware developer |
 
 #### Potential issues to watch for
 
-- **Threading:** Always call `send_buzzer_alert()` from a background thread, never the main MAVLink loop.
-- **Debounce reset:** Decide when `_buzzer_active` resets — after dismiss (current plan) or after condition clears. Resetting only after dismiss prevents re-alerts while the condition still exists.
-- **Multiple conditions:** Each alert condition (low battery, GPS loss, etc.) needs its own flag to avoid one condition's flag-reset unblocking another.
-- **STM32 buzzer timeout:** If the serial connection drops while the buzzer is on, it may stay on indefinitely. The STM32 firmware should auto-stop the buzzer if no packet is received within a few seconds.
+- **Threading:** Always call `send_buzzer_alert()` from a background thread — never the main MAVLink loop or it will pause heartbeats during the dialog.
+- **Debounce:** Each condition needs its own `_active` flag. Resetting only after the operator dismisses prevents re-alerts while the condition still exists.
+- **Multiple simultaneous alerts:** Queue or prioritise by scale — do not fire several popups at once.
+- **STM32 buzzer timeout:** If serial drops while buzzer is on it stays on forever. STM32 firmware should auto-stop if no packet received within a few seconds.
