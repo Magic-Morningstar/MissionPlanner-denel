@@ -8,6 +8,7 @@ obj/
 packages/
 *.psess
 *.pyc
+__pycache__/
 /ExtLibs/Mavlink/mavlink
 /LogAnalyzer/py2exe/
 *.vspx

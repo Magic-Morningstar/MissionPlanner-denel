@@ -263,19 +263,18 @@ Log is created in the same folder as `MissionPlanner.exe` on first run.
 
 ### Release packaging
 
-Build Release, copy UAV_ scripts, ZIP:
-```bash
+UAV_ Python scripts live in `plugins/UAV_/` in the repo — no manual copy step needed. Build and ZIP:
+```powershell
 # 1. Build
-MSBuild.exe -v:m -restore -t:Build -p:Configuration=Release MissionPlanner.sln
+"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" -v:m -restore -t:Build -p:Configuration=Release MissionPlanner.sln
 
-# 2. Copy new Python scripts into output
-xcopy /E /I "C:\Users\denel\Desktop\VTOL\UAV_" "bin\Release\net461\plugins\UAV_"
-
-# 3. ZIP for distribution (PowerShell)
+# 2. ZIP for distribution
 Compress-Archive -Path "bin\Release\net461\*" -DestinationPath "DenelGCS_Release.zip" -Force
 ```
 
-**Target machine requirements:** Windows 10/11, Python 3 + `pip install pymavlink pyserial`. No installer needed — unzip and run `MissionPlanner.exe`. Apply Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
+**Note:** `python_runtime\` (bundled Python) lives in `bin\Release\net461\` and is excluded from the repo (`bin/` is gitignored). It must be set up once per dev machine. It is included in the ZIP automatically.
+
+**Target machine requirements:** Windows 10/11 + .NET 4.7.2. No Python install needed — bundled in `python_runtime\`. No installer — unzip and run `MissionPlanner.exe`. Apply Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
 
 **Auto-connect (future):** `ExtLibs/Utilities/AutoConnect.cs` already supports TCP auto-connect. To enable it, set `Enabled = true` on the relevant `ConnectionInfo` entry and set the target IP/port. No other code changes needed.
 
