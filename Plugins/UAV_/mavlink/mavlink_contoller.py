@@ -1,4 +1,5 @@
 
+import time
 from utils.helper import *
 from pymavlink import mavutil
 from mavlink.speed_control import Speed_Controller
@@ -17,7 +18,13 @@ class Mavlink_controller:
 
     def initiate_Connection(self):
         system_Print("Connecting...")
-        self.drone = mavutil.mavlink_connection(MAVLINK_CONNECTION,wait_ready=True)
+        while True:
+            try:
+                self.drone = mavutil.mavlink_connection(MAVLINK_CONNECTION, wait_ready=True)
+                break
+            except Exception as e:
+                system_Print(f"MAVLink connection failed ({e}) — retrying in 1 seconds...")
+                time.sleep(1)
         self.state.UAV = self.drone
         self.Manual = Manual_mode(self.drone)
         self.Arms = Arms(self.drone)
