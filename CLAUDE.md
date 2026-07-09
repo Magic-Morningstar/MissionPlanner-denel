@@ -211,6 +211,8 @@ A custom STM32 hardware controller communicates with the drone via a Python scri
 STM32 → COM7 (binary serial packets) → main.py → tcp:127.0.0.1:5763 → ArduPilot
 ```
 
+**Startup ordering / connection resilience:** `DenelPythonLauncher.cs` auto-starts `main.py` as soon as the GCS plugin loads — this is typically *before* the operator has manually connected MissionPlanner to the vehicle, so nothing may be listening on `MAVLINK_CONNECTION` yet. `Mavlink_controller.initiate_Connection()` (`plugins/UAV_/mavlink/mavlink_contoller.py`) wraps `mavutil.mavlink_connection()` in a `try`/`except` retry loop (1s interval, `system_Print`-logged) instead of letting a refused connection raise uncaught — matching the existing STM32 serial-retry pattern in `main.py`'s read loop. There is no process-level watchdog (`DenelPythonLauncher.cs` does not restart `main.py` if it exits), so this in-script retry is the only thing standing between a cold-boot race and a permanently-dead bridge for the rest of the GCS session — do not remove it without adding an equivalent safeguard.
+
 **Files:**
 
 | File | Purpose |
@@ -218,9 +220,10 @@ STM32 → COM7 (binary serial packets) → main.py → tcp:127.0.0.1:5763 → Ar
 | `plugins/DenelPythonLauncher.cs` | C# plugin — auto-starts `plugins/UAV_/main.py` on GCS startup, kills it on exit, logs to `denel_python.log` |
 | `plugins/UAV_/main.py` | Entry point — modular Controller class; connects MAVLink + STM32 serial |
 | `plugins/UAV_/config.py` | Central config — `MAVLINK_CONNECTION`, `SERIAL_PORT`, bitmask bits, timeouts, debug flags |
-| `plugins/UAV_/mavlink/` | Flight controllers: arms, RTL, auto-takeoff, manual, speed control |
-| `plugins/UAV_/serial/` | Binary packet protocol: `serial_handler.py`, `packet_Parser.py`, `packet_builder.py` |
-| `plugins/UAV_/protocol/bit_definitions.py` | Centralised bitmask definitions |
+| `plugins/UAV_/mavlink/` | Flight controllers: arms, RTL, auto-takeoff, manual, speed control (`mavlink/Services/Pre_Flight_Checks/` holds battery/flight/GPS pre-flight checks) |
+| `plugins/UAV_/serial_controller/` | Binary packet protocol: `serial_handler.py`, `packet_Parser.py`, `packet_builder.py` |
+| `plugins/UAV_/serial_controller/protocol/bit_definitions.py` | Centralised bitmask definitions |
+| `plugins/UAV_/notifications.py` | Sends `BUZZER_ALERT` messages to the GCS (see Buzzer notification system below) |
 | `plugins/UAV_/state/system_state.py` | SystemState class — tracks all vehicle flags and computed properties |
 | `plugins/Misson_PlannerScripts/` | Legacy scripts (Heart.py) — kept for reference, no longer launched |
 
