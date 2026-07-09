@@ -281,8 +281,6 @@ namespace MissionPlanner.GCSViews
             myhud = hud1;
             MainHcopy = MainH;
 
-            SubMainLeft.Resize += SubMainLeft_Resize;
-
             mymap.Paint += mymap_Paint;
 
             // populate the unmodified base list
@@ -1109,7 +1107,10 @@ namespace MissionPlanner.GCSViews
             try
             {
                 if (hud1 != null)
+                {
                     Settings.Instance["FlightSplitter"] = MainH.SplitterDistance.ToString();
+                    Settings.Instance["FlightSplitterHudMap"] = SubMainLeft.SplitterDistance.ToString();
+                }
             }
             catch
             {
@@ -2906,14 +2907,11 @@ namespace MissionPlanner.GCSViews
         void dropout_FormClosed(object sender, FormClosedEventArgs e)
         {
             (sender as Form).SaveStartupLocation();
-            var parent = (sender as Form).Tag as Control;
-            hud1.Dock = DockStyle.None;
-            parent.Controls.Add(hud1);
+            //GetFormFromGuid(GetOrCreateGuid("fd_hud_guid")).Controls.Add(hud1);
+            ((sender as Form).Tag as Control).Controls.Add(hud1);
+            //SubMainLeft.Panel1.Controls.Add(hud1);
             if (hud1.Parent == SubMainLeft.Panel1)
-            {
-                hud1.Dock = DockStyle.Fill;
                 SubMainLeft.Panel1Collapsed = false;
-            }
             huddropout = false;
         }
 
@@ -2971,9 +2969,6 @@ namespace MissionPlanner.GCSViews
         {
             tabPage1_Resize(tabGauges, EventArgs.Empty);
 
-            if (Screen.AllScreens.Length > 1 && !huddropout)
-                BeginInvoke(new Action(() => AutoUndockHUD()));
-
             POI.POIModified += POI_POIModified;
 
             if (!Settings.Instance.ContainsKey("ShowNoFly") || Settings.Instance.GetBoolean("ShowNoFly"))
@@ -3012,6 +3007,15 @@ namespace MissionPlanner.GCSViews
             if (Settings.Instance.ContainsKey("FlightSplitter"))
             {
                 MainH.SplitterDistance = Settings.Instance.GetInt32("FlightSplitter");
+            }
+
+            if (Settings.Instance.ContainsKey("FlightSplitterHudMap"))
+            {
+                SubMainLeft.SplitterDistance = Settings.Instance.GetInt32("FlightSplitterHudMap");
+            }
+            else if (SubMainLeft.Width > 0)
+            {
+                SubMainLeft.SplitterDistance = SubMainLeft.Width / 2;
             }
 
             if (Settings.Instance.ContainsKey("russian_hud"))
@@ -3563,36 +3567,6 @@ namespace MissionPlanner.GCSViews
             huddropout = true;
         }
 
-        private void AutoUndockHUD()
-        {
-            if (huddropout) return;
-
-            if (hud1.Parent == SubMainLeft.Panel1)
-                SubMainLeft.Panel1Collapsed = true;
-
-            Form dropout = new Form();
-            dropout.Text = "HUD";
-            dropout.BackColor = ThemeManager.BGColor;
-            dropout.ShowInTaskbar = true;
-            dropout.Tag = hud1.Parent;
-
-            SubMainLeft.Panel1.Controls.Remove(hud1);
-            hud1.Dock = DockStyle.Fill;
-            dropout.Controls.Add(hud1);
-            dropout.FormClosed += dropout_FormClosed;
-
-            Screen targetScreen = Screen.AllScreens.Length > 1
-                ? Screen.AllScreens.FirstOrDefault(s => !s.Primary) ?? Screen.PrimaryScreen
-                : Screen.PrimaryScreen;
-
-            dropout.StartPosition = FormStartPosition.Manual;
-            dropout.Location = targetScreen.Bounds.Location;
-            dropout.WindowState = FormWindowState.Maximized;
-
-            huddropout = true;
-            dropout.Show();
-        }
-
         private void hud1_ekfclick(object sender, EventArgs e)
         {
             EKFStatus frm = new EKFStatus();
@@ -3605,15 +3579,15 @@ namespace MissionPlanner.GCSViews
 
         private void hud1_Resize(object sender, EventArgs e)
         {
-            Console.WriteLine("HUD resize " + hud1.Width + " " + hud1.Height);
-        }
+            Console.WriteLine("HUD resize " + hud1.Width + " " + hud1.Height); // +"\n"+ System.Environment.StackTrace);
 
-        private void SubMainLeft_Resize(object sender, EventArgs e)
-        {
-            if (SubMainLeft.Width <= 0 || SubMainLeft.Height <= 0) return;
-            int target = Math.Min(SubMainLeft.Height, SubMainLeft.Width / 2);
-            if (Math.Abs(SubMainLeft.SplitterDistance - target) > 4)
-                SubMainLeft.SplitterDistance = target;
+            if (hud1.Parent == this.SubMainLeft.Panel1)
+            {
+                // SubMainLeft is now Vertical (left/right), so track width not height
+                var wd = SubMainLeft.SplitterDistance;
+                if (wd >= hud1.Width + 5 || wd <= hud1.Width - 5)
+                    SubMainLeft.SplitterDistance = hud1.Width;
+            }
         }
 
         private void hud1_vibeclick(object sender, EventArgs e)

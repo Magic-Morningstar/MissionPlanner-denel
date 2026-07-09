@@ -144,14 +144,14 @@ The designer layout is restructured at runtime — do not rely on the designer v
 MainH (top/bottom SplitContainer — FixedPanel.Panel2 keeps tabs fixed)
 ├── Panel1 (top, resizable)
 │   └── SubMainLeft (left/right SplitContainer — FixedPanel.None, both sides resize)
-│       ├── Panel1 (left) = hud1  [Dock=Fill — fills to square via SubMainLeft_Resize]
+│       ├── Panel1 (left) = hud1  [Dock=Fill]
 │       └── Panel2 (right) = tableMap (map)
 └── Panel2 (bottom, full-width) = tabControlactions + panel_persistent
 ```
 
-**HUD proportional resize:** `SubMainLeft_Resize` handler sets `SplitterDistance = Math.Min(SubMainLeft.Height, SubMainLeft.Width / 2)` — keeps the HUD panel square, map gets the rest.
+**HUD/map split:** `SubMainLeft.SplitterDistance` starts at a true 50/50 split on first run (set in `FlightData_Load` when no saved value exists yet). The user's manually-dragged split position is persisted across restarts via `Settings.Instance["FlightSplitterHudMap"]` — saved in `Dispose()`, restored in `FlightData_Load`, mirroring the pre-existing pattern already used for the outer `MainH.SplitterDistance` (`Settings.Instance["FlightSplitter"]`). `hud1_Resize` nudges `SubMainLeft.SplitterDistance` back to `hud1.Width` if it drifts by more than 5px — a stability guard against internal HUD layout recalculation, not an active resize policy.
 
-**HUD auto-undock on startup:** When two monitors are detected (`Screen.AllScreens.Length > 1`), `FlightData_Load` calls `AutoUndockHUD()` via `BeginInvoke` (deferred until after first paint). `AutoUndockHUD()` collapses `SubMainLeft.Panel1`, creates a borderless `Form`, moves `hud1` (Dock=Fill) into it, positions it at `Screen.AllScreens[1].Bounds.Location`, and maximizes it. `dropout_FormClosed` re-attaches `hud1` and un-collapses the panel. The `huddropout` bool prevents double-undocking.
+**Removed (do not re-add without discussion):** an earlier version of this fork had `AutoUndockHUD()` — automatically moving the HUD into a borderless window on a second monitor at startup when one was detected — plus a `SubMainLeft_Resize` handler that forced the HUD panel to stay square (`SplitterDistance = Math.Min(SubMainLeft.Height, SubMainLeft.Width / 2)`). Both were deliberately removed; the HUD no longer auto-undocks on startup, and the HUD/map split is a plain, user-adjustable, persisted splitter instead of a square-forcing one. Manual double-click-to-undock (`hud1_DoubleClick` / `dropout_FormClosed`) and "swap HUD and map" (`SwapHud1AndMap`, persisted via `Settings.Instance["HudSwap"]`) are unaffected and still work.
 
 ---
 
@@ -263,7 +263,7 @@ Log is created in the same folder as `MissionPlanner.exe` on first run.
 
 ### Release packaging
 
-UAV_ Python scripts live in `plugins/UAV_/` in the repo — no manual copy step needed. Build and ZIP:
+UAV_ Python scripts live in `plugins/UAV_/` in the repo. `MissionPlanner.csproj` has a `<None Include="plugins\UAV_\**\*.py">` item with `CopyToOutputDirectory=PreserveNewest`, so every `.py` file under `plugins/UAV_/` (including new ones) is copied to `bin\<Config>\net461\plugins\UAV_\` automatically on build — no manual copy step needed. Build and ZIP:
 ```powershell
 # 1. Build
 "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" -v:m -restore -t:Build -p:Configuration=Release MissionPlanner.sln

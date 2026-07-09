@@ -738,6 +738,9 @@
     <None Include="plugins\DenelPythonLauncher.cs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="plugins\UAV_\**\*.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="plugins\Misson_PlannerScripts\Heart.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
