@@ -1,105 +1,199 @@
+# state/system_state.py
+#
+# Holds only two kinds of things now:
+#   1. Facts both sides need verbatim (armed, mode, altitude, connection
+#      status, joystick position, pot value) — no translation needed,
+#      safe for anyone to read.
+#   2. Nothing else. The raw incoming serial register is GONE — it was
+#      the thing leaking serial's internal representation into mavlink
+#      code. Discrete button intent now flows through the command_bus
+#      (see commands/translator.py + mavlink/uav_commads/command_sender.py)
+#      instead of living here.
 
-from pymavlink import mavutil
+import threading
+
 
 class SystemState:
 
     def __init__(self):
+        # ── MAVLink connections ───────────────────────────────────────────────
+        self._UAV_STATE_CONNECTION = None
+        self._UAV_COMMAND_CONNECTION = None
+        self._UAV_STATE_CONNECTION_STATUS = False
+        self._UAV_COMMAND_CONNECTION_STATUS = False
+        self.UAV_HEARTBEAT = None
 
-        #mavlink
-        self.UAV = None
+        # ── Serial connection ─────────────────────────────────────────────────
+        self._SERIAL_CONNECTION = None
+        self._SERIAL_CONNECTION_STATUS = False
 
-        #Properties
-        self.ALTITUDE = 0
-        self.SPEED = 0
+        # ── UAV observed state ────────────────────────────────────────────────
+        self._UAV_ARMED_STATUS = False
+        self._UAV_CURRENT_MODE = None
+        self._UAV_ALTITUDE = None
+        self._UAV_AIR_SPEED = None
+        self._UAV_GROUND_SPEED = None
+        self._UAV_CURRENT_ITEM = None
+        self._UAV_MISSION_ITEMS = []
 
-        #states
-        self.ARMED = False
+        # ── Continuous analog inputs — facts, not events ────────────────────
+        self._JOYSTICK_X = 0
+        self._JOYSTICK_Y = 0
+        self._POT_VALUE = 0
+        self._PAYLOAD_JOYSTICK_X = 0
+        self._PAYLOAD_JOYSTICK_Y = 0
+
+        # ── Operation flags ───────────────────────────────────────────────────
+        self.UAV_STATE_CHANGE = False
         self.ARMED_SWITCH = False
-        self.LTE_SIGNAL = True
-        self.RF = True
-        self.MANUAL_MODE = False
-        self.RTL = False
-        self.ATO = False
-        self.ATO_Success = False
-        self.SYSTEM_HEALTHY = False
         self.SYSTEM_CHECKED = False
 
+        # ── Speed limits ──────────────────────────────────────────────────────
+        self.MIN_SPEED = 5.0
+        self.MAX_SPEED = 25.0
 
-        #serial
-        self.CONVERSATION_STARTED = False
-        self.SERIAL_CONNECTION = None
-        self.SERIAL_CONNECTION_STATUS = False
-        self.PREVIOUS_MESSAGE = 8
+        # ── Thread safety ─────────────────────────────────────────────────────
+        self._lock = threading.Lock()
 
+    # ── Derived properties ────────────────────────────────────────────────────
 
     @property
     def is_flying(self):
-        return self.ALTITUDE > 1
-    
-    @property
-    def flying_bit(self):
-        if self.is_flying:
-            return 1
-        else:
-            return 0
+        if self._UAV_ALTITUDE is not None:
+            return self._UAV_ALTITUDE > 1
+        return False
+
+    # ── UAV state properties ──────────────────────────────────────────────────
 
     @property
-    def armed_State(self):
-        return self.ARMED
+    def is_UAV_Armed(self):
+        return self._UAV_ARMED_STATUS
 
     @property
-    def rtl_Returning_State(self):
-        return (self.RTL and (self.is_flying == True))
-    
-    @property
-    def rtl_Landed_State(self):
-        return self.RTL and ( self.is_flying == False)
-    
-    @property
-    def is_ATO_Successful(self):
-        return self.ATO_Success
-    
-    @property
-    def is_ATO_InProgress(self):
-        return self.ATO
-    
-    @property
-    def system_Check_Healthy(self):
-        return self.SYSTEM_HEALTHY
-    
-    @property
-    def system_Check_Unealthy(self):
-        return self.SYSTEM_HEALTHY == False
+    def get_UAV_Current_Mode(self):
+        return self._UAV_CURRENT_MODE
 
     @property
-    def disArm_State(self):
-        return (self.ARMED == False)
-
-        
-    @property
-    def emergency_State(self):
-        pass
-     
+    def get_UAV_Current_Altitude(self):
+        return self._UAV_ALTITUDE
 
     @property
-    def manual_State(self):
-        return self.MANUAL_MODE
+    def get_UAV_Current_Air_Speed(self):
+        return self._UAV_AIR_SPEED
 
     @property
-    def rf_State(self):
-        return self.RF
+    def get_UAV_Current_Ground_Speed(self):
+        return self._UAV_GROUND_SPEED
+
+    # ── Analog input properties ───────────────────────────────────────────────
 
     @property
-    def lte_State(self):
-        return self.LTE_SIGNAL
+    def get_Joystick_X(self):
+        return self._JOYSTICK_X
 
-    def UAV_connected(self):
-        return self.UAV.wait_heartbeat()
+    @property
+    def get_Joystick_Y(self):
+        return self._JOYSTICK_Y
+
+    @property
+    def get_Pot_Value(self):
+        return self._POT_VALUE
     
-    def update_serialConnection(self, is_Connected,ser):
-        self.SERIAL_CONNECTION_STATUS = is_Connected
-        self.SERIAL_CONNECTION = ser
-        self.PREVIOUS_MESSAGE = 0
-    
-    def is_Serial_connected(self):
-        return self.SERIAL_CONNECTION_STATUS
+    @property
+    def get_Payload_Joystick_X(self):
+        return self._PAYLOAD_JOYSTICK_X
+
+    @property
+    def get_Payload_Joystick_Y(self):
+        return self._PAYLOAD_JOYSTICK_Y
+
+    # ── Serial properties ─────────────────────────────────────────────────────
+
+    @property
+    def is_Serial_Connection_Available(self):
+        return self._SERIAL_CONNECTION_STATUS
+
+    @property
+    def get_Serial_Connection(self):
+        return self._SERIAL_CONNECTION
+
+    # ── MAVLink connection properties ─────────────────────────────────────────
+
+    @property
+    def is_UAV_State_Connection_Available(self):
+        return self._UAV_STATE_CONNECTION_STATUS
+
+    @property
+    def is_UAV_Command_Connection_Available(self):
+        return self._UAV_COMMAND_CONNECTION_STATUS
+
+    # ── Serial update methods ─────────────────────────────────────────────────
+
+    def update_Serial_connection(self, connected=False, connection=None):
+        with self._lock:
+            self._SERIAL_CONNECTION = connection
+            self._SERIAL_CONNECTION_STATUS = connected
+
+    # ── MAVLink connection update methods ─────────────────────────────────────
+
+    def update_UAV_State_Connection(self, connected=False, connection=None):
+        with self._lock:
+            self._UAV_STATE_CONNECTION = connection
+            self._UAV_STATE_CONNECTION_STATUS = connected
+
+    def update_UAV_Command_Connection(self, connected=False, connection=None):
+        with self._lock:
+            self._UAV_COMMAND_CONNECTION = connection
+            self._UAV_COMMAND_CONNECTION_STATUS = connected
+
+    # ── UAV state update methods ──────────────────────────────────────────────
+
+    def update_UAV_Armed_Status(self, armed=False):
+        with self._lock:
+            self._UAV_ARMED_STATUS = armed
+
+    def update_UAV_Current_Mode(self, mode):
+        with self._lock:
+            self._UAV_CURRENT_MODE = mode
+
+    def update_UAV_Altitude(self, altitude):
+        with self._lock:
+            self._UAV_ALTITUDE = altitude
+
+    def update_UAV_Air_Speed(self, speed):
+        with self._lock:
+            self._UAV_AIR_SPEED = speed
+
+    def update_UAV_Ground_Speed(self, speed):
+        with self._lock:
+            self._UAV_GROUND_SPEED = speed
+
+    def update_UAV_Current_Item(self, item):
+        with self._lock:
+            self._UAV_CURRENT_ITEM = item
+
+    # ── Analog input update methods ─────────────────────────────────────────
+
+    def update_Joystick(self, x, y):
+        with self._lock:
+            self._JOYSTICK_X = x
+            self._JOYSTICK_Y = y
+
+    def update_Payload_Joystick(self, x, y):
+        with self._lock:
+            self._PAYLOAD_JOYSTICK_X = x
+            self._PAYLOAD_JOYSTICK_Y = y
+
+    def update_Pot_Value(self, value):
+        with self._lock:
+            self._POT_VALUE = value
+
+    # ── Flag management ───────────────────────────────────────────────────────
+
+    def set_UAV_State_Changed(self):
+        with self._lock:
+            self.UAV_STATE_CHANGE = True
+
+    def clear_UAV_State_Changed(self):
+        with self._lock:
+            self.UAV_STATE_CHANGE = False

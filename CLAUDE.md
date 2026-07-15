@@ -251,7 +251,9 @@ MAVLINK_CONNECTION = 'tcp:127.0.0.1:5762'
 ```
 Port 5762 is SITL's built-in secondary TCP port — no MAVProxy change needed.
 
-**Python dependencies (install once per machine):**
+**Python requirement:** `DenelPythonLauncher.cs` launches `main.py` via a bare `"python.exe"` `ProcessStartInfo.FileName`, resolved through the system `PATH` — there is no bundled runtime anymore (see Release packaging note below). Every GCS machine needs a real Python install (not the Windows Store stub — check with `python --version`; if it prints an "install from the Store" prompt instead of a version, install Python from python.org or via `py`/`winget` and make sure it's on `PATH`).
+
+**Python dependencies (install once per machine, into whichever Python is on `PATH`):**
 ```
 pip install pymavlink pyserial
 ```
@@ -275,9 +277,9 @@ UAV_ Python scripts live in `plugins/UAV_/` in the repo. `MissionPlanner.csproj`
 Compress-Archive -Path "bin\Release\net461\*" -DestinationPath "DenelGCS_Release.zip" -Force
 ```
 
-**Note:** `python_runtime\` (bundled Python) lives in `bin\Release\net461\` and is excluded from the repo (`bin/` is gitignored). It must be set up once per dev machine. It is included in the ZIP automatically.
+**Note:** there is no bundled `python_runtime\` anymore — an earlier version of this fork shipped an embeddable Python distribution to avoid requiring a system install, but that approach was dropped (it was unreliable) in favor of requiring a real system-wide Python on every GCS machine. This makes the Release ZIP smaller but means Python must be installed and on `PATH` separately on each target machine (see "Python requirement" above) — it is *not* included in the ZIP.
 
-**Target machine requirements:** Windows 10/11 + .NET 4.7.2. No Python install needed — bundled in `python_runtime\`. No installer — unzip and run `MissionPlanner.exe`. Apply Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
+**Target machine requirements:** Windows 10/11 + .NET 4.7.2 + a system Python install (with `pymavlink`/`pyserial` installed for it) on `PATH`. No installer — unzip and run `MissionPlanner.exe`. Apply Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
 
 **Auto-connect (future):** `ExtLibs/Utilities/AutoConnect.cs` already supports TCP auto-connect. To enable it, set `Enabled = true` on the relevant `ConnectionInfo` entry and set the target IP/port. No other code changes needed.
 

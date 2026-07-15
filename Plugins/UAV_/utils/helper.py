@@ -1,21 +1,12 @@
+# utils/helper.py
+#
+# Your real project already has this file with more in it (print gating
+# by config.DEBUG_MODE, etc). This is a minimal stand-in so the testing/
+# harness runs standalone without needing the rest of your project.
 
-from config import *
-
-
-def system_Print(msg, condition=True):
-    if DEBUG_MODE and condition:
-        print(msg)
-
-#TO BE REMOVED USELES IN A NON-DEBUG STATE
-def print_HeartBeat(heartbeat):
-    if DEBUG_MODE:
-        print('=== Heartbeat contents ===')
-        print('Vehicle type    : ' + str(heartbeat.type))
-        print('Autopilot       : ' + str(heartbeat.autopilot))
-        print('Base mode       : ' + str(heartbeat.base_mode))
-        print('Custom mode     : ' + str(heartbeat.custom_mode))
-        print('System status   : ' + str(heartbeat.system_status))
-        print('MAVLink version : ' + str(heartbeat.mavlink_version))
+import time
 
 
-
+def system_Print(msg):
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}")

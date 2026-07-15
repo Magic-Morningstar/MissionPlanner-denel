@@ -45,7 +45,7 @@ namespace MissionPlanner.Plugin
 
                 var psi = new ProcessStartInfo
                 {
-                    FileName               =  Path.Combine(exeDir, "python_runtime", "python.exe"),
+                    FileName               =  "python.exe",
                     Arguments              = "-u main.py",
                     WorkingDirectory       = scriptDir,
                     UseShellExecute        = false,

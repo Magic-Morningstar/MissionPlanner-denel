@@ -1,0 +1,59 @@
+# commands/intents.py
+#
+# The shared vocabulary that crosses the serial <-> mavlink boundary.
+# Deliberately knows nothing about buttons, bits, or the STM32 — and
+# mavlink/ code is not allowed to know anything about serial internals
+# either. This file is the only thing both sides are allowed to import.
+#
+# Rule of thumb: nothing in serial_controller/ should ever appear in
+# mavlink/, and nothing in mavlink/ should ever appear in
+# serial_controller/. Only these types cross.
+#
+# New discrete instruction? Add a dataclass here, add one branch to
+# InputTranslator, add one branch to UAVCommandSender.process_command.
+# That's the whole cost of a new command, end to end.
+
+from dataclasses import dataclass
+
+
+class Command:
+    """Marker base class — every intent that can cross the boundary."""
+    pass
+
+
+@dataclass
+class ArmCommand(Command):
+    pass
+
+
+@dataclass
+class DisarmCommand(Command):
+    pass
+
+
+@dataclass
+class TakeoffCommand(Command):
+    pass
+
+
+@dataclass
+class ManualModeCommand(Command):
+    pass
+
+
+@dataclass
+class RTLCommand(Command):
+    pass
+
+
+@dataclass
+class EmergencyCommand(Command):
+    pass
+
+
+# Reserved for when it's wired up — config.py already defines the bit,
+# it's just not acted on yet:
+#
+# @dataclass
+# class SystemCheckCommand(Command):
+#     pass
