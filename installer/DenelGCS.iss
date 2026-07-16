@@ -74,6 +74,16 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 
 [Code]
 
+var
+  ProgressPage: TOutputProgressWizardPage;
+
+procedure InitializeWizard();
+begin
+  ProgressPage := CreateOutputProgressPage('Setting Up Python',
+    'Please wait while Denel GCS finishes setting up its Python components. ' +
+    'This can take several minutes on the first install.');
+end;
+
 // ── .NET Framework 4.7.2+ check — warn, don't block. Windows 10 1803+ and ──────────
 // Windows 11 ship with this already, so we don't bundle a ~60MB .NET installer.
 function IsDotNet472OrLater(): Boolean;
@@ -137,49 +147,62 @@ begin
   if CurStep = ssPostInstall then
   begin
     Log('CurStepChanged(ssPostInstall): starting Python provisioning.');
+    ProgressPage.Show();
+    try
+      ProgressPage.SetText('Installing Python runtime (this may take a few minutes)...', '');
+      ProgressPage.SetProgress(1, 3);
 
-    Log('Installing bundled Python: {#PythonInstaller}');
-    if not (Exec(ExpandConstant('{tmp}\{#PythonInstaller}'),
-                 '/quiet InstallAllUsers=1 PrependPath=0 Include_test=0',
-                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-            and (ResultCode = 0)) then
-      Log('Bundled Python installer exited with code ' + IntToStr(ResultCode) +
-          ' (continuing — Python may already be installed at this version).');
+      Log('Installing bundled Python: {#PythonInstaller}');
+      if not (Exec(ExpandConstant('{tmp}\{#PythonInstaller}'),
+                   '/quiet InstallAllUsers=1 PrependPath=0 Include_test=0',
+                   '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+              and (ResultCode = 0)) then
+        Log('Bundled Python installer exited with code ' + IntToStr(ResultCode) +
+            ' (continuing — Python may already be installed at this version).');
 
-    if not GetBundledPythonPath(PythonExe) then
-    begin
-      Log('Python still not found after running bundled installer — aborting provisioning.');
-      MsgBox('Python installation did not complete successfully. The STM32/joystick ' +
-             'controller bridge will not work until Python is installed manually. See ' +
-             'https://www.python.org/downloads/ or re-run this installer.',
-             mbError, MB_OK);
-      Exit;
+      if not GetBundledPythonPath(PythonExe) then
+      begin
+        Log('Python still not found after running bundled installer — aborting provisioning.');
+        MsgBox('Python installation did not complete successfully. The STM32/joystick ' +
+               'controller bridge will not work until Python is installed manually. See ' +
+               'https://www.python.org/downloads/ or re-run this installer.',
+               mbError, MB_OK);
+        Exit;
+      end;
+
+      ProgressPage.SetText('Installing Python dependencies...', '');
+      ProgressPage.SetProgress(2, 3);
+
+      // Offline pip install of pymavlink/pyserial (+ transitive deps) from bundled wheels.
+      WheelsDir := ExpandConstant('{tmp}\wheels');
+      ReqFile   := ExpandConstant('{tmp}\requirements.txt');
+      Log('Running offline pip install via: ' + PythonExe);
+      if Exec(PythonExe,
+              '-m pip install --no-index --find-links="' + WheelsDir + '" -r "' + ReqFile + '"',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+         and (ResultCode = 0) then
+        Log('pip install completed successfully (exit code 0).')
+      else
+      begin
+        Log('pip install failed (exit code ' + IntToStr(ResultCode) + ').');
+        MsgBox('Installing the Python dependencies (pymavlink/pyserial) failed (exit code ' +
+               IntToStr(ResultCode) + '). Run manually: "' + PythonExe + '" -m pip install -r "' +
+               ExpandConstant('{app}') + '\plugins\UAV_\requirements.txt"',
+               mbError, MB_OK);
+      end;
+
+      ProgressPage.SetText('Finishing up...', '');
+      ProgressPage.SetProgress(3, 3);
+
+      // Record the resolved python.exe path for DenelPythonLauncher.cs — it reads this
+      // instead of trusting a bare "python.exe" PATH lookup, which is unpredictable if
+      // another Python is also installed on this machine.
+      PathFile := ExpandConstant('{app}\plugins\UAV_\python_path.txt');
+      if not SaveStringToFile(PathFile, PythonExe, False) then
+        Log('WARNING: failed to write ' + PathFile);
+    finally
+      ProgressPage.Hide();
     end;
-
-    // Offline pip install of pymavlink/pyserial (+ transitive deps) from bundled wheels.
-    WheelsDir := ExpandConstant('{tmp}\wheels');
-    ReqFile   := ExpandConstant('{tmp}\requirements.txt');
-    Log('Running offline pip install via: ' + PythonExe);
-    if Exec(PythonExe,
-            '-m pip install --no-index --find-links="' + WheelsDir + '" -r "' + ReqFile + '"',
-            '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-       and (ResultCode = 0) then
-      Log('pip install completed successfully (exit code 0).')
-    else
-    begin
-      Log('pip install failed (exit code ' + IntToStr(ResultCode) + ').');
-      MsgBox('Installing the Python dependencies (pymavlink/pyserial) failed (exit code ' +
-             IntToStr(ResultCode) + '). Run manually: "' + PythonExe + '" -m pip install -r "' +
-             ExpandConstant('{app}') + '\plugins\UAV_\requirements.txt"',
-             mbError, MB_OK);
-    end;
-
-    // Record the resolved python.exe path for DenelPythonLauncher.cs — it reads this
-    // instead of trusting a bare "python.exe" PATH lookup, which is unpredictable if
-    // another Python is also installed on this machine.
-    PathFile := ExpandConstant('{app}\plugins\UAV_\python_path.txt');
-    if not SaveStringToFile(PathFile, PythonExe, False) then
-      Log('WARNING: failed to write ' + PathFile);
   end;
 end;
 
