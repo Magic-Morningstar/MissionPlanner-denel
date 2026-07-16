@@ -4,6 +4,7 @@ import threading
 import queue
 import time
 import signal
+import os
 from state.system_state import SystemState
 from state.watchdog import Watchdog
 from serial_controller.serial_handler import SerialHandler
@@ -73,6 +74,12 @@ class Controller:
 
 
 if __name__ == "__main__":
-    setup_logging()   # must run before any other module logs anything
+    # ProgramData is writable by a standard (non-admin) user, unlike an install
+    # under Program Files — controller.log must not be written relative to cwd
+    # (this app's cwd when installed) or the write throws PermissionError before
+    # any bridge logic runs.
+    log_dir = os.path.join(os.environ.get("PROGRAMDATA", "."), "Denel GCS")
+    os.makedirs(log_dir, exist_ok=True)
+    setup_logging(log_file=os.path.join(log_dir, "controller.log"))   # must run before any other module logs anything
     app = Controller()
     app.start()

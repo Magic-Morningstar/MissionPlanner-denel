@@ -49,3 +49,8 @@ obj2/
 obj3/
 
 /.claude/settings.local.json
+
+/installer/redist/
+/installer/wheels/
+/installer/output/
+/installer/.wheelbuild/
