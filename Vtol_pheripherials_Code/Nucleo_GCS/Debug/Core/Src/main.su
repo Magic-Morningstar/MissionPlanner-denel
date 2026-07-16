@@ -1,0 +1,15 @@
+../Core/Src/main.c:77:16:tlv_crc8	24	static
+../Core/Src/main.c:84:16:TLV_Send	32	static
+../Core/Src/main.c:104:10:ADC_Read_Channel	40	static
+../Core/Src/main.c:129:23:debounce_check	16	static
+../Core/Src/main.c:136:6:onARM_Button_Press	4	static
+../Core/Src/main.c:142:6:onManual_Button_Press	4	static
+../Core/Src/main.c:148:6:onAutoTakeOff_Button_Press	4	static
+../Core/Src/main.c:154:13:poll_button	32	static
+../Core/Src/main.c:171:5:main	40	static
+../Core/Src/main.c:281:6:SystemClock_Config	88	static
+../Core/Src/main.c:336:13:MX_ADC3_Init	24	static
+../Core/Src/main.c:415:13:MX_USART2_UART_Init	8	static
+../Core/Src/main.c:450:13:MX_GPIO_Init	56	static
+../Core/Src/main.c:553:6:MPU_Config	24	static
+../Core/Src/main.c:584:6:Error_Handler	4	static,ignoring_inline_asm
