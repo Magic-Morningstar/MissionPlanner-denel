@@ -48,10 +48,50 @@ ADC_HandleTypeDef hadc3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+typedef struct {
+    GPIO_TypeDef *port;
+    uint16_t      pin;
+    uint8_t       active_low;   /* 1 = pressed reads LOW, 0 = pressed reads HIGH */
+} button_t;
+
+typedef struct {
+    GPIO_TypeDef *port;
+    uint16_t      pin;
+} led_t;
+
+/* Order must match: buttons[i] drives leds[i] */
+static const button_t buttons[10] = {
+    { GPIOF, GPIO_PIN_12, 1 },  /* PF12 */
+    { GPIOD, GPIO_PIN_14, 1 },  /* PD14 */
+    { GPIOD, GPIO_PIN_15, 1 },  /* PD15 */
+    { GPIOC, GPIO_PIN_7,  1 },  /* PC7  */
+    { GPIOE, GPIO_PIN_10, 0 },  /* PE10 */
+    { GPIOE, GPIO_PIN_12, 0 },  /* PE12 */
+    { GPIOE, GPIO_PIN_14, 0 },  /* PE14 */
+    { GPIOD, GPIO_PIN_11, 0 },  /* PD11 */
+    { GPIOD, GPIO_PIN_12, 0 },  /* PD12 */
+    { GPIOD, GPIO_PIN_13, 0 },  /* PD13 */
+};
+
+static const led_t leds[10] = {
+    { GPIOB, GPIO_PIN_0  },
+    { GPIOB, GPIO_PIN_7  },
+    { GPIOF, GPIO_PIN_13 },
+    { GPIOF, GPIO_PIN_14 },
+    { GPIOF, GPIO_PIN_15 },
+    { GPIOE, GPIO_PIN_9  },
+    { GPIOE, GPIO_PIN_11 },
+    { GPIOE, GPIO_PIN_13 },
+	{ GPIOE, GPIO_PIN_8 },
+    { GPIOG, GPIO_PIN_9  },
+    { GPIOG, GPIO_PIN_14 },
+};
+
 static uint8_t rx_byte;
 #define TLV_SYNC 0xAA
 #define TLV_END  0x55
-
+#define MASTER_BTN_PORT GPIOA
+#define MASTER_BTN_PIN   GPIO_PIN_6
 #define TLV_TYPE_BUTTON_STATE 0x01
 #define TLV_TYPE_JOYSTICK     0x02
 #define TLV_TYPE_JOYSTICK2    0x03
@@ -101,6 +141,30 @@ static uint8_t TLV_Send(uint8_t type, const uint8_t *payload, uint8_t len)
     return (HAL_UART_Transmit(&huart2, buf, len + 5, HAL_MAX_DELAY) == HAL_OK);
 }
 
+static uint8_t Button_Is_Pressed(const button_t *b)
+{
+    GPIO_PinState state = HAL_GPIO_ReadPin(b->port, b->pin);
+    if (b->active_low)
+        return (state == GPIO_PIN_RESET);
+    else
+        return (state == GPIO_PIN_SET);
+}
+
+/* Call this every loop iteration in place of your normal logic */
+void Test_Loop(void)
+{
+    uint8_t master_pressed =
+        (HAL_GPIO_ReadPin(MASTER_BTN_PORT, MASTER_BTN_PIN) == GPIO_PIN_RESET);
+
+    for (int i = 0; i < 10; i++)
+    {
+        uint8_t on = master_pressed || Button_Is_Pressed(&buttons[i]);
+        HAL_GPIO_WritePin(leds[i].port, leds[i].pin,
+                           on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    }
+
+    HAL_Delay(10); /* light debounce / avoid hammering the CPU */
+}
 uint16_t ADC_Read_Channel(uint32_t channel)
 {
     ADC_ChannelConfTypeDef sConfig = {0};
@@ -219,6 +283,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+	  Test_Loop();
       pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
       pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
       pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
@@ -267,7 +333,7 @@ int main(void)
 
           last_usb_send = HAL_GetTick();
       }
-      HAL_GPIO_WritePin(GPIOF, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_SET);
+
   }
 
 
@@ -470,7 +536,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOF, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13 |GPIO_PIN_8, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOG, GPIO_PIN_9|GPIO_PIN_14, GPIO_PIN_RESET);
@@ -491,7 +557,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PF12 */
   GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PF13 PF14 PF15 */
@@ -502,7 +568,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE9 PE11 PE13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13;
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13|GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
