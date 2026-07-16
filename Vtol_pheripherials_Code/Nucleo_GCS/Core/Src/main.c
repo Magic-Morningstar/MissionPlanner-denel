@@ -106,9 +106,16 @@ static uint8_t rx_byte;
 #define TLV_TYPE_BUTTON_STATE 0x01
 #define TLV_TYPE_JOYSTICK     0x02
 #define TLV_TYPE_JOYSTICK2    0x03
-static uint32_t lastArmTime     = 0;
-static uint32_t lastManualTime  = 0;
-static uint32_t lastTakeoffTime = 0;
+static uint32_t lastArmTime      = 0;
+static uint32_t lastManualTime   = 0;
+static uint32_t lastAutoTime     = 0;
+static uint32_t lastAutoLandTime = 0;
+static uint32_t lastSpeedUpTime  = 0;
+static uint32_t lastSpeedDownTime= 0;
+static uint32_t lastZoomInTime   = 0;
+static uint32_t lastZoomOutTime  = 0;
+static uint32_t lastWideInTime   = 0;
+static uint32_t lastWideOutTime  = 0;
 uint32_t USB_MESSAGE = 0x00;
 
 /* USER CODE END PV */
@@ -222,59 +229,63 @@ void onManual_Button_Press(void)
 
 void onAuto_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_AUTO)) USB_MESSAGE &= ~(1 << BIT_AUTO);
+    else                                USB_MESSAGE |= (1 << BIT_AUTO);
 }
 
 void onAutoLand_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_MANUAL)) USB_MESSAGE &= ~(1 << BIT_MANUAL);
-    else                                 USB_MESSAGE |= (1 << BIT_MANUAL);
+    if (USB_MESSAGE & (1 << BIT_AUTO_LAND)) USB_MESSAGE &= ~(1 << BIT_AUTO_LAND);
+    else                                     USB_MESSAGE |= (1 << BIT_AUTO_LAND);
 }
 
 void onSpeedUp_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_SPEED_UP)) USB_MESSAGE &= ~(1 << BIT_SPEED_UP);
+    else                                    USB_MESSAGE |= (1 << BIT_SPEED_UP);
 }
 
 void onSpeedDown_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_SPEED_DOWN)) USB_MESSAGE &= ~(1 << BIT_SPEED_DOWN);
+    else                                      USB_MESSAGE |= (1 << BIT_SPEED_DOWN);
 }
 
 void onZoomIn_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_ZOOM_IN)) USB_MESSAGE &= ~(1 << BIT_ZOOM_IN);
+    else                                   USB_MESSAGE |= (1 << BIT_ZOOM_IN);
 }
 
 void onZoomOUT_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_ZOOM_OUT)) USB_MESSAGE &= ~(1 << BIT_ZOOM_OUT);
+    else                                    USB_MESSAGE |= (1 << BIT_ZOOM_OUT);
 }
 
 
 void onWideIn_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_WIDE_IN)) USB_MESSAGE &= ~(1 << BIT_WIDE_IN);
+    else                                   USB_MESSAGE |= (1 << BIT_WIDE_IN);
 }
 
 void onWideOUT_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
-    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+    if (USB_MESSAGE & (1 << BIT_WIDE_OUT)) USB_MESSAGE &= ~(1 << BIT_WIDE_OUT);
+    else                                    USB_MESSAGE |= (1 << BIT_WIDE_OUT);
 }
 
-static void poll_button(GPIO_TypeDef *port, uint16_t pin,
+/* polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
+static void poll_button(GPIO_TypeDef *port, uint16_t pin, uint8_t active_low,
                          GPIO_PinState *lastState, uint32_t *lastTime,
                          uint32_t now, void (*onPress)(void))
 {
-    GPIO_PinState nowState = HAL_GPIO_ReadPin(port, pin);
-    if (nowState == GPIO_PIN_RESET && *lastState == GPIO_PIN_SET)
+    GPIO_PinState nowState     = HAL_GPIO_ReadPin(port, pin);
+    GPIO_PinState pressedState = active_low ? GPIO_PIN_RESET : GPIO_PIN_SET;
+    GPIO_PinState idleState    = active_low ? GPIO_PIN_SET   : GPIO_PIN_RESET;
+
+    if (nowState == pressedState && *lastState == idleState)
     {
         if (debounce_check(lastTime, now)) onPress();
     }
@@ -319,12 +330,19 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+  uint16_t pot1 = 0, pot2 = 0, pot3 = 0, pot4 = 0;
 
 
-
-  static GPIO_PinState armLastState     = GPIO_PIN_SET;
-  static GPIO_PinState manualLastState  = GPIO_PIN_SET;
-  static GPIO_PinState takeoffLastState = GPIO_PIN_SET;
+  static GPIO_PinState armLastState       = GPIO_PIN_SET;    /* PA6  pull-up   */
+  static GPIO_PinState manualLastState    = GPIO_PIN_RESET;  /* PF12 pull-down */
+  static GPIO_PinState autoLastState      = GPIO_PIN_SET;    /* PD14 pull-up   */
+  static GPIO_PinState autoLandLastState  = GPIO_PIN_SET;    /* PD15 pull-up   */
+  static GPIO_PinState speedUpLastState   = GPIO_PIN_RESET;  /* PE10 pull-down */
+  static GPIO_PinState speedDownLastState = GPIO_PIN_RESET;  /* PE12 pull-down */
+  static GPIO_PinState zoomInLastState    = GPIO_PIN_RESET;  /* PE14 pull-down */
+  static GPIO_PinState zoomOutLastState   = GPIO_PIN_RESET;  /* PD11 pull-down */
+  static GPIO_PinState wideInLastState    = GPIO_PIN_RESET;  /* PD12 pull-down */
+  static GPIO_PinState wideOutLastState   = GPIO_PIN_RESET;  /* PD13 pull-down */
   static uint32_t last_usb_send = 0;
   static uint16_t avg1 = 0;
   static uint16_t avg2 = 0;
@@ -345,9 +363,17 @@ int main(void)
       pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
 
       uint32_t now = HAL_GetTick();
-      poll_button(GPIOA, GPIO_PIN_6,  &armLastState,     &lastArmTime,     now, onARM_Button_Press);
-      poll_button(GPIOF, GPIO_PIN_12, &manualLastState,  &lastManualTime,  now, onManual_Button_Press);
-      poll_button(GPIOD, GPIO_PIN_14, &takeoffLastState, &lastTakeoffTime, now, onAutoTakeOff_Button_Press);
+      /*                port      pin           active_low  lastState            lastTime            now  handler */
+      poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onARM_Button_Press);
+      poll_button(GPIOF, GPIO_PIN_12, 0, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
+      poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onAuto_Button_Press);
+      poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
+      poll_button(GPIOE, GPIO_PIN_10, 0, &speedUpLastState,   &lastSpeedUpTime,   now, onSpeedUp_Button_Press);
+      poll_button(GPIOE, GPIO_PIN_12, 0, &speedDownLastState, &lastSpeedDownTime, now, onSpeedDown_Button_Press);
+      poll_button(GPIOE, GPIO_PIN_14, 0, &zoomInLastState,    &lastZoomInTime,    now, onZoomIn_Button_Press);
+      poll_button(GPIOD, GPIO_PIN_11, 0, &zoomOutLastState,   &lastZoomOutTime,   now, onZoomOUT_Button_Press);
+      poll_button(GPIOD, GPIO_PIN_12, 0, &wideInLastState,    &lastWideInTime,    now, onWideIn_Button_Press);
+      poll_button(GPIOD, GPIO_PIN_13, 0, &wideOutLastState,   &lastWideOutTime,   now, onWideOUT_Button_Press);
 
       counter++;
 
