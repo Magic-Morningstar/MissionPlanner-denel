@@ -1,18 +1,18 @@
-# mavlink/uav_commads/command_sender.py
+# mavlink/uav_commads/discrete_command_sender.py
 
 import logging
 import queue
 import threading
 from pymavlink import mavutil
 from mavlink.mavlink_worker import MavlinkWorker
-from mavlink.uav_commads.arms_commands import Arms
-from mavlink.uav_commads.autotakeoff_commands import AutoTakeOff
-from mavlink.uav_commads.mode_commands import ModeCommander
-from mavlink.uav_commads.speed_commands import Speed_Controller
-from mavlink.uav_commads.direction_commands import DirectionCommander, ManualController
+from mavlink.uav_commads.commands.arms_commands import Arms
+from mavlink.uav_commads.commands.autotakeoff_commands import AutoTakeOff
+from mavlink.uav_commads.commands.mode_commands import ModeCommander
+from mavlink.uav_commads.commands.speed_commands import Speed_Controller
+from mavlink.uav_commads.commands.direction_commands import DirectionCommander, ManualController
 from commands.intents import (
-    ArmCommand, DisarmCommand, TakeoffCommand, ManualModeCommand, RTLCommand,
-    EmergencyCommand,
+    ArmCommand, DisarmCommand, TakeoffCommand, ManualModeCommand,
+    RTLCommand, EmergencyCommand,
 )
 from commands.registry import register_handler, dispatch
 
@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 
 class UAVCommandSender(MavlinkWorker):
+    """
+    Handles discrete button commands arriving via command_bus.
+    Owns the MAVLink connection, command queue, and all
+    sub-controllers (Manual, Director, ManualCtrl, AutoTakeOff).
+
+    Analog input handling is delegated to AnalogInputHandler,
+    which is instantiated here and called each _run_once().
+    """
 
     def __init__(self, connection_string, state, command_bus, watchdog=None, interval=0.05):
         super().__init__(connection_string, state, watchdog, interval)
@@ -33,10 +41,7 @@ class UAVCommandSender(MavlinkWorker):
         self.Director   = None
         self.ManualCtrl = None
         self._ato       = None
-
-        self._last_pot_value = None
-        self._last_turn_degrees = 0.0
-        self._last_altitude_delta = 0.0
+        self._analog    = None   # AnalogInputHandler — set after connection
 
     # ── Connection ────────────────────────────────────────────────────────────
 
@@ -54,6 +59,11 @@ class UAVCommandSender(MavlinkWorker):
         self.Director   = DirectionCommander(self.command_drone, self.state, self._mav_lock)
         self.ManualCtrl = ManualController(self.command_drone, self.state, self._mav_lock)
         self._ato       = AutoTakeOff(self.command_drone, self._mav_lock)
+
+        # Analog handler wired to this sender so it can call
+        # set_airspeed / turn_left / set_altitude etc.
+        from mavlink.uav_commads.analog_input_handler import AnalogInputHandler
+        self._analog = AnalogInputHandler(self.state, self.ManualCtrl, self)
 
         self.state.update_UAV_Command_Connection(True, self.command_drone)
         logger.info("UAVCommandSender connected.")
@@ -75,6 +85,7 @@ class UAVCommandSender(MavlinkWorker):
             self.command_drone = None
         self.Manual   = None
         self.Director = None
+        self._analog  = None
         self.state.update_UAV_Command_Connection(False, None)
         logger.info("UAVCommandSender disconnected.")
 
@@ -90,8 +101,17 @@ class UAVCommandSender(MavlinkWorker):
         logger.error(f"UAVCommandSender loop error: {e}")
         self.state.update_UAV_Command_Connection(False, None)
 
+    # ── Main loop ─────────────────────────────────────────────────────────────
+
     def _run_once(self):
-        self._process_analog_inputs()
+        # 1. Drain discrete commands from the bus
+        self.drain_input_commands()
+
+        # 2. Process continuous analog inputs
+        if self._analog:
+            self._analog.process()
+
+        # 3. Execute one MAVLink command from the queue
         try:
             cmd, args, kwargs = self.command_queue.get(timeout=self.interval)
             cmd(*args, **kwargs)
@@ -102,7 +122,7 @@ class UAVCommandSender(MavlinkWorker):
     def enqueue(self, cmd, *args, **kwargs):
         self.command_queue.put((cmd, args, kwargs))
 
-    # ── Inbound dispatch — drains the Command bus ───────────────────────────
+    # ── Discrete command bus ──────────────────────────────────────────────────
 
     def drain_input_commands(self):
         while True:
@@ -110,57 +130,12 @@ class UAVCommandSender(MavlinkWorker):
                 cmd = self.command_bus.get_nowait()
             except queue.Empty:
                 break
-            dispatch(cmd, self)   # was a hand-written if/elif chain — see commands/registry.py
+            dispatch(cmd, self)
 
     def _cancel_takeoff_if_active(self):
         if self._ato:
             self._ato.cancel()
         self.takeoff_in_progress = False
-
-    # ── Continuous analog inputs — read as facts, not Commands ─────────────
-
-    def _process_analog_inputs(self):
-        current_mode = self.state.get_UAV_Current_Mode
-
-        pot_value = self.state.get_Pot_Value
-        if pot_value and pot_value != self._last_pot_value and current_mode in ("FBWA", "FBWB"):
-            speed = self._pot_to_speed(pot_value)
-            logger.debug(f"POT: {pot_value} -> {speed:.1f} m/s")
-            self.set_airspeed(speed)
-            self._last_pot_value = pot_value
-
-        joystick_x = self.state.get_Joystick_X
-        joystick_y = self.state.get_Joystick_Y
-
-        if current_mode in ("FBWA", "FBWB"):
-            if self.ManualCtrl and not self.ManualCtrl._streaming:
-                if self.state.is_flying:
-                    self.ManualCtrl.start_streaming()
-
-        elif current_mode == "GUIDED":
-            if self.ManualCtrl and self.ManualCtrl._streaming:
-                self.ManualCtrl.stop_streaming()
-                self.ManualCtrl.set_neutral()
-
-            degrees = self._joystick_to_degrees(joystick_x)
-            if degrees != 0 and abs(degrees - self._last_turn_degrees) > 2.0:
-                if degrees > 0:
-                    self.turn_right(abs(degrees))
-                else:
-                    self.turn_left(abs(degrees))
-                self._last_turn_degrees = degrees
-
-            alt_delta = self._joystick_to_altitude_delta(joystick_y)
-            if alt_delta != 0 and abs(alt_delta - self._last_altitude_delta) > 1.0:
-                current_alt = self.state.get_UAV_Current_Altitude or 0
-                target_alt = max(5.0, current_alt + alt_delta)
-                self.set_altitude(target_alt)
-                self._last_altitude_delta = alt_delta
-
-        else:
-            if self.ManualCtrl and self.ManualCtrl._streaming:
-                self.ManualCtrl.stop_streaming()
-                self.ManualCtrl.set_neutral()
 
     # ── Public command API ────────────────────────────────────────────────────
 
@@ -212,7 +187,10 @@ class UAVCommandSender(MavlinkWorker):
             self.enqueue(self.Manual.initiate_RTL)
 
     def set_airspeed(self, speed_ms):
-        self.enqueue(Speed_Controller(self.command_drone, self.state, self._mav_lock).set_airspeed, speed_ms)
+        self.enqueue(
+            Speed_Controller(self.command_drone, self.state, self._mav_lock).set_airspeed,
+            speed_ms
+        )
 
     def turn_left(self, degrees=30):
         if self.Director:
@@ -231,7 +209,9 @@ class UAVCommandSender(MavlinkWorker):
             logger.info("Takeoff already in progress — ignoring duplicate request.")
             return
         self.takeoff_in_progress = True
-        threading.Thread(target=self._run_takeoff, daemon=True, name="TakeoffSequence").start()
+        threading.Thread(
+            target=self._run_takeoff, daemon=True, name="TakeoffSequence"
+        ).start()
 
     def _run_takeoff(self):
         try:
@@ -247,42 +227,8 @@ class UAVCommandSender(MavlinkWorker):
             logger.critical("EMERGENCY: vehicle on ground — disarming")
             self.disarm()
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _pot_to_speed(self, pot_value):
-        min_speed = getattr(self.state, 'MIN_SPEED', 5.0)
-        max_speed = getattr(self.state, 'MAX_SPEED', 25.0)
-        return min_speed + ((pot_value - 1) / 99.0) * (max_speed - min_speed)
-
-    def _joystick_to_degrees(self, joystick_x):
-        DEAD_LOW  = int(0.45 * 4095)
-        DEAD_HIGH = int(0.55 * 4095)
-        if DEAD_LOW <= joystick_x <= DEAD_HIGH:
-            return 0
-        if joystick_x < DEAD_LOW:
-            return -(((DEAD_LOW - joystick_x) / DEAD_LOW) * 45.0)
-        return +(((joystick_x - DEAD_HIGH) / (4095 - DEAD_HIGH)) * 45.0)
-
-    def _joystick_to_altitude_delta(self, joystick_y):
-        DEAD_LOW  = int(0.45 * 4095)
-        DEAD_HIGH = int(0.55 * 4095)
-        if DEAD_LOW <= joystick_y <= DEAD_HIGH:
-            return 0
-        if joystick_y < DEAD_LOW:
-            return -(((DEAD_LOW - joystick_y) / DEAD_LOW) * 20.0)
-        return +(((joystick_y - DEAD_HIGH) / (4095 - DEAD_HIGH)) * 20.0)
-    
-    def _joystick2_y_to_speed(self, raw_adc):
-        min_speed = getattr(self.state, 'MIN_SPEED', 5.0)
-        max_speed = getattr(self.state, 'MAX_SPEED', 25.0)
-        ratio = raw_adc / 4095.0
-        return min_speed + ratio * (max_speed - min_speed)
-
-
-# ── Registered handlers — this list IS the dispatch table ──────────────────
-# Adding a command: write one function here, decorate it. process_command
-# (now just dispatch(), called from drain_input_commands above) never
-# changes, and neither does UAVCommandSender.
+# ── Registered handlers ───────────────────────────────────────────────────────
 
 @register_handler(ArmCommand)
 def _handle_arm(sender, cmd):

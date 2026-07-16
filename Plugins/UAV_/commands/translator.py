@@ -47,6 +47,7 @@ class InputTranslator:
         elif isinstance(obj, Joystick):
             self.state.update_Joystick(obj.x, obj.y)
         elif isinstance(obj, Joystick2):
+
             self.state.update_Payload_Joystick(obj.x, obj.y) 
 
     def _translate_buttons(self, new: ButtonState):

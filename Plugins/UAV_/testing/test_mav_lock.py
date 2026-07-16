@@ -23,9 +23,9 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mavlink.uav_commads.arms_commands import Arms
-from mavlink.uav_commads.mode_commands import ModeCommander
-from mavlink.uav_commads.direction_commands import ManualController
+from mavlink.uav_commads.commands.arms_commands import Arms
+from mavlink.uav_commads.commands.mode_commands import ModeCommander
+from mavlink.uav_commads.commands.direction_commands import ManualController
 from utils.helper import system_Print
 from logging_config import setup_logging
 import logging
