@@ -31,9 +31,20 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define BIT_ARM      4
-#define BIT_MANUAL   11
-#define BIT_TAKEOFF  6
+#define BIT_ARM                 0
+#define BIT_ARM_STATUS          1
+#define BIT_AUTO                2
+#define BIT_AUTO_STATUS         3
+#define BIT_MANUAL              4
+#define BIT_MANUAL_STATUS       5
+#define BIT_AUTO_LAND           6
+#define BIT_AUTO_LAND_STATUS    7
+#define BIT_SPEED_UP            8
+#define BIT_SPEED_DOWN          9
+#define BIT_ZOOM_IN             10
+#define BIT_ZOOM_OUT            11
+#define BIT_WIDE_IN             12
+#define BIT_WIDE_OUT            13
 #define DEBOUNCE_MS  15
 /* USER CODE END PD */
 
@@ -99,7 +110,7 @@ static uint32_t lastArmTime     = 0;
 static uint32_t lastManualTime  = 0;
 static uint32_t lastTakeoffTime = 0;
 uint32_t USB_MESSAGE = 0x00;
-static uint16_t adc3_dma_buf[4];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -209,7 +220,50 @@ void onManual_Button_Press(void)
     else                                 USB_MESSAGE |= (1 << BIT_MANUAL);
 }
 
-void onAutoTakeOff_Button_Press(void)
+void onAuto_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
+    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+}
+
+void onAutoLand_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_MANUAL)) USB_MESSAGE &= ~(1 << BIT_MANUAL);
+    else                                 USB_MESSAGE |= (1 << BIT_MANUAL);
+}
+
+void onSpeedUp_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
+    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+}
+
+void onSpeedDown_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
+    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+}
+
+void onZoomIn_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
+    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+}
+
+void onZoomOUT_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
+    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+}
+
+
+void onWideIn_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
+    else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
+}
+
+void onWideOUT_Button_Press(void)
 {
     if (USB_MESSAGE & (1 << BIT_TAKEOFF)) USB_MESSAGE &= ~(1 << BIT_TAKEOFF);
     else                                  USB_MESSAGE |= (1 << BIT_TAKEOFF);
@@ -267,7 +321,7 @@ int main(void)
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
 
 
-  uint16_t pot1, pot2, pot3, pot4;
+
   static GPIO_PinState armLastState     = GPIO_PIN_SET;
   static GPIO_PinState manualLastState  = GPIO_PIN_SET;
   static GPIO_PinState takeoffLastState = GPIO_PIN_SET;
