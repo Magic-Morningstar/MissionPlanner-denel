@@ -42,7 +42,40 @@ class ManualModeCommand(Command):
 
 
 @dataclass
+class LandCommand(Command):
+    pass
+
+
+@dataclass
+class SpeedUpCommand(Command):
+    pass
+
+@dataclass
+class SpeedDownCommand(Command):
+    pass
+
+@dataclass
+class ZoomInCommand(Command):
+    pass
+
+@dataclass
+class ZoomOutCommand(Command):
+    pass
+
+@dataclass
+class WideInCommand(Command):
+    pass
+
+@dataclass
+class WideOutCommand(Command):
+    pass
+
+@dataclass
 class RTLCommand(Command):
+    pass
+
+@dataclass
+class AutoModeCommand(Command):
     pass
 
 

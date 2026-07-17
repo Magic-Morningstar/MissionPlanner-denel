@@ -8,11 +8,7 @@
 import struct
 from dataclasses import dataclass
 from serial_controller.protocol.registry import Decoder, MessageType, register
-from serial_controller.protocol.bit_definitions import (
-    ARM_BIT, RTL_BIT, MANUAL_BIT, AUTOTAKEOFF_BIT, EMERGENCY_BIT,
-    SYSTEM_CHECK_BIT, POT_VALUE_SHIFT, POT_VALUE_MASK,
-    STATUS_ARMED_BIT, STATUS_MANUAL_MODE_BIT, STATUS_IS_FLYING_BIT,
-)
+from serial_controller.protocol.bit_definitions import *
 
 
 # ── Incoming: STM32 -> PC ────────────────────────────────────────────────────
@@ -48,10 +44,17 @@ class ButtonState:
     arm: bool
     rtl: bool
     manual: bool
+    auto: bool
     takeoff: bool
     emergency: bool
-    system_check: bool
-    pot_value: int   # 0-255, raw
+    autoland: bool
+    speedup: bool
+    speeddown: bool
+    zoomin: bool
+    zoomout: bool
+    widein: bool
+    wideout: bool
+
 
 
 class ButtonStateDecoder(Decoder):
@@ -61,26 +64,21 @@ class ButtonStateDecoder(Decoder):
         value = struct.unpack('<I', payload)[0]
         return ButtonState(
             arm          = bool((value >> ARM_BIT) & 1),
-            rtl          = bool((value >> RTL_BIT) & 1),
             manual       = bool((value >> MANUAL_BIT) & 1),
-            takeoff      = bool((value >> AUTOTAKEOFF_BIT) & 1),
-            emergency    = bool((value >> EMERGENCY_BIT) & 1),
-            system_check = bool((value >> SYSTEM_CHECK_BIT) & 1),
-            pot_value    = (value >> POT_VALUE_SHIFT) & POT_VALUE_MASK,
-        )
+            #takeoff      = bool((value >> AUTOTAKEOFF_BIT) & 1),
+            auto         = bool((value >> AUTO_BIT) & 1),
+            autoland     = bool((value >> AUTO_LAND_BIT) & 1),
+            
+            speedup     = bool((value >> SPEED_UP_BIT) & 1),
+            speeddown     = bool((value >> SPEED_DOWN_BIT) & 1),
+            
+            zoomin     = bool((value >> ZOOM_IN_BIT) & 1),
+            zoomout     = bool((value >> ZOOM_OUT_BIT) & 1),
+            
+            widein     = bool((value >> WIDE_IN_BIT) & 1),
+            wideout     = bool((value >> WIDE_OUT_BIT) & 1),
 
-    def encode(self, obj: ButtonState) -> bytes:
-        # Included for symmetry / test-harness use (e.g. simulating STM32
-        # input from a PC-side test script). Not used in normal operation.
-        value = 0
-        value |= (int(obj.arm)          << ARM_BIT)
-        value |= (int(obj.rtl)          << RTL_BIT)
-        value |= (int(obj.manual)       << MANUAL_BIT)
-        value |= (int(obj.takeoff)      << AUTOTAKEOFF_BIT)
-        value |= (int(obj.emergency)    << EMERGENCY_BIT)
-        value |= (int(obj.system_check) << SYSTEM_CHECK_BIT)
-        value |= ((obj.pot_value & POT_VALUE_MASK) << POT_VALUE_SHIFT)
-        return struct.pack('<I', value)
+        )
 
 
 register(ButtonStateDecoder())
@@ -122,6 +120,8 @@ class StatusUpdate:
     """
     armed: bool
     manual_mode: bool
+    auto_mode: bool
+    autoland_mode: bool
     is_flying: bool
 
 
@@ -131,15 +131,19 @@ class StatusUpdateDecoder(Decoder):
     def decode(self, payload: bytes) -> StatusUpdate:
         value = struct.unpack('<I', payload)[0]
         return StatusUpdate(
-            armed       = bool((value >> STATUS_ARMED_BIT) & 1),
-            manual_mode = bool((value >> STATUS_MANUAL_MODE_BIT) & 1),
+            armed       = bool((value >> ARM_STATUS_BIT) & 1),
+            manual_mode = bool((value >> MANUAL_STATUS_BIT) & 1),
+            auto_mode = bool((value >> AUTO_STATUS_BIT) & 1),
+            autoland_mode = bool((value >> AUTO_LAND_STATUS_BIT) & 1),
             is_flying   = bool((value >> STATUS_IS_FLYING_BIT) & 1),
         )
 
     def encode(self, obj: StatusUpdate) -> bytes:
         value = 0
-        value |= (int(obj.armed)       << STATUS_ARMED_BIT)
-        value |= (int(obj.manual_mode) << STATUS_MANUAL_MODE_BIT)
+        value |= (int(obj.armed)       << ARM_STATUS_BIT)
+        value |= (int(obj.manual_mode) << MANUAL_STATUS_BIT)
+        value |= (int(obj.auto_mode) << AUTO_STATUS_BIT)
+        value |= (int(obj.autoland_mode) << AUTO_LAND_STATUS_BIT)
         value |= (int(obj.is_flying)   << STATUS_IS_FLYING_BIT)
         return struct.pack('<I', value)
 

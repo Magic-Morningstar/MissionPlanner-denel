@@ -245,7 +245,7 @@ def _handle_disarm(sender, cmd):
 @register_handler(TakeoffCommand)
 def _handle_takeoff(sender, cmd):
     logger.info("TakeoffCommand received")
-    sender.start_takeoff()
+    sender.start_takeoff() 
 
 
 @register_handler(ManualModeCommand)
@@ -269,3 +269,44 @@ def _handle_emergency(sender, cmd):
     logger.warning("EmergencyCommand received")
     sender._cancel_takeoff_if_active()
     sender.emergency_stop()
+
+@register_handler(AutoModeCommand)
+def _handle_auto(sender, cmd):
+    logger.info("AutoModeCommand received")
+    sender.set_auto()
+
+
+@register_handler(LandCommand)
+def _handle_land(sender, cmd):
+    logger.info("LandCommand received")
+
+
+
+@register_handler(SpeedUpCommand)
+def _handle_speedup(sender, cmd):
+    logger.info("SpeedUpCommand received")
+    
+
+@register_handler(SpeedDownCommand)
+def _handle_speeddown(sender, cmd):
+    logger.info("SpeedDownCommand received")
+
+
+@register_handler(ZoomInCommand)
+def _handle_zoomin(sender, cmd):
+    logger.info("CameraZoomInCommand received")
+
+
+@register_handler(ZoomOutCommand)
+def _handle_zoomout(sender, cmd):
+    logger.info("CameraZoomOutCommand received")
+
+
+@register_handler(WideInCommand)
+def _handle_wideout(sender, cmd):
+    logger.info("CameraWideOutCommand received")
+
+@register_handler(WideOutCommand)
+def _handle_widein(sender, cmd):
+    logger.info("CameraWideInCommand received")
+

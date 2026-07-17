@@ -12,22 +12,25 @@
 
 import logging
 from serial_controller.protocol.messages import ButtonState, Joystick, Joystick2  # add Joystick2 to this import
-from commands.intents import (
-    ArmCommand, DisarmCommand, TakeoffCommand, ManualModeCommand, RTLCommand,
-    EmergencyCommand,
-)
-
+from commands.intents import *
 logger = logging.getLogger(__name__)
 
 # (ButtonState field name, rising-edge command, falling-edge command or None)
 EDGE_TABLE = [
-    ("arm",       ArmCommand,        DisarmCommand),
-    ("rtl",       RTLCommand,        None),
-    ("takeoff",   TakeoffCommand,    None),
-    ("manual",    ManualModeCommand, None),
-    ("emergency", EmergencyCommand,  None),
-    # New button? One row here. No other line in this file changes.
-    # ("system_check", SystemCheckCommand, None),
+    ("arm",       ArmCommand,           DisarmCommand),
+    ("rtl",       RTLCommand,           None),
+    ("takeoff",   TakeoffCommand,       None),
+    ("autoland",   LandCommand,         None),
+    ("speedup",   SpeedUpCommand,       None),
+    ("speeddown",   SpeedDownCommand,   None),
+    ("zoomin",   ZoomInCommand,         None),
+    ("zoomout",   ZoomOutCommand,       None),
+    ("widein",   WideInCommand,         None),
+    ("wideout",   WideOutCommand,       None),
+    ("manual",    ManualModeCommand,    None),
+    ("auto",      AutoModeCommand,      None),
+    ("emergency", EmergencyCommand,     None),
+   
 ]
 
 
@@ -38,7 +41,8 @@ class InputTranslator:
         self.state = state
         self._prev = ButtonState(
             arm=False, rtl=False, manual=False, takeoff=False,
-            emergency=False, system_check=False, pot_value=0,
+            emergency=False, autoland = False, auto = False, speedup = False, speeddown = False, 
+            zoomin = False, zoomout = False, widein = False, wideout = False
         )
 
     def handle(self, obj):
