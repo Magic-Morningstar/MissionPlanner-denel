@@ -181,7 +181,7 @@ void Test_Loop(void)
                            on ? GPIO_PIN_SET : GPIO_PIN_RESET);
     }
 
-    HAL_Delay(10); /* light debounce / avoid hammering the CPU */
+    HAL_Delay(10); /* light debounce */
 }
 uint16_t ADC_Read_Channel(uint32_t channel)
 {
@@ -206,6 +206,17 @@ uint16_t ADC_Read_Channel(uint32_t channel)
     HAL_ADC_Stop(&hadc3);
 
     return value;
+}
+
+
+static inline void set_bit_from_pin(GPIO_TypeDef *port, uint16_t pin,
+                                     uint8_t active_low, uint32_t bit)
+{
+    GPIO_PinState state = HAL_GPIO_ReadPin(port, pin);
+    uint8_t pressed = active_low ? (state == GPIO_PIN_RESET) : (state == GPIO_PIN_SET);
+
+    if (pressed) USB_MESSAGE |= (1UL << bit);
+    else         USB_MESSAGE &= ~(1UL << bit);
 }
 
 static inline uint8_t debounce_check(uint32_t *last_time, uint32_t now)
@@ -349,73 +360,81 @@ int main(void)
   static uint16_t avg3 = 0;
   static uint16_t avg4 = 0;
   static uint8_t counter = 0;
+  static uint8_t message_counter = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
+    {
+  	  Test_Loop();
+        pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
+        pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
+        pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
+        pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
 
-	  Test_Loop();
-      pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
-      pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
-      pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
-      pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
+        uint32_t now = HAL_GetTick();
 
-      uint32_t now = HAL_GetTick();
-      /*                port      pin           active_low  lastState            lastTime            now  handler */
-      poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onARM_Button_Press);
-      poll_button(GPIOF, GPIO_PIN_12, 0, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
-      poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onAuto_Button_Press);
-      poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
-      poll_button(GPIOE, GPIO_PIN_10, 0, &speedUpLastState,   &lastSpeedUpTime,   now, onSpeedUp_Button_Press);
-      poll_button(GPIOE, GPIO_PIN_12, 0, &speedDownLastState, &lastSpeedDownTime, now, onSpeedDown_Button_Press);
-      poll_button(GPIOE, GPIO_PIN_14, 0, &zoomInLastState,    &lastZoomInTime,    now, onZoomIn_Button_Press);
-      poll_button(GPIOD, GPIO_PIN_11, 0, &zoomOutLastState,   &lastZoomOutTime,   now, onZoomOUT_Button_Press);
-      poll_button(GPIOD, GPIO_PIN_12, 0, &wideInLastState,    &lastWideInTime,    now, onWideIn_Button_Press);
-      poll_button(GPIOD, GPIO_PIN_13, 0, &wideOutLastState,   &lastWideOutTime,   now, onWideOUT_Button_Press);
+        /* Persistent MODE buttons: toggle/latch on press, stay set until pressed again. */
+        /*                port      pin           active_low  lastState            lastTime            now  handler */
+        poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onARM_Button_Press);
+        poll_button(GPIOF, GPIO_PIN_12, 0, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
+        poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onAuto_Button_Press);
+        poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
 
-      counter++;
+        /* MOMENTARY command buttons: bit mirrors the pin, set only while held. */
+        /*                  port      pin           active_low  bit */
+        set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_SPEED_UP);
+        set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_SPEED_DOWN);
+        set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_IN);
+        set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_ZOOM_OUT);
+        set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_WIDE_IN);
+        set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_WIDE_OUT);
 
-      if (counter >= 16)
-      {
-          avg1 = pot1 / 16;
-          avg2 = pot2 / 16;
-          avg3 = pot3 / 16;
-          avg4 = pot4 / 16;
+        counter++;
+
+        if (counter >= 16)
+        {
+            avg1 = pot1 / 16;
+            avg2 = pot2 / 16;
+            avg3 = pot3 / 16;
+            avg4 = pot4 / 16;
 
 
-          counter = 0;
-          pot1 = 0;
-          pot2 = 0;
-          pot3 = 0;
-          pot4 = 0;
-      }
-      if ((HAL_GetTick() - last_usb_send) >= 10)
-      {
-          uint8_t btn_payload[4] = {
-              (uint8_t)(USB_MESSAGE & 0xFF), (uint8_t)((USB_MESSAGE >> 8) & 0xFF),
-              (uint8_t)((USB_MESSAGE >> 16) & 0xFF), (uint8_t)((USB_MESSAGE >> 24) & 0xFF),
-          };
-          TLV_Send(TLV_TYPE_BUTTON_STATE, btn_payload, sizeof(btn_payload));
+            counter = 0;
+            pot1 = 0;
+            pot2 = 0;
+            pot3 = 0;
+            pot4 = 0;
+        }
+        if ((HAL_GetTick() - last_usb_send) >= 10)
+        {
+            uint8_t btn_payload[4] = {
+                (uint8_t)(USB_MESSAGE & 0xFF), (uint8_t)((USB_MESSAGE >> 8) & 0xFF),
+                (uint8_t)((USB_MESSAGE >> 16) & 0xFF), (uint8_t)((USB_MESSAGE >> 24) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_BUTTON_STATE, btn_payload, sizeof(btn_payload));
 
-          uint8_t joy_payload[4] = {
-              (uint8_t)(avg1 & 0xFF), (uint8_t)((avg1 >> 8) & 0xFF),
-              (uint8_t)(avg2 & 0xFF), (uint8_t)((avg2 >> 8) & 0xFF),
-          };
-          TLV_Send(TLV_TYPE_JOYSTICK, joy_payload, sizeof(joy_payload));
+            uint8_t joy_payload[4] = {
+                (uint8_t)(avg1 & 0xFF), (uint8_t)((avg1 >> 8) & 0xFF),
+                (uint8_t)(avg2 & 0xFF), (uint8_t)((avg2 >> 8) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_JOYSTICK, joy_payload, sizeof(joy_payload));
 
-          uint8_t joy2_payload[4] = {
-              (uint8_t)(avg3 & 0xFF), (uint8_t)((avg3 >> 8) & 0xFF),
-              (uint8_t)(avg4 & 0xFF), (uint8_t)((avg4 >> 8) & 0xFF),
-          };
-          TLV_Send(TLV_TYPE_JOYSTICK2, joy2_payload, sizeof(joy2_payload));
+            uint8_t joy2_payload[4] = {
+                (uint8_t)(avg3 & 0xFF), (uint8_t)((avg3 >> 8) & 0xFF),
+                (uint8_t)(avg4 & 0xFF), (uint8_t)((avg4 >> 8) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_JOYSTICK2, joy2_payload, sizeof(joy2_payload));
 
-          last_usb_send = HAL_GetTick();
-      }
+            last_usb_send = HAL_GetTick();
+        }
 
-  }
 
+
+
+
+    }
 
   /* USER CODE END 3 */
 }
