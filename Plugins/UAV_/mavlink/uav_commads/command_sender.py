@@ -10,10 +10,7 @@ from mavlink.uav_commads.commands.autotakeoff_commands import AutoTakeOff
 from mavlink.uav_commads.commands.mode_commands import ModeCommander
 from mavlink.uav_commads.commands.speed_commands import Speed_Controller
 from mavlink.uav_commads.commands.direction_commands import DirectionCommander, ManualController
-from commands.intents import (
-    ArmCommand, DisarmCommand, TakeoffCommand, ManualModeCommand,
-    RTLCommand, EmergencyCommand,
-)
+from commands.intents import *
 from commands.registry import register_handler, dispatch
 
 logger = logging.getLogger(__name__)
@@ -285,7 +282,7 @@ def _handle_land(sender, cmd):
 @register_handler(SpeedUpCommand)
 def _handle_speedup(sender, cmd):
     logger.info("SpeedUpCommand received")
-    
+
 
 @register_handler(SpeedDownCommand)
 def _handle_speeddown(sender, cmd):
