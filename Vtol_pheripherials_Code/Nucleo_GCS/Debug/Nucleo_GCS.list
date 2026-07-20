@@ -861,6 +861,7 @@ void onManual_Button_Press(void)
 {
  8000884:	b480      	push	{r7}
  8000886:	af00      	add	r7, sp, #0
+
     if (USB_MESSAGE & (1 << BIT_MANUAL)) USB_MESSAGE &= ~(1 << BIT_MANUAL);
  8000888:	4b0b      	ldr	r3, [pc, #44]	@ (80008b8 <onManual_Button_Press+0x34>)
  800088a:	681b      	ldr	r3, [r3, #0]
@@ -1141,7 +1142,7 @@ int main(void)
  8000a2e:	2140      	movs	r1, #64	@ 0x40
  8000a30:	4871      	ldr	r0, [pc, #452]	@ (8000bf8 <main+0x25c>)
  8000a32:	f7ff ff7b 	bl	800092c <poll_button>
-        poll_button(GPIOF, GPIO_PIN_12, 0, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
+        poll_button(GPIOC, GPIO_PIN_7, 1, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
  8000a36:	4b71      	ldr	r3, [pc, #452]	@ (8000bfc <main+0x260>)
  8000a38:	9302      	str	r3, [sp, #8]
  8000a3a:	68fb      	ldr	r3, [r7, #12]
@@ -1149,257 +1150,258 @@ int main(void)
  8000a3e:	4b70      	ldr	r3, [pc, #448]	@ (8000c00 <main+0x264>)
  8000a40:	9300      	str	r3, [sp, #0]
  8000a42:	4b70      	ldr	r3, [pc, #448]	@ (8000c04 <main+0x268>)
- 8000a44:	2200      	movs	r2, #0
- 8000a46:	f44f 5180 	mov.w	r1, #4096	@ 0x1000
- 8000a4a:	486f      	ldr	r0, [pc, #444]	@ (8000c08 <main+0x26c>)
- 8000a4c:	f7ff ff6e 	bl	800092c <poll_button>
+ 8000a44:	2201      	movs	r2, #1
+ 8000a46:	2180      	movs	r1, #128	@ 0x80
+ 8000a48:	486f      	ldr	r0, [pc, #444]	@ (8000c08 <main+0x26c>)
+ 8000a4a:	f7ff ff6f 	bl	800092c <poll_button>
         poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onAuto_Button_Press);
- 8000a50:	4b6e      	ldr	r3, [pc, #440]	@ (8000c0c <main+0x270>)
- 8000a52:	9302      	str	r3, [sp, #8]
- 8000a54:	68fb      	ldr	r3, [r7, #12]
- 8000a56:	9301      	str	r3, [sp, #4]
- 8000a58:	4b6d      	ldr	r3, [pc, #436]	@ (8000c10 <main+0x274>)
- 8000a5a:	9300      	str	r3, [sp, #0]
- 8000a5c:	4b6d      	ldr	r3, [pc, #436]	@ (8000c14 <main+0x278>)
- 8000a5e:	2201      	movs	r2, #1
- 8000a60:	f44f 4180 	mov.w	r1, #16384	@ 0x4000
- 8000a64:	486c      	ldr	r0, [pc, #432]	@ (8000c18 <main+0x27c>)
- 8000a66:	f7ff ff61 	bl	800092c <poll_button>
+ 8000a4e:	4b6f      	ldr	r3, [pc, #444]	@ (8000c0c <main+0x270>)
+ 8000a50:	9302      	str	r3, [sp, #8]
+ 8000a52:	68fb      	ldr	r3, [r7, #12]
+ 8000a54:	9301      	str	r3, [sp, #4]
+ 8000a56:	4b6e      	ldr	r3, [pc, #440]	@ (8000c10 <main+0x274>)
+ 8000a58:	9300      	str	r3, [sp, #0]
+ 8000a5a:	4b6e      	ldr	r3, [pc, #440]	@ (8000c14 <main+0x278>)
+ 8000a5c:	2201      	movs	r2, #1
+ 8000a5e:	f44f 4180 	mov.w	r1, #16384	@ 0x4000
+ 8000a62:	486d      	ldr	r0, [pc, #436]	@ (8000c18 <main+0x27c>)
+ 8000a64:	f7ff ff62 	bl	800092c <poll_button>
         poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
- 8000a6a:	4b6c      	ldr	r3, [pc, #432]	@ (8000c1c <main+0x280>)
- 8000a6c:	9302      	str	r3, [sp, #8]
- 8000a6e:	68fb      	ldr	r3, [r7, #12]
- 8000a70:	9301      	str	r3, [sp, #4]
- 8000a72:	4b6b      	ldr	r3, [pc, #428]	@ (8000c20 <main+0x284>)
- 8000a74:	9300      	str	r3, [sp, #0]
- 8000a76:	4b6b      	ldr	r3, [pc, #428]	@ (8000c24 <main+0x288>)
- 8000a78:	2201      	movs	r2, #1
- 8000a7a:	f44f 4100 	mov.w	r1, #32768	@ 0x8000
- 8000a7e:	4866      	ldr	r0, [pc, #408]	@ (8000c18 <main+0x27c>)
- 8000a80:	f7ff ff54 	bl	800092c <poll_button>
+ 8000a68:	4b6c      	ldr	r3, [pc, #432]	@ (8000c1c <main+0x280>)
+ 8000a6a:	9302      	str	r3, [sp, #8]
+ 8000a6c:	68fb      	ldr	r3, [r7, #12]
+ 8000a6e:	9301      	str	r3, [sp, #4]
+ 8000a70:	4b6b      	ldr	r3, [pc, #428]	@ (8000c20 <main+0x284>)
+ 8000a72:	9300      	str	r3, [sp, #0]
+ 8000a74:	4b6b      	ldr	r3, [pc, #428]	@ (8000c24 <main+0x288>)
+ 8000a76:	2201      	movs	r2, #1
+ 8000a78:	f44f 4100 	mov.w	r1, #32768	@ 0x8000
+ 8000a7c:	4866      	ldr	r0, [pc, #408]	@ (8000c18 <main+0x27c>)
+ 8000a7e:	f7ff ff55 	bl	800092c <poll_button>
 
         /* MOMENTARY command buttons: bit mirrors the pin, set only while held. */
         /*                  port      pin           active_low  bit */
         set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_SPEED_UP);
- 8000a84:	2308      	movs	r3, #8
- 8000a86:	2200      	movs	r2, #0
- 8000a88:	f44f 6180 	mov.w	r1, #1024	@ 0x400
- 8000a8c:	4866      	ldr	r0, [pc, #408]	@ (8000c28 <main+0x28c>)
- 8000a8e:	f7ff fe87 	bl	80007a0 <set_bit_from_pin>
+ 8000a82:	2308      	movs	r3, #8
+ 8000a84:	2200      	movs	r2, #0
+ 8000a86:	f44f 6180 	mov.w	r1, #1024	@ 0x400
+ 8000a8a:	4867      	ldr	r0, [pc, #412]	@ (8000c28 <main+0x28c>)
+ 8000a8c:	f7ff fe88 	bl	80007a0 <set_bit_from_pin>
         set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_SPEED_DOWN);
- 8000a92:	2309      	movs	r3, #9
- 8000a94:	2200      	movs	r2, #0
- 8000a96:	f44f 5180 	mov.w	r1, #4096	@ 0x1000
- 8000a9a:	4863      	ldr	r0, [pc, #396]	@ (8000c28 <main+0x28c>)
- 8000a9c:	f7ff fe80 	bl	80007a0 <set_bit_from_pin>
+ 8000a90:	2309      	movs	r3, #9
+ 8000a92:	2200      	movs	r2, #0
+ 8000a94:	f44f 5180 	mov.w	r1, #4096	@ 0x1000
+ 8000a98:	4863      	ldr	r0, [pc, #396]	@ (8000c28 <main+0x28c>)
+ 8000a9a:	f7ff fe81 	bl	80007a0 <set_bit_from_pin>
         set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_IN);
- 8000aa0:	230a      	movs	r3, #10
- 8000aa2:	2200      	movs	r2, #0
- 8000aa4:	f44f 4180 	mov.w	r1, #16384	@ 0x4000
- 8000aa8:	485f      	ldr	r0, [pc, #380]	@ (8000c28 <main+0x28c>)
- 8000aaa:	f7ff fe79 	bl	80007a0 <set_bit_from_pin>
+ 8000a9e:	230a      	movs	r3, #10
+ 8000aa0:	2200      	movs	r2, #0
+ 8000aa2:	f44f 4180 	mov.w	r1, #16384	@ 0x4000
+ 8000aa6:	4860      	ldr	r0, [pc, #384]	@ (8000c28 <main+0x28c>)
+ 8000aa8:	f7ff fe7a 	bl	80007a0 <set_bit_from_pin>
         set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_ZOOM_OUT);
- 8000aae:	230b      	movs	r3, #11
- 8000ab0:	2200      	movs	r2, #0
- 8000ab2:	f44f 6100 	mov.w	r1, #2048	@ 0x800
- 8000ab6:	4858      	ldr	r0, [pc, #352]	@ (8000c18 <main+0x27c>)
- 8000ab8:	f7ff fe72 	bl	80007a0 <set_bit_from_pin>
+ 8000aac:	230b      	movs	r3, #11
+ 8000aae:	2200      	movs	r2, #0
+ 8000ab0:	f44f 6100 	mov.w	r1, #2048	@ 0x800
+ 8000ab4:	4858      	ldr	r0, [pc, #352]	@ (8000c18 <main+0x27c>)
+ 8000ab6:	f7ff fe73 	bl	80007a0 <set_bit_from_pin>
         set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_WIDE_IN);
- 8000abc:	230c      	movs	r3, #12
- 8000abe:	2200      	movs	r2, #0
- 8000ac0:	f44f 5180 	mov.w	r1, #4096	@ 0x1000
- 8000ac4:	4854      	ldr	r0, [pc, #336]	@ (8000c18 <main+0x27c>)
- 8000ac6:	f7ff fe6b 	bl	80007a0 <set_bit_from_pin>
+ 8000aba:	230c      	movs	r3, #12
+ 8000abc:	2200      	movs	r2, #0
+ 8000abe:	f44f 5180 	mov.w	r1, #4096	@ 0x1000
+ 8000ac2:	4855      	ldr	r0, [pc, #340]	@ (8000c18 <main+0x27c>)
+ 8000ac4:	f7ff fe6c 	bl	80007a0 <set_bit_from_pin>
         set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_WIDE_OUT);
- 8000aca:	230d      	movs	r3, #13
- 8000acc:	2200      	movs	r2, #0
- 8000ace:	f44f 5100 	mov.w	r1, #8192	@ 0x2000
- 8000ad2:	4851      	ldr	r0, [pc, #324]	@ (8000c18 <main+0x27c>)
- 8000ad4:	f7ff fe64 	bl	80007a0 <set_bit_from_pin>
+ 8000ac8:	230d      	movs	r3, #13
+ 8000aca:	2200      	movs	r2, #0
+ 8000acc:	f44f 5100 	mov.w	r1, #8192	@ 0x2000
+ 8000ad0:	4851      	ldr	r0, [pc, #324]	@ (8000c18 <main+0x27c>)
+ 8000ad2:	f7ff fe65 	bl	80007a0 <set_bit_from_pin>
 
         counter++;
- 8000ad8:	4b54      	ldr	r3, [pc, #336]	@ (8000c2c <main+0x290>)
- 8000ada:	781b      	ldrb	r3, [r3, #0]
- 8000adc:	3301      	adds	r3, #1
- 8000ade:	b2da      	uxtb	r2, r3
- 8000ae0:	4b52      	ldr	r3, [pc, #328]	@ (8000c2c <main+0x290>)
- 8000ae2:	701a      	strb	r2, [r3, #0]
+ 8000ad6:	4b55      	ldr	r3, [pc, #340]	@ (8000c2c <main+0x290>)
+ 8000ad8:	781b      	ldrb	r3, [r3, #0]
+ 8000ada:	3301      	adds	r3, #1
+ 8000adc:	b2da      	uxtb	r2, r3
+ 8000ade:	4b53      	ldr	r3, [pc, #332]	@ (8000c2c <main+0x290>)
+ 8000ae0:	701a      	strb	r2, [r3, #0]
 
         if (counter >= 16)
- 8000ae4:	4b51      	ldr	r3, [pc, #324]	@ (8000c2c <main+0x290>)
- 8000ae6:	781b      	ldrb	r3, [r3, #0]
- 8000ae8:	2b0f      	cmp	r3, #15
- 8000aea:	d91e      	bls.n	8000b2a <main+0x18e>
+ 8000ae2:	4b52      	ldr	r3, [pc, #328]	@ (8000c2c <main+0x290>)
+ 8000ae4:	781b      	ldrb	r3, [r3, #0]
+ 8000ae6:	2b0f      	cmp	r3, #15
+ 8000ae8:	d91e      	bls.n	8000b28 <main+0x18c>
         {
             avg1 = pot1 / 16;
- 8000aec:	8afb      	ldrh	r3, [r7, #22]
- 8000aee:	091b      	lsrs	r3, r3, #4
- 8000af0:	b29a      	uxth	r2, r3
- 8000af2:	4b4f      	ldr	r3, [pc, #316]	@ (8000c30 <main+0x294>)
- 8000af4:	801a      	strh	r2, [r3, #0]
+ 8000aea:	8afb      	ldrh	r3, [r7, #22]
+ 8000aec:	091b      	lsrs	r3, r3, #4
+ 8000aee:	b29a      	uxth	r2, r3
+ 8000af0:	4b4f      	ldr	r3, [pc, #316]	@ (8000c30 <main+0x294>)
+ 8000af2:	801a      	strh	r2, [r3, #0]
             avg2 = pot2 / 16;
- 8000af6:	8abb      	ldrh	r3, [r7, #20]
- 8000af8:	091b      	lsrs	r3, r3, #4
- 8000afa:	b29a      	uxth	r2, r3
- 8000afc:	4b4d      	ldr	r3, [pc, #308]	@ (8000c34 <main+0x298>)
- 8000afe:	801a      	strh	r2, [r3, #0]
+ 8000af4:	8abb      	ldrh	r3, [r7, #20]
+ 8000af6:	091b      	lsrs	r3, r3, #4
+ 8000af8:	b29a      	uxth	r2, r3
+ 8000afa:	4b4e      	ldr	r3, [pc, #312]	@ (8000c34 <main+0x298>)
+ 8000afc:	801a      	strh	r2, [r3, #0]
             avg3 = pot3 / 16;
- 8000b00:	8a7b      	ldrh	r3, [r7, #18]
- 8000b02:	091b      	lsrs	r3, r3, #4
- 8000b04:	b29a      	uxth	r2, r3
- 8000b06:	4b4c      	ldr	r3, [pc, #304]	@ (8000c38 <main+0x29c>)
- 8000b08:	801a      	strh	r2, [r3, #0]
+ 8000afe:	8a7b      	ldrh	r3, [r7, #18]
+ 8000b00:	091b      	lsrs	r3, r3, #4
+ 8000b02:	b29a      	uxth	r2, r3
+ 8000b04:	4b4c      	ldr	r3, [pc, #304]	@ (8000c38 <main+0x29c>)
+ 8000b06:	801a      	strh	r2, [r3, #0]
             avg4 = pot4 / 16;
- 8000b0a:	8a3b      	ldrh	r3, [r7, #16]
- 8000b0c:	091b      	lsrs	r3, r3, #4
- 8000b0e:	b29a      	uxth	r2, r3
- 8000b10:	4b4a      	ldr	r3, [pc, #296]	@ (8000c3c <main+0x2a0>)
- 8000b12:	801a      	strh	r2, [r3, #0]
+ 8000b08:	8a3b      	ldrh	r3, [r7, #16]
+ 8000b0a:	091b      	lsrs	r3, r3, #4
+ 8000b0c:	b29a      	uxth	r2, r3
+ 8000b0e:	4b4b      	ldr	r3, [pc, #300]	@ (8000c3c <main+0x2a0>)
+ 8000b10:	801a      	strh	r2, [r3, #0]
 
 
             counter = 0;
- 8000b14:	4b45      	ldr	r3, [pc, #276]	@ (8000c2c <main+0x290>)
- 8000b16:	2200      	movs	r2, #0
- 8000b18:	701a      	strb	r2, [r3, #0]
+ 8000b12:	4b46      	ldr	r3, [pc, #280]	@ (8000c2c <main+0x290>)
+ 8000b14:	2200      	movs	r2, #0
+ 8000b16:	701a      	strb	r2, [r3, #0]
             pot1 = 0;
- 8000b1a:	2300      	movs	r3, #0
- 8000b1c:	82fb      	strh	r3, [r7, #22]
+ 8000b18:	2300      	movs	r3, #0
+ 8000b1a:	82fb      	strh	r3, [r7, #22]
             pot2 = 0;
- 8000b1e:	2300      	movs	r3, #0
- 8000b20:	82bb      	strh	r3, [r7, #20]
+ 8000b1c:	2300      	movs	r3, #0
+ 8000b1e:	82bb      	strh	r3, [r7, #20]
             pot3 = 0;
- 8000b22:	2300      	movs	r3, #0
- 8000b24:	827b      	strh	r3, [r7, #18]
+ 8000b20:	2300      	movs	r3, #0
+ 8000b22:	827b      	strh	r3, [r7, #18]
             pot4 = 0;
- 8000b26:	2300      	movs	r3, #0
- 8000b28:	823b      	strh	r3, [r7, #16]
+ 8000b24:	2300      	movs	r3, #0
+ 8000b26:	823b      	strh	r3, [r7, #16]
         }
         if ((HAL_GetTick() - last_usb_send) >= 10)
- 8000b2a:	f000 fc83 	bl	8001434 <HAL_GetTick>
- 8000b2e:	4602      	mov	r2, r0
- 8000b30:	4b43      	ldr	r3, [pc, #268]	@ (8000c40 <main+0x2a4>)
- 8000b32:	681b      	ldr	r3, [r3, #0]
- 8000b34:	1ad3      	subs	r3, r2, r3
- 8000b36:	2b09      	cmp	r3, #9
- 8000b38:	f67f af4c 	bls.w	80009d4 <main+0x38>
+ 8000b28:	f000 fc84 	bl	8001434 <HAL_GetTick>
+ 8000b2c:	4602      	mov	r2, r0
+ 8000b2e:	4b44      	ldr	r3, [pc, #272]	@ (8000c40 <main+0x2a4>)
+ 8000b30:	681b      	ldr	r3, [r3, #0]
+ 8000b32:	1ad3      	subs	r3, r2, r3
+ 8000b34:	2b09      	cmp	r3, #9
+ 8000b36:	f67f af4d 	bls.w	80009d4 <main+0x38>
         {
             uint8_t btn_payload[4] = {
                 (uint8_t)(USB_MESSAGE & 0xFF), (uint8_t)((USB_MESSAGE >> 8) & 0xFF),
- 8000b3c:	4b41      	ldr	r3, [pc, #260]	@ (8000c44 <main+0x2a8>)
- 8000b3e:	681b      	ldr	r3, [r3, #0]
- 8000b40:	b2db      	uxtb	r3, r3
+ 8000b3a:	4b42      	ldr	r3, [pc, #264]	@ (8000c44 <main+0x2a8>)
+ 8000b3c:	681b      	ldr	r3, [r3, #0]
+ 8000b3e:	b2db      	uxtb	r3, r3
             uint8_t btn_payload[4] = {
- 8000b42:	723b      	strb	r3, [r7, #8]
+ 8000b40:	723b      	strb	r3, [r7, #8]
                 (uint8_t)(USB_MESSAGE & 0xFF), (uint8_t)((USB_MESSAGE >> 8) & 0xFF),
- 8000b44:	4b3f      	ldr	r3, [pc, #252]	@ (8000c44 <main+0x2a8>)
- 8000b46:	681b      	ldr	r3, [r3, #0]
- 8000b48:	0a1b      	lsrs	r3, r3, #8
- 8000b4a:	b2db      	uxtb	r3, r3
+ 8000b42:	4b40      	ldr	r3, [pc, #256]	@ (8000c44 <main+0x2a8>)
+ 8000b44:	681b      	ldr	r3, [r3, #0]
+ 8000b46:	0a1b      	lsrs	r3, r3, #8
+ 8000b48:	b2db      	uxtb	r3, r3
             uint8_t btn_payload[4] = {
- 8000b4c:	727b      	strb	r3, [r7, #9]
+ 8000b4a:	727b      	strb	r3, [r7, #9]
                 (uint8_t)((USB_MESSAGE >> 16) & 0xFF), (uint8_t)((USB_MESSAGE >> 24) & 0xFF),
- 8000b4e:	4b3d      	ldr	r3, [pc, #244]	@ (8000c44 <main+0x2a8>)
- 8000b50:	681b      	ldr	r3, [r3, #0]
- 8000b52:	0c1b      	lsrs	r3, r3, #16
- 8000b54:	b2db      	uxtb	r3, r3
+ 8000b4c:	4b3d      	ldr	r3, [pc, #244]	@ (8000c44 <main+0x2a8>)
+ 8000b4e:	681b      	ldr	r3, [r3, #0]
+ 8000b50:	0c1b      	lsrs	r3, r3, #16
+ 8000b52:	b2db      	uxtb	r3, r3
             uint8_t btn_payload[4] = {
- 8000b56:	72bb      	strb	r3, [r7, #10]
+ 8000b54:	72bb      	strb	r3, [r7, #10]
                 (uint8_t)((USB_MESSAGE >> 16) & 0xFF), (uint8_t)((USB_MESSAGE >> 24) & 0xFF),
- 8000b58:	4b3a      	ldr	r3, [pc, #232]	@ (8000c44 <main+0x2a8>)
- 8000b5a:	681b      	ldr	r3, [r3, #0]
- 8000b5c:	0e1b      	lsrs	r3, r3, #24
- 8000b5e:	b2db      	uxtb	r3, r3
+ 8000b56:	4b3b      	ldr	r3, [pc, #236]	@ (8000c44 <main+0x2a8>)
+ 8000b58:	681b      	ldr	r3, [r3, #0]
+ 8000b5a:	0e1b      	lsrs	r3, r3, #24
+ 8000b5c:	b2db      	uxtb	r3, r3
             uint8_t btn_payload[4] = {
- 8000b60:	72fb      	strb	r3, [r7, #11]
+ 8000b5e:	72fb      	strb	r3, [r7, #11]
             };
             TLV_Send(TLV_TYPE_BUTTON_STATE, btn_payload, sizeof(btn_payload));
- 8000b62:	f107 0308 	add.w	r3, r7, #8
- 8000b66:	2204      	movs	r2, #4
- 8000b68:	4619      	mov	r1, r3
- 8000b6a:	2001      	movs	r0, #1
- 8000b6c:	f7ff fd1a 	bl	80005a4 <TLV_Send>
+ 8000b60:	f107 0308 	add.w	r3, r7, #8
+ 8000b64:	2204      	movs	r2, #4
+ 8000b66:	4619      	mov	r1, r3
+ 8000b68:	2001      	movs	r0, #1
+ 8000b6a:	f7ff fd1b 	bl	80005a4 <TLV_Send>
 
             uint8_t joy_payload[4] = {
                 (uint8_t)(avg1 & 0xFF), (uint8_t)((avg1 >> 8) & 0xFF),
- 8000b70:	4b2f      	ldr	r3, [pc, #188]	@ (8000c30 <main+0x294>)
- 8000b72:	881b      	ldrh	r3, [r3, #0]
- 8000b74:	b2db      	uxtb	r3, r3
+ 8000b6e:	4b30      	ldr	r3, [pc, #192]	@ (8000c30 <main+0x294>)
+ 8000b70:	881b      	ldrh	r3, [r3, #0]
+ 8000b72:	b2db      	uxtb	r3, r3
             uint8_t joy_payload[4] = {
- 8000b76:	713b      	strb	r3, [r7, #4]
+ 8000b74:	713b      	strb	r3, [r7, #4]
                 (uint8_t)(avg1 & 0xFF), (uint8_t)((avg1 >> 8) & 0xFF),
- 8000b78:	4b2d      	ldr	r3, [pc, #180]	@ (8000c30 <main+0x294>)
- 8000b7a:	881b      	ldrh	r3, [r3, #0]
- 8000b7c:	0a1b      	lsrs	r3, r3, #8
- 8000b7e:	b29b      	uxth	r3, r3
- 8000b80:	b2db      	uxtb	r3, r3
+ 8000b76:	4b2e      	ldr	r3, [pc, #184]	@ (8000c30 <main+0x294>)
+ 8000b78:	881b      	ldrh	r3, [r3, #0]
+ 8000b7a:	0a1b      	lsrs	r3, r3, #8
+ 8000b7c:	b29b      	uxth	r3, r3
+ 8000b7e:	b2db      	uxtb	r3, r3
             uint8_t joy_payload[4] = {
- 8000b82:	717b      	strb	r3, [r7, #5]
+ 8000b80:	717b      	strb	r3, [r7, #5]
                 (uint8_t)(avg2 & 0xFF), (uint8_t)((avg2 >> 8) & 0xFF),
- 8000b84:	4b2b      	ldr	r3, [pc, #172]	@ (8000c34 <main+0x298>)
- 8000b86:	881b      	ldrh	r3, [r3, #0]
- 8000b88:	b2db      	uxtb	r3, r3
+ 8000b82:	4b2c      	ldr	r3, [pc, #176]	@ (8000c34 <main+0x298>)
+ 8000b84:	881b      	ldrh	r3, [r3, #0]
+ 8000b86:	b2db      	uxtb	r3, r3
             uint8_t joy_payload[4] = {
- 8000b8a:	71bb      	strb	r3, [r7, #6]
+ 8000b88:	71bb      	strb	r3, [r7, #6]
                 (uint8_t)(avg2 & 0xFF), (uint8_t)((avg2 >> 8) & 0xFF),
- 8000b8c:	4b29      	ldr	r3, [pc, #164]	@ (8000c34 <main+0x298>)
- 8000b8e:	881b      	ldrh	r3, [r3, #0]
- 8000b90:	0a1b      	lsrs	r3, r3, #8
- 8000b92:	b29b      	uxth	r3, r3
- 8000b94:	b2db      	uxtb	r3, r3
+ 8000b8a:	4b2a      	ldr	r3, [pc, #168]	@ (8000c34 <main+0x298>)
+ 8000b8c:	881b      	ldrh	r3, [r3, #0]
+ 8000b8e:	0a1b      	lsrs	r3, r3, #8
+ 8000b90:	b29b      	uxth	r3, r3
+ 8000b92:	b2db      	uxtb	r3, r3
             uint8_t joy_payload[4] = {
- 8000b96:	71fb      	strb	r3, [r7, #7]
+ 8000b94:	71fb      	strb	r3, [r7, #7]
             };
             TLV_Send(TLV_TYPE_JOYSTICK, joy_payload, sizeof(joy_payload));
- 8000b98:	1d3b      	adds	r3, r7, #4
- 8000b9a:	2204      	movs	r2, #4
- 8000b9c:	4619      	mov	r1, r3
- 8000b9e:	2002      	movs	r0, #2
- 8000ba0:	f7ff fd00 	bl	80005a4 <TLV_Send>
+ 8000b96:	1d3b      	adds	r3, r7, #4
+ 8000b98:	2204      	movs	r2, #4
+ 8000b9a:	4619      	mov	r1, r3
+ 8000b9c:	2002      	movs	r0, #2
+ 8000b9e:	f7ff fd01 	bl	80005a4 <TLV_Send>
 
             uint8_t joy2_payload[4] = {
                 (uint8_t)(avg3 & 0xFF), (uint8_t)((avg3 >> 8) & 0xFF),
- 8000ba4:	4b24      	ldr	r3, [pc, #144]	@ (8000c38 <main+0x29c>)
- 8000ba6:	881b      	ldrh	r3, [r3, #0]
- 8000ba8:	b2db      	uxtb	r3, r3
+ 8000ba2:	4b25      	ldr	r3, [pc, #148]	@ (8000c38 <main+0x29c>)
+ 8000ba4:	881b      	ldrh	r3, [r3, #0]
+ 8000ba6:	b2db      	uxtb	r3, r3
             uint8_t joy2_payload[4] = {
- 8000baa:	703b      	strb	r3, [r7, #0]
+ 8000ba8:	703b      	strb	r3, [r7, #0]
                 (uint8_t)(avg3 & 0xFF), (uint8_t)((avg3 >> 8) & 0xFF),
- 8000bac:	4b22      	ldr	r3, [pc, #136]	@ (8000c38 <main+0x29c>)
- 8000bae:	881b      	ldrh	r3, [r3, #0]
- 8000bb0:	0a1b      	lsrs	r3, r3, #8
- 8000bb2:	b29b      	uxth	r3, r3
- 8000bb4:	b2db      	uxtb	r3, r3
+ 8000baa:	4b23      	ldr	r3, [pc, #140]	@ (8000c38 <main+0x29c>)
+ 8000bac:	881b      	ldrh	r3, [r3, #0]
+ 8000bae:	0a1b      	lsrs	r3, r3, #8
+ 8000bb0:	b29b      	uxth	r3, r3
+ 8000bb2:	b2db      	uxtb	r3, r3
             uint8_t joy2_payload[4] = {
- 8000bb6:	707b      	strb	r3, [r7, #1]
+ 8000bb4:	707b      	strb	r3, [r7, #1]
                 (uint8_t)(avg4 & 0xFF), (uint8_t)((avg4 >> 8) & 0xFF),
- 8000bb8:	4b20      	ldr	r3, [pc, #128]	@ (8000c3c <main+0x2a0>)
- 8000bba:	881b      	ldrh	r3, [r3, #0]
- 8000bbc:	b2db      	uxtb	r3, r3
+ 8000bb6:	4b21      	ldr	r3, [pc, #132]	@ (8000c3c <main+0x2a0>)
+ 8000bb8:	881b      	ldrh	r3, [r3, #0]
+ 8000bba:	b2db      	uxtb	r3, r3
             uint8_t joy2_payload[4] = {
- 8000bbe:	70bb      	strb	r3, [r7, #2]
+ 8000bbc:	70bb      	strb	r3, [r7, #2]
                 (uint8_t)(avg4 & 0xFF), (uint8_t)((avg4 >> 8) & 0xFF),
- 8000bc0:	4b1e      	ldr	r3, [pc, #120]	@ (8000c3c <main+0x2a0>)
- 8000bc2:	881b      	ldrh	r3, [r3, #0]
- 8000bc4:	0a1b      	lsrs	r3, r3, #8
- 8000bc6:	b29b      	uxth	r3, r3
- 8000bc8:	b2db      	uxtb	r3, r3
+ 8000bbe:	4b1f      	ldr	r3, [pc, #124]	@ (8000c3c <main+0x2a0>)
+ 8000bc0:	881b      	ldrh	r3, [r3, #0]
+ 8000bc2:	0a1b      	lsrs	r3, r3, #8
+ 8000bc4:	b29b      	uxth	r3, r3
+ 8000bc6:	b2db      	uxtb	r3, r3
             uint8_t joy2_payload[4] = {
- 8000bca:	70fb      	strb	r3, [r7, #3]
+ 8000bc8:	70fb      	strb	r3, [r7, #3]
             };
             TLV_Send(TLV_TYPE_JOYSTICK2, joy2_payload, sizeof(joy2_payload));
- 8000bcc:	463b      	mov	r3, r7
- 8000bce:	2204      	movs	r2, #4
- 8000bd0:	4619      	mov	r1, r3
- 8000bd2:	2003      	movs	r0, #3
- 8000bd4:	f7ff fce6 	bl	80005a4 <TLV_Send>
+ 8000bca:	463b      	mov	r3, r7
+ 8000bcc:	2204      	movs	r2, #4
+ 8000bce:	4619      	mov	r1, r3
+ 8000bd0:	2003      	movs	r0, #3
+ 8000bd2:	f7ff fce7 	bl	80005a4 <TLV_Send>
 
             last_usb_send = HAL_GetTick();
- 8000bd8:	f000 fc2c 	bl	8001434 <HAL_GetTick>
- 8000bdc:	4603      	mov	r3, r0
- 8000bde:	4a18      	ldr	r2, [pc, #96]	@ (8000c40 <main+0x2a4>)
- 8000be0:	6013      	str	r3, [r2, #0]
+ 8000bd6:	f000 fc2d 	bl	8001434 <HAL_GetTick>
+ 8000bda:	4603      	mov	r3, r0
+ 8000bdc:	4a18      	ldr	r2, [pc, #96]	@ (8000c40 <main+0x2a4>)
+ 8000bde:	6013      	str	r3, [r2, #0]
     {
- 8000be2:	e6f7      	b.n	80009d4 <main+0x38>
+ 8000be0:	e6f8      	b.n	80009d4 <main+0x38>
+ 8000be2:	bf00      	nop
  8000be4:	200000fc 	.word	0x200000fc
  8000be8:	20000074 	.word	0x20000074
  8000bec:	0800084d 	.word	0x0800084d
@@ -1409,7 +1411,7 @@ int main(void)
  8000bfc:	08000885 	.word	0x08000885
  8000c00:	20000104 	.word	0x20000104
  8000c04:	20000198 	.word	0x20000198
- 8000c08:	40021400 	.word	0x40021400
+ 8000c08:	40020800 	.word	0x40020800
  8000c0c:	080008bd 	.word	0x080008bd
  8000c10:	20000108 	.word	0x20000108
  8000c14:	20000001 	.word	0x20000001

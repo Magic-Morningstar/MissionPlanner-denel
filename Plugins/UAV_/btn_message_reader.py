@@ -46,14 +46,22 @@ def find_stm_port():
 def describe_intent(bs: ButtonState) -> str:
     """Mirrors the fields commands/translator.py actually reads."""
     parts = []
-    if bs.arm:           parts.append("ARM")
+    if bs.arm:            parts.append("ARM")
     if bs.rtl:            parts.append("RTL")
     if bs.manual:         parts.append("MANUAL")
     if bs.takeoff:        parts.append("TAKEOFF")
     if bs.emergency:      parts.append("EMERGENCY")
-    if bs.system_check:   parts.append("SYSTEM_CHECK")
+    if bs.auto:           parts.append("AUTO MODE")
+    if bs.autoland:       parts.append("AUTOLAND")
+    if bs.speedup:        parts.append("SPEEDUP")
+    if bs.speeddown:      parts.append("SPEED DOWN")
+    if bs.zoomin:         parts.append("ZOOM IN")
+    if bs.zoomout:        parts.append("ZOOM OUT")
+    if bs.widein:         parts.append("WIDE IN")
+    if bs.wideout:        parts.append("WIDE OUT")
+
     label = ", ".join(parts) if parts else "IDLE"
-    return f"{label}  (pot={bs.pot_value})"
+    return f"{label}  (pot={""})"
 
 
 def main():

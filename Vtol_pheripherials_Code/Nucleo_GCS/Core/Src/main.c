@@ -234,6 +234,7 @@ void onARM_Button_Press(void)
 
 void onManual_Button_Press(void)
 {
+
     if (USB_MESSAGE & (1 << BIT_MANUAL)) USB_MESSAGE &= ~(1 << BIT_MANUAL);
     else                                 USB_MESSAGE |= (1 << BIT_MANUAL);
 }
@@ -378,7 +379,7 @@ int main(void)
         /* Persistent MODE buttons: toggle/latch on press, stay set until pressed again. */
         /*                port      pin           active_low  lastState            lastTime            now  handler */
         poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onARM_Button_Press);
-        poll_button(GPIOF, GPIO_PIN_12, 0, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
+        poll_button(GPIOC, GPIO_PIN_7, 1, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
         poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onAuto_Button_Press);
         poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
 

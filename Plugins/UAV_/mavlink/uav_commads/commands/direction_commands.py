@@ -24,7 +24,7 @@ class DirectionCommander(BaseCommand):
             logger.warning("DirectionCommander: could not read heading.")
             return False
         target = (current_heading - degrees) % 360
-        logger.info(f"Turn left {degrees}deg -> {target:.1f}deg")
+        #logger.info(f"Turn left {degrees}deg -> {target:.1f}deg")
         return self._send_heading(target)
 
     def turn_right(self, degrees=30):
@@ -40,7 +40,7 @@ class DirectionCommander(BaseCommand):
             logger.warning("DirectionCommander: could not read heading.")
             return False
         target = (current_heading + degrees) % 360
-        logger.info(f"Turn right {degrees}deg -> {target:.1f}deg")
+        #logger.info(f"Turn right {degrees}deg -> {target:.1f}deg")
         return self._send_heading(target)
 
     def set_heading(self, heading_deg):
@@ -52,7 +52,7 @@ class DirectionCommander(BaseCommand):
         ):
             return False
         heading_deg = heading_deg % 360
-        logger.info(f"Set heading to {heading_deg}deg")
+        #logger.info(f"Set heading to {heading_deg}deg")
         return self._send_heading(heading_deg)
 
     def _send_heading(self, heading_deg):
@@ -73,7 +73,7 @@ class DirectionCommander(BaseCommand):
         ):
             return False
         target_alt_m = max(5.0, target_alt_m)
-        logger.info(f"Set altitude to {target_alt_m}m")
+        #logger.info(f"Set altitude to {target_alt_m}m")
         self._send_command(
             mavutil.mavlink.MAV_CMD_GUIDED_CHANGE_ALTITUDE,
             p1=target_alt_m,
@@ -110,13 +110,13 @@ class ManualController(BaseCommand):
             target=self._stream_loop, daemon=True, name="ManualControl"
         )
         self._thread.start()
-        logger.info("ManualController: streaming started.")
+        #logger.info("ManualController: streaming started.")
 
     def stop_streaming(self):
         self._streaming = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
-        logger.info("ManualController: streaming stopped.")
+        #logger.info("ManualController: streaming stopped.")
 
     def set_neutral(self):
         pass
@@ -133,8 +133,8 @@ class ManualController(BaseCommand):
             throttle = self._to_throttle(joy2_y)
 
 
-            logger.debug(f"J1 raw=({self.state.get_Joystick_X},{self.state.get_Joystick_Y}) -> roll={roll} pitch={pitch}")
-            logger.debug(f"J2 raw=({joy2_x},{joy2_y}) -> yaw={yaw} throttle={throttle}")
+            #logger.info(f"J1 raw=({self.state.get_Joystick_X},{self.state.get_Joystick_Y}) -> roll={roll} pitch={pitch}")
+            #logger.info(f"J2 raw=({joy2_x},{joy2_y}) -> yaw={yaw} throttle={throttle}")
             
 
             try:
@@ -154,7 +154,7 @@ class ManualController(BaseCommand):
 
             time.sleep(interval)
 
-        logger.info("ManualController: stream loop exited.")
+        #logger.info("ManualController: stream loop exited.")
 
     def _to_manual(self, raw_adc):
         """Bipolar -1000..1000, centered dead zone. Used for roll/pitch/yaw."""

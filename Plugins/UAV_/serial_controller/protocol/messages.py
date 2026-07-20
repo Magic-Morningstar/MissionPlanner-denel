@@ -65,18 +65,17 @@ class ButtonStateDecoder(Decoder):
         return ButtonState(
             arm          = bool((value >> ARM_BIT) & 1),
             manual       = bool((value >> MANUAL_BIT) & 1),
-            #takeoff      = bool((value >> AUTOTAKEOFF_BIT) & 1),
+            takeoff      = bool((value >> 25) & 1),
             auto         = bool((value >> AUTO_BIT) & 1),
             autoland     = bool((value >> AUTO_LAND_BIT) & 1),
-            
-            speedup     = bool((value >> SPEED_UP_BIT) & 1),
-            speeddown     = bool((value >> SPEED_DOWN_BIT) & 1),
-            
-            zoomin     = bool((value >> ZOOM_IN_BIT) & 1),
-            zoomout     = bool((value >> ZOOM_OUT_BIT) & 1),
-            
-            widein     = bool((value >> WIDE_IN_BIT) & 1),
-            wideout     = bool((value >> WIDE_OUT_BIT) & 1),
+            emergency    =  bool((value >> 25) & 1), 
+            speedup      = bool((value >> SPEED_UP_BIT) & 1),
+            speeddown    = bool((value >> SPEED_DOWN_BIT) & 1),
+            zoomin       = bool((value >> ZOOM_IN_BIT) & 1),
+            zoomout      = bool((value >> ZOOM_OUT_BIT) & 1),
+            rtl          = bool((value >> 25) & 1),
+            widein       = bool((value >> WIDE_IN_BIT) & 1),
+            wideout      = bool((value >> WIDE_OUT_BIT) & 1),
 
         )
 

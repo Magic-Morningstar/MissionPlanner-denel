@@ -42,7 +42,7 @@ class InputTranslator:
         self._prev = ButtonState(
             arm=False, rtl=False, manual=False, takeoff=False,
             emergency=False, autoland = False, auto = False, speedup = False, speeddown = False, 
-            zoomin = False, zoomout = False, widein = False, wideout = False
+            zoomin = False, zoomout = False, widein = False, wideout = False,
         )
 
     def handle(self, obj):
@@ -68,7 +68,5 @@ class InputTranslator:
                 logger.info(f"{field} falling edge -> {falling_cmd.__name__}")
                 self.command_bus.put(falling_cmd())
 
-        if new.pot_value != prev.pot_value:
-            self.state.update_Pot_Value(new.pot_value)
 
         self._prev = new

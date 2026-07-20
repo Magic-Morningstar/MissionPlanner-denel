@@ -229,7 +229,7 @@ class UAVCommandSender(MavlinkWorker):
 
 @register_handler(ArmCommand)
 def _handle_arm(sender, cmd):
-    logger.info("ArmCommand received")
+    logger.debug("ArmCommand received")
     sender.arm()
 
 
@@ -241,13 +241,13 @@ def _handle_disarm(sender, cmd):
 
 @register_handler(TakeoffCommand)
 def _handle_takeoff(sender, cmd):
-    logger.info("TakeoffCommand received")
+    logger.debug("TakeoffCommand received")
     sender.start_takeoff() 
 
 
 @register_handler(ManualModeCommand)
 def _handle_manual(sender, cmd):
-    logger.info("ManualModeCommand received")
+    logger.debug("ManualModeCommand received")
     sender._cancel_takeoff_if_active()
     sender.set_fbwb()
 
@@ -269,13 +269,14 @@ def _handle_emergency(sender, cmd):
 
 @register_handler(AutoModeCommand)
 def _handle_auto(sender, cmd):
-    logger.info("AutoModeCommand received")
+    logger.debug("AutoModeCommand received")
+    
     sender.set_auto()
 
 
 @register_handler(LandCommand)
 def _handle_land(sender, cmd):
-    logger.info("LandCommand received")
+    logger.debug("LandCommand received")
 
 
 
