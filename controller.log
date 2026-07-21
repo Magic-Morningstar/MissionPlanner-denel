@@ -774,3 +774,102 @@
 12:55:17.909 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=False, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
 12:55:18.931 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=False, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
 12:55:18.932 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=False, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:43.391 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+13:13:43.393 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [state-poll] connecting to tcp:127.0.0.1:5762...
+13:13:43.399 [Thread-3 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to tcp:127.0.0.1:5763...
+13:13:43.401 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [state-poll] connected on tcp:127.0.0.1:5762.
+13:13:43.406 [Thread-3 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on tcp:127.0.0.1:5763.
+13:13:43.406 [MainThread      ] INFO     __main__                     Controller started.
+13:13:43.407 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM67 — 'USB-Enhanced-SERIAL-D CH344 (COM67)'
+13:13:43.410 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVStatePoller waiting for heartbeat...
+13:13:43.411 [Thread-3 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+13:13:43.414 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM67.
+13:13:43.415 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+13:13:43.416 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+13:13:43.450 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVStatePoller heartbeat received — system 1 component 1
+13:13:43.451 [Thread-3 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender heartbeat received — system 1 component 1
+13:13:43.472 [Thread-3 (_run) ] INFO     mavlink.uav_commads.command_sender UAVCommandSender connected.
+13:13:43.476 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVStatePoller loop started.
+13:13:43.487 [Thread-3 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender loop started.
+13:13:43.503 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:43.511 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:44.507 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:44.508 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:45.513 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:45.514 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:46.524 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:46.524 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:47.534 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:47.534 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:48.543 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:48.544 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=False)
+13:13:49.491 [SerialProcessor ] INFO     commands.translator          auto rising edge -> AutoModeCommand
+13:13:49.494 [MainThread      ] DEBUG    mavlink.uav_commads.command_sender AutoModeCommand received
+13:13:49.494 [UAVCommandSender] INFO     mavlink.uav_commads.commands.base_command ModeCommander: switched to AUTO.
+13:13:49.557 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=False)
+13:13:49.558 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=False)
+13:13:50.573 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=False)
+13:13:50.573 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=False)
+13:13:51.586 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:51.587 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:52.588 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:52.588 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:53.599 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:53.599 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:54.611 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:54.611 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:55.626 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:55.626 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:56.636 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:56.637 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:57.653 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:57.653 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:58.667 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:58.668 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:59.679 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:13:59.680 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:00.153 [SerialProcessor ] INFO     commands.translator          autoland rising edge -> LandCommand
+13:14:00.160 [MainThread      ] DEBUG    mavlink.uav_commads.command_sender LandCommand received
+13:14:00.695 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:00.695 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:01.172 [SerialProcessor ] INFO     commands.translator          auto rising edge -> AutoModeCommand
+13:14:01.177 [MainThread      ] DEBUG    mavlink.uav_commads.command_sender AutoModeCommand received
+13:14:01.177 [UAVCommandSender] INFO     mavlink.uav_commads.commands.base_command ModeCommander: switched to AUTO.
+13:14:01.711 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:01.712 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:02.733 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:02.733 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:03.737 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:03.738 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:04.756 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:04.757 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:05.763 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:05.763 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:06.782 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:06.782 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=False, auto_mode=True, autoland_mode=False, is_flying=True)
+13:14:07.064 [SerialProcessor ] INFO     commands.translator          manual rising edge -> ManualModeCommand
+13:14:07.066 [MainThread      ] DEBUG    mavlink.uav_commads.command_sender ManualModeCommand received
+13:14:07.066 [MainThread      ] WARNING  mavlink.uav_commads.commands.autotakeoff_commands AutoTakeOff: cancel requested.
+13:14:07.075 [UAVCommandSender] INFO     mavlink.uav_commads.command_sender Switched to FBWB — joystick active.
+13:14:07.788 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:07.789 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:08.807 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:08.809 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:09.819 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:09.819 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:10.826 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:10.826 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:11.843 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:11.844 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:12.850 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:12.850 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:13.861 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:13.861 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:14.875 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:14.875 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:15.884 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:15.885 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:16.892 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:16.893 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:17.907 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+13:14:17.908 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)

@@ -10,6 +10,7 @@ from mavlink.uav_commads.commands.autotakeoff_commands import AutoTakeOff
 from mavlink.uav_commads.commands.mode_commands import ModeCommander
 from mavlink.uav_commads.commands.speed_commands import Speed_Controller
 from mavlink.uav_commads.commands.direction_commands import DirectionCommander, ManualController
+from mavlink.uav_commads.commands.payload_commands import Payload
 from commands.intents import *
 from commands.registry import register_handler, dispatch
 
@@ -33,12 +34,12 @@ class UAVCommandSender(MavlinkWorker):
         self.command_bus         = command_bus
         self.takeoff_in_progress = False
         self._mav_lock           = threading.Lock()
-
-        self.Manual     = None
-        self.Director   = None
-        self.ManualCtrl = None
-        self._ato       = None
-        self._analog    = None   # AnalogInputHandler — set after connection
+        self.Payload             = None
+        self.Manual              = None
+        self.Director            = None
+        self.ManualCtrl          = None
+        self._ato                = None
+        self._analog             = None   # AnalogInputHandler — set after connection
 
     # ── Connection ────────────────────────────────────────────────────────────
 
@@ -56,9 +57,10 @@ class UAVCommandSender(MavlinkWorker):
         self.Director   = DirectionCommander(self.command_drone, self.state, self._mav_lock)
         self.ManualCtrl = ManualController(self.command_drone, self.state, self._mav_lock)
         self._ato       = AutoTakeOff(self.command_drone, self._mav_lock)
+        self.Payload    = Payload(state = self.state,command_drone =self.command_drone,lock=self._mav_lock  )
 
         # Analog handler wired to this sender so it can call
-        # set_airspeed / turn_left / set_altitude etc.
+        # set_airspeed / turn_left / point_gimbal etc.
         from mavlink.uav_commads.analog_input_handler import AnalogInputHandler
         self._analog = AnalogInputHandler(self.state, self.ManualCtrl, self)
 
@@ -175,6 +177,19 @@ class UAVCommandSender(MavlinkWorker):
         if self.Manual:
             self.enqueue(self.Manual.initiate_Guided_Mode)
 
+    def payloadZoom(self):
+        self.enqueue(self.Payload.initiate_SetZoom, self.state.GIMBAL_ZOOM)
+
+    def payloadFocus(self):
+        self.enqueue(
+            self.Payload.initiate_SetFocus,
+            focus_type=mavutil.mavlink.FOCUS_TYPE_RANGE,
+            focus_value=self.state.GIMBAL_FOCUS
+        )
+
+    def payloadautofocus(self):
+        self.enqueue(self.Payload.initiate_SetFocus)
+
     def set_auto(self):
         if self.Manual:
             self.enqueue(self.Manual.initiate_Auto_Mode)
@@ -200,6 +215,12 @@ class UAVCommandSender(MavlinkWorker):
     def set_altitude(self, target_alt_m):
         if self.Director:
             self.enqueue(self.Director.set_altitude, target_alt_m)
+
+    def point_gimbal(self, pitch_deg, yaw_deg):
+        self.enqueue(
+            Payload(self.command_drone, self.state, self._mav_lock).initiate_PointAngle,
+            pitch_deg, yaw_deg
+        )
 
     def start_takeoff(self):
         if self.takeoff_in_progress:
@@ -270,7 +291,6 @@ def _handle_emergency(sender, cmd):
 @register_handler(AutoModeCommand)
 def _handle_auto(sender, cmd):
     logger.debug("AutoModeCommand received")
-    
     sender.set_auto()
 
 
@@ -293,18 +313,34 @@ def _handle_speeddown(sender, cmd):
 @register_handler(ZoomInCommand)
 def _handle_zoomin(sender, cmd):
     logger.info("CameraZoomInCommand received")
+    sender.state.GIMBAL_ZOOM +=1
+    if sender.state.GIMBAL_ZOOM >= 100:
+           sender.state.GIMBAL_ZOOM = 100
+    sender.payloadZoom() 
 
 
 @register_handler(ZoomOutCommand)
 def _handle_zoomout(sender, cmd):
     logger.info("CameraZoomOutCommand received")
-
+    sender.state.GIMBAL_ZOOM -=1
+    if sender.state.GIMBAL_ZOOM <= 0:
+           sender.state.GIMBAL_ZOOM = 0 
+    sender.payloadZoom()
 
 @register_handler(WideInCommand)
 def _handle_wideout(sender, cmd):
     logger.info("CameraWideOutCommand received")
+    sender.state.GIMBAL_FOCUS +=1
+    if sender.state.GIMBAL_FOCUS >= 100:
+           sender.state.GIMBAL_FOCUS = 100
+    sender.payloadFocus()
 
 @register_handler(WideOutCommand)
 def _handle_widein(sender, cmd):
-    logger.info("CameraWideInCommand received")
+    logger.info("CameraWideOutCommand received")
+    sender.state.GIMBAL_FOCUS -=1
+    if sender.state.GIMBAL_FOCUS <= 0:
+           sender.state.GIMBAL_FOCUS = 0 
+    sender.payloadFocus()
 
+    

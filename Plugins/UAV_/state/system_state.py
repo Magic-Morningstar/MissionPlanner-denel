@@ -52,6 +52,12 @@ class SystemState:
         self.MIN_SPEED = 5.0
         self.MAX_SPEED = 25.0
 
+        # ── Payload options ──────────────────────────────────────────────────────    
+        self.GIMBAL_ZOOM  = 0
+        self.GIMBAL_FOCUS = 0
+
+
+
         # ── Thread safety ─────────────────────────────────────────────────────
         self._lock = threading.Lock()
 
