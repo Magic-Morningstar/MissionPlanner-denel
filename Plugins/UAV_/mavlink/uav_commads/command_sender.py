@@ -35,7 +35,7 @@ class UAVCommandSender(MavlinkWorker):
         self.command_bus         = command_bus
         self.takeoff_in_progress = False
         self._mav_lock           = threading.Lock()
-        self.gimbal_Motor_ON_OFF_Value = True
+
         self.Payload             = None
         self.Manual              = None
         self.Director            = None
@@ -219,9 +219,9 @@ class UAVCommandSender(MavlinkWorker):
             self.enqueue(self.Director.set_altitude, target_alt_m)
 
     def point_gimbal(self, pitch_deg, yaw_deg):
-
+        
         self.enqueue(
-            Payload(self.command_drone, self.state, self._mav_lock).initiate_PointAngle_Raw,
+            Payload(self.command_drone, self.state, self._mav_lock).initiate_PointAngle_Relative_Raw,
             pitch_deg, yaw_deg
         )      
 
