@@ -72,25 +72,6 @@ class Payload(BaseCommand):
         logger.info("Neutral command sent.")
         return True
 
-    def initiate_PointAngle(self, pitch_deg, yaw_deg, roll_deg=0):
-        """
-        Point the gimbal at a fixed pitch/roll/yaw (degrees) via standard
-        MAVLink DO_MOUNT_CONTROL. Yaw is vehicle-relative: 0 = forward,
-        90 = right, -90 = left.
-        """
-        if not self._check(self._requires_payload_connection):
-            return False
-
-        logger.info(f"Pointing gimbal — pitch={pitch_deg}, roll={roll_deg}, yaw={yaw_deg}...")
-        self._send_command(
-            mavutil.mavlink.MAV_CMD_DO_MOUNT_CONTROL,
-            p1=pitch_deg,
-            p2=roll_deg,
-            p3=yaw_deg,
-            p7=mavutil.mavlink.MAV_MOUNT_MODE_MAVLINK_TARGETING
-        )
-        logger.info("Point-angle command sent.")
-        return True
 
     def initiate_PointROI(self, lat, lon, alt):
         """Point the gimbal at a fixed GPS location (region of interest)."""
@@ -237,14 +218,14 @@ class Payload(BaseCommand):
         flags = mavutil.mavlink.SERIAL_CONTROL_FLAG_EXCLUSIVE
         if expect_response:
             flags |= mavutil.mavlink.SERIAL_CONTROL_FLAG_RESPOND
-
-        self.state.mav_connection.mav.serial_control_send(
+        
+        self.command_drone.mav.serial_control_send(
             device=self.VIEWPRO_SERIAL_DEVICE,
             flags=flags,
             timeout=0,
-            baudrate=0,  # 0 = don't change the port's configured baud rate
+            baudrate=0,  
             count=len(frame),
-            data=bytes(frame).ljust(70, b'\x00'),
+            data=bytes(frame).ljust(70, b'\x00')
         )
         logger.info(f"Sent raw Viewpro frame ({len(frame)} bytes): {frame.hex(' ')}")
         return True

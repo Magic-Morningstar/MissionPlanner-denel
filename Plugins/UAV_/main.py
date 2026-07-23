@@ -43,25 +43,7 @@ class Controller:
 
         while not self._shutdown.is_set():
 
-            # ── MAVLink commands — drain whatever's pending on the bus ────────
-            if self.state.is_UAV_Command_Connection_Available:
-                self.Mavlink_controller.execute_commands()
-            elif not self.Mavlink_controller.command_sender.connection_in_progress:
-                logger.info("MAVLink command connection lost — reconnecting...")
-                self.Mavlink_controller.command_sender.connect()
-
-            # ── MAVLink state poller reconnect ────────────────────────────────
-            if not self.state.is_UAV_State_Connection_Available:
-                if not self.Mavlink_controller.state_poller.connection_in_progress:
-                    logger.info("MAVLink state connection lost — reconnecting...")
-                    self.Mavlink_controller.state_poller.connect()
-
-            # ── Send state back to STM32 only when UAV state changed ──────────
-            if self.state.is_Serial_Connection_Available:
-                if self.state.UAV_STATE_CHANGE:
-                    self.SerialHandler.compile_Send()
-
-            time.sleep(0.01)
+            time.sleep(2)
 
         logger.info("Shutting down.")
 

@@ -20,8 +20,8 @@ class MavlinkWorker(ConnectionManager):
         self._loop_thread = None
 
     def _connect_with_retry(self, label, retry_delay=2):
-        PORT_MIN = 5760
-        PORT_MAX = 5769
+        PORT_MIN = 14550
+        PORT_MAX = 14559
         PORT_RANGE = PORT_MAX - PORT_MIN + 1
 
         parts = self.connection_string.rsplit(":", 1)
@@ -65,7 +65,7 @@ class MavlinkWorker(ConnectionManager):
         "working" until you notice the loop just never logs anything.
         """
         logger.info(f"{self.__class__.__name__} waiting for heartbeat...")
-        msg = connection.wait_heartbeat(timeout=timeout)
+        msg = connection.wait_heartbeat()
         if msg is None:
             logger.warning(f"{self.__class__.__name__}: no heartbeat within {timeout}s — closing and retrying.")
             connection.close()   # free the port rather than leave a dead socket holding it
@@ -75,6 +75,22 @@ class MavlinkWorker(ConnectionManager):
             f"system {msg.get_srcSystem()} component {msg.get_srcComponent()}"
         )
         return msg
+
+    def send_ping(connection, target_system=1, target_component=1):
+        """
+        Sends a MAVLink PING request to a target system (e.g., Herelink/Autopilot).
+        """
+        # Generate a unique sequence identifier using microsecond timestamps
+        ping_id = int(time.time() * 1000000) & 0xFFFFFFFF
+        
+        logger.info(f"##########Sending PING request (ID: {ping_id}) to System {target_system}...##########")
+        
+        connection.mav.ping_send(
+            ping_id,          # Unique ID (often a timestamp) to match response
+            target_system,    # Target System ID (typically 1 for drone/flight controller)
+            target_component  # Target Component ID (typically 1 for main autopilot)
+        )
+        return ping_id
 
     def _request_message_interval(self, connection, message_id, interval_us=100000):
         connection.mav.command_long_send(

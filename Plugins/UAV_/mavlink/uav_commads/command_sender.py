@@ -11,6 +11,7 @@ from mavlink.uav_commads.commands.mode_commands import ModeCommander
 from mavlink.uav_commads.commands.speed_commands import Speed_Controller
 from mavlink.uav_commads.commands.direction_commands import DirectionCommander, ManualController
 from mavlink.uav_commads.commands.payload_commands import Payload
+from mavlink.uav_commads.commands.payload_services import GimbalFrameBuilder
 from commands.intents import *
 from commands.registry import register_handler, dispatch
 
@@ -34,6 +35,7 @@ class UAVCommandSender(MavlinkWorker):
         self.command_bus         = command_bus
         self.takeoff_in_progress = False
         self._mav_lock           = threading.Lock()
+        self.gimbal_Motor_ON_OFF_Value = True
         self.Payload             = None
         self.Manual              = None
         self.Director            = None
@@ -217,10 +219,11 @@ class UAVCommandSender(MavlinkWorker):
             self.enqueue(self.Director.set_altitude, target_alt_m)
 
     def point_gimbal(self, pitch_deg, yaw_deg):
+
         self.enqueue(
-            Payload(self.command_drone, self.state, self._mav_lock).initiate_PointAngle,
+            Payload(self.command_drone, self.state, self._mav_lock).initiate_PointAngle_Raw,
             pitch_deg, yaw_deg
-        )
+        )      
 
     def start_takeoff(self):
         if self.takeoff_in_progress:
