@@ -5,48 +5,90 @@ import time
 
 logger = logging.getLogger(__name__)
 
-DEAD_LOW  = int(0.45 * 4095)   # 1842 — 45% of ADC range
-DEAD_HIGH = int(0.55 * 4095)   # 2252 — 55% of ADC range
+ADC_MAX = 4095
+ADC_MID = ADC_MAX / 2.0   # 2047.5
 
-# Gimbal angle limits — tune to the A20KTR's actual mechanical range.
-GIMBAL_YAW_MAX_DEG   = 45.0    # +/- from forward
-GIMBAL_PITCH_MIN_DEG = -90.0   # straight down
-GIMBAL_PITCH_MAX_DEG = 45.0    # up from level
+# Rate control: at full joystick deflection (+/-100%), the gimbal moves at
+# this many degrees per second. Center stick = 0 deg/s. Azimuth and tilt
+# are both continuous/360° on this gimbal, so there is intentionally no
+# angle clamping anywhere in this file — only the RATE is controlled,
+# total travel is never capped.
+GIMBAL_YAW_DEG_PER_SEC   = 30.0   # azimuth
+GIMBAL_PITCH_DEG_PER_SEC = 30.0   # tilt
 
-# Rate control: at full joystick deflection, the commanded angle changes
-# by this many degrees per second. Center stick = 0 deg/s (no movement).
-# This is what "how many degrees the joystick represents at a time" tunes —
-# raise it for a snappier stick, lower it for finer control.
-GIMBAL_YAW_DEG_PER_SEC   = 30.0
-GIMBAL_PITCH_DEG_PER_SEC = 30.0
-
-# Minimum change (deg) between the last angle actually SENT to the gimbal
-# and the current accumulated angle before a new point-angle command is
-# sent, to avoid flooding the MAVLink link while the stick is held at a
-# small deflection.
-GIMBAL_SEND_THRESHOLD_DEG = 1.0
+# Small per-tick deltas are buffered and only flushed as an actual
+# relative-angle command once the pending amount reaches this size, so
+# holding the stick at a small deflection doesn't flood the link with
+# near-zero commands. This only limits how OFTEN a command goes out —
+# it never limits how far the gimbal can travel.
+GIMBAL_SEND_THRESHOLD_DEG = 0.5
 
 
-def _clamp(value, lo, hi):
-    return max(lo, min(hi, value))
+def _percent_from_joystick(value):
+    """
+    Maps a raw ADC value (0-4095) to a signed percent, split at the
+    midpoint (2047.5):
+        0    -> -100%
+        mid  ->    0%
+        4095 -> +100%
+    No deadzone — only exact center reads as 0%. If a given axis moves
+    the wrong physical direction, flip its sign at the call site rather
+    than here, since this mapping itself is direction-agnostic.
+    """
+    if value <= ADC_MID:
+        return (value - ADC_MID) / ADC_MID * 100.0
+    return (value - ADC_MID) / (ADC_MAX - ADC_MID) * 100.0
+
+
+class _EdgeTrigger:
+    """Fires 'start' on False->True, 'stop' on True->False, else None."""
+
+    def __init__(self):
+        self._prev = False
+
+    def update(self, active: bool):
+        if active and not self._prev:
+            self._prev = True
+            return "start"
+        if not active and self._prev:
+            self._prev = False
+            return "stop"
+        self._prev = active
+        return None
 
 
 class AnalogInputHandler:
     """
     Completely stateless with respect to MAVLink — it calls methods on
-    UAVCommandSender (set_airspeed, turn_left, point_gimbal etc.) and
-    never touches the drone connection directly.
+    UAVCommandSender (set_airspeed, turn_left, point_gimbal, zoom_in_start,
+    etc.) and never touches the drone connection directly.
 
-    Owns:
+    Gimbal control (Joystick2 X/Y) — pure RATE control, sent as relative
+    angle deltas:
+      Deflection percent (see _percent_from_joystick) sets a deg/sec rate
+      per axis. Each tick's delta (rate * dt) is added to a small pending
+      buffer; once the buffer is big enough to be worth a MAVLink message
+      it's flushed as one initiate_PointAngle_Relative_Raw call and reset
+      to zero. There is deliberately NO local "current angle" tracking and
+      NO clamping — azimuth and tilt are both continuous 360° on this
+      gimbal, so a relative delta is always valid no matter where the
+      gimbal currently is. Centering the stick just stops producing
+      deltas, so the gimbal holds wherever it last moved to.
 
-      - Joystick2 X/Y → gimbal yaw/pitch RATE control. Deflection sets a
-        deg/sec rate; each process() tick adds (rate * dt) to a locally
-        tracked commanded angle, clamped to the gimbal's limits, and sends
-        an updated absolute point-angle command when it's moved enough to
-        be worth another MAVLink message. Centering the stick stops motion
-        at whatever angle was last reached — it does NOT re-center to 0.
-      - Joystick X/Y → heading/altitude in GUIDED mode
-      - ManualController start/stop based on mode transitions
+    Zoom / focus — level-triggered, NOT proportional to deflection:
+      As long as the matching *_Pressed flag on `state` is True, a single
+      "start" command fires once (rising edge) and the gimbal keeps
+      zooming/focusing on its own, per the ICD's "rising edge is valid"
+      behavior; a single "stop" fires once the flag goes False (falling
+      edge). How long the flag stays True is entirely up to whatever sets
+      it — this class doesn't decide "how far," only start/stop.
+
+      NOTE: this assumes `state` exposes get_Zoom_In_Pressed /
+      get_Zoom_Out_Pressed / get_Focus_Plus_Pressed / get_Focus_Minus_Pressed
+      as booleans — rename these in _handle_zoom_focus() if your State
+      class uses different names. If they don't exist yet, the getattr
+      default of False just means zoom/focus never fires (safe no-op)
+      rather than crashing.
     """
 
     def __init__(self, state, manual_ctrl, sender):
@@ -57,20 +99,17 @@ class AnalogInputHandler:
         self._last_turn_degrees   = 0.0
         self._last_altitude_delta = 0.0
 
-        # Locally tracked commanded gimbal angle (what we believe we've
-        # asked the gimbal to point at). Starts at 0/0, matching the
-        # gimbal's home position — see reset_gimbal_tracking() below for
-        # why this can drift and when to reset it.
-        self._current_gimbal_pitch = 0.0
-        self._current_gimbal_yaw   = 0.0
-
-        # Last angle actually SENT as a MAVLink point-angle command —
-        # separate from _current_gimbal_* so we can rate-limit sends
-        # without losing accumulated position between sends.
-        self._last_sent_gimbal_pitch = 0.0
-        self._last_sent_gimbal_yaw   = 0.0
-
+        # Buffered, not-yet-sent relative gimbal motion (degrees). Reset
+        # to 0 each time it's flushed as an actual command.
+        self._pending_yaw_delta   = 0.0
+        self._pending_pitch_delta = 0.0
         self._last_gimbal_tick_time = None
+
+        # Edge triggers for level-based zoom/focus control.
+        self._zoom_in_trigger     = _EdgeTrigger()
+        self._zoom_out_trigger    = _EdgeTrigger()
+        self._focus_plus_trigger  = _EdgeTrigger()
+        self._focus_minus_trigger = _EdgeTrigger()
 
     def process(self):
         current_mode = self.state.get_UAV_Current_Mode
@@ -78,22 +117,9 @@ class AnalogInputHandler:
         # Gimbal pointing is independent of flight mode — always active.
         self._handle_joystick2_gimbal()
         self._handle_joystick(current_mode)
+        self._handle_zoom_focus()
 
-    def reset_gimbal_tracking(self, pitch_deg=0.0, yaw_deg=0.0):
-        """
-        Re-sync the locally tracked commanded angle to a known value.
-        Call this after sending a Home/Retract/Neutral command (raw or
-        MAVLink), or after any external gimbal telemetry confirms an
-        actual position — otherwise this handler's notion of "current
-        angle" can silently drift from where the gimbal really is, since
-        there's no feedback loop here, only accumulation.
-        """
-        self._current_gimbal_pitch = pitch_deg
-        self._current_gimbal_yaw = yaw_deg
-        self._last_sent_gimbal_pitch = pitch_deg
-        self._last_sent_gimbal_yaw = yaw_deg
-
-    # ── Joystick2 X/Y → gimbal yaw/pitch (rate control) ──────────────────────
+    # ── Joystick2 X/Y → gimbal yaw/pitch (pure rate, relative-delta) ────────
 
     def _handle_joystick2_gimbal(self):
         now = time.monotonic()
@@ -107,32 +133,26 @@ class AnalogInputHandler:
         payload_joy_x = self.state.get_Payload_Joystick_X
         payload_joy_y = self.state.get_Payload_Joystick_Y
 
-        yaw_rate_deg_s = self._joystick_to_gimbal_yaw_rate(payload_joy_x)
-        pitch_rate_deg_s = self._joystick_to_gimbal_pitch_rate(payload_joy_y)
+        yaw_percent = _percent_from_joystick(payload_joy_x)
+        pitch_percent = _percent_from_joystick(payload_joy_y)
 
-        if yaw_rate_deg_s == 0.0 and pitch_rate_deg_s == 0.0:
-            return  # stick centered — hold current angle, nothing to add
+        yaw_rate_deg_s = (yaw_percent / 100.0) * GIMBAL_YAW_DEG_PER_SEC
+        pitch_rate_deg_s = (pitch_percent / 100.0) * GIMBAL_PITCH_DEG_PER_SEC
 
-        self._current_gimbal_yaw = _clamp(
-            self._current_gimbal_yaw + yaw_rate_deg_s * dt,
-            -GIMBAL_YAW_MAX_DEG, GIMBAL_YAW_MAX_DEG
-        )
-        self._current_gimbal_pitch = (
-            self._current_gimbal_pitch + pitch_rate_deg_s * dt
-        ) % 360.0
+        self._pending_yaw_delta += yaw_rate_deg_s * dt
+        self._pending_pitch_delta += pitch_rate_deg_s * dt
 
-        yaw_moved = abs(self._current_gimbal_yaw - self._last_sent_gimbal_yaw)
-        pitch_moved = abs(self._current_gimbal_pitch - self._last_sent_gimbal_pitch)
-        if yaw_moved < GIMBAL_SEND_THRESHOLD_DEG and pitch_moved < GIMBAL_SEND_THRESHOLD_DEG:
+        if (abs(self._pending_yaw_delta) < GIMBAL_SEND_THRESHOLD_DEG
+                and abs(self._pending_pitch_delta) < GIMBAL_SEND_THRESHOLD_DEG):
             return
 
         logger.info(
-            f"Joystick2 gimbal: pitch={self._current_gimbal_pitch:+.1f}deg, "
-            f"yaw={self._current_gimbal_yaw:+.1f}deg"
+            f"Joystick2 gimbal delta: pitch={self._pending_pitch_delta:+.2f}deg, "
+            f"yaw={self._pending_yaw_delta:+.2f}deg"
         )
-        self.sender.point_gimbal(self._current_gimbal_pitch, self._current_gimbal_yaw)
-        self._last_sent_gimbal_pitch = self._current_gimbal_pitch
-        self._last_sent_gimbal_yaw = self._current_gimbal_yaw
+        self.sender.point_gimbal(self._pending_pitch_delta, self._pending_yaw_delta)
+        self._pending_pitch_delta = 0.0
+        self._pending_yaw_delta = 0.0
 
     # ── Joystick X/Y → mode-dependent control ────────────────────────────────
 
@@ -146,44 +166,41 @@ class AnalogInputHandler:
             if self.manual_ctrl and not self.manual_ctrl._streaming:
                 self.manual_ctrl.start_streaming()
 
-    # ── Mapping helpers ───────────────────────────────────────────────────────
+    # ── Zoom / focus — level-triggered start/stop ────────────────────────
 
-    def _joystick_to_gimbal_yaw_rate(self, joystick_x):
-        """
-        Maps joystick2 X (0-4095) to a yaw RATE in deg/sec. 0 inside the
-        deadzone, scaling linearly out to +/-GIMBAL_YAW_DEG_PER_SEC at
-        full deflection. This is a velocity, not a target position.
-        """
-        if DEAD_LOW <= joystick_x <= DEAD_HIGH:
-            return 0.0
-        if joystick_x < DEAD_LOW:
-            return -((DEAD_LOW - joystick_x) / DEAD_LOW) * GIMBAL_YAW_DEG_PER_SEC
-        return +((joystick_x - DEAD_HIGH) / (4095 - DEAD_HIGH)) * GIMBAL_YAW_DEG_PER_SEC
+    def _handle_zoom_focus(self):
+        zoom_in = self._zoom_in_trigger.update(bool(getattr(self.state, "get_Zoom_In_Pressed", False)))
+        if zoom_in == "start":
+            self.sender.zoom_in_start()
+        elif zoom_in == "stop":
+            self.sender.zoom_in_stop()
 
-    def _joystick_to_gimbal_pitch_rate(self, joystick_y):
-        """
-        Maps joystick2 Y (0-4095) to a pitch RATE in deg/sec. Below center
-        drives the gimbal down, above center drives it up. 0 inside the
-        deadzone. This is a velocity, not a target position.
-        """
-        if DEAD_LOW <= joystick_y <= DEAD_HIGH:
-            return 0.0
-        if joystick_y < DEAD_LOW:
-            return -((DEAD_LOW - joystick_y) / DEAD_LOW) * GIMBAL_PITCH_DEG_PER_SEC
-        return +((joystick_y - DEAD_HIGH) / (4095 - DEAD_HIGH)) * GIMBAL_PITCH_DEG_PER_SEC
+        zoom_out = self._zoom_out_trigger.update(bool(getattr(self.state, "get_Zoom_Out_Pressed", False)))
+        if zoom_out == "start":
+            self.sender.zoom_out_start()
+        elif zoom_out == "stop":
+            self.sender.zoom_out_stop()
+
+        focus_plus = self._focus_plus_trigger.update(bool(getattr(self.state, "get_Focus_Plus_Pressed", False)))
+        if focus_plus == "start":
+            self.sender.focus_plus_start()
+        elif focus_plus == "stop":
+            self.sender.focus_plus_stop()
+
+        focus_minus = self._focus_minus_trigger.update(bool(getattr(self.state, "get_Focus_Minus_Pressed", False)))
+        if focus_minus == "start":
+            self.sender.focus_minus_start()
+        elif focus_minus == "stop":
+            self.sender.focus_minus_stop()
+
+    # ── Mapping helpers — heading / altitude, unrelated to the gimbal ────────
 
     def _joystick_to_degrees(self, joystick_x):
         """Maps joystick X (0-4095) to heading change in degrees. Max ±45deg."""
-        if DEAD_LOW <= joystick_x <= DEAD_HIGH:
-            return 0
-        if joystick_x < DEAD_LOW:
-            return -((DEAD_LOW - joystick_x) / DEAD_LOW) * 45.0
-        return +((joystick_x - DEAD_HIGH) / (4095 - DEAD_HIGH)) * 45.0
+        percent = _percent_from_joystick(joystick_x)
+        return (percent / 100.0) * 45.0
 
     def _joystick_to_altitude_delta(self, joystick_y):
         """Maps joystick Y (0-4095) to altitude delta in meters. Max ±20m."""
-        if DEAD_LOW <= joystick_y <= DEAD_HIGH:
-            return 0
-        if joystick_y < DEAD_LOW:
-            return -((DEAD_LOW - joystick_y) / DEAD_LOW) * 20.0
-        return +((joystick_y - DEAD_HIGH) / (4095 - DEAD_HIGH)) * 20.0
+        percent = _percent_from_joystick(joystick_y)
+        return (percent / 100.0) * 20.0

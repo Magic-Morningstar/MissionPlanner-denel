@@ -219,11 +219,70 @@ class UAVCommandSender(MavlinkWorker):
             self.enqueue(self.Director.set_altitude, target_alt_m)
 
     def point_gimbal(self, pitch_deg, yaw_deg):
-        
+        """
+        pitch_deg / yaw_deg here are RELATIVE deltas (degrees to move by
+        this call), not absolute targets — AnalogInputHandler streams
+        small per-tick deltas while the stick is held.
+
+        Fixed two bugs that were here before:
+          1. initiate_PointAngle_Relative_Raw(azimuth_delta_deg, tilt_delta_deg)
+             takes azimuth FIRST — this used to pass (pitch_deg, yaw_deg)
+             positionally, putting pitch in the azimuth slot and yaw in
+             the tilt slot.
+          2. This used to build a throwaway `Payload(self.command_drone,
+             self.state, self._mav_lock)` with positional args, instead of
+             reusing self.Payload (built with keyword args in _do_connect).
+             If Payload's real __init__ order doesn't match
+             (command_drone, state, lock), state/command_drone get
+             silently swapped in that one-off instance.
+        """
+        if not self.Payload:
+            logger.warning("point_gimbal called with no Payload connection — ignoring.")
+            return
         self.enqueue(
-            Payload(self.command_drone, self.state, self._mav_lock).initiate_PointAngle_Relative_Raw,
-            pitch_deg, yaw_deg
-        )      
+            self.Payload.initiate_PointAngle_Relative_Raw,
+            yaw_deg,     # azimuth_delta_deg
+            pitch_deg,   # tilt_delta_deg
+        )
+
+    # ── Zoom / focus — level-triggered raw start/stop ───────────────────────
+    # Called by AnalogInputHandler on rising/falling edges of the held
+    # zoom/focus flags. Per the ICD, zoom-in/out and focus+/- are "rising
+    # edge valid" — one start command keeps the gimbal moving until a
+    # matching stop is sent, so these are one-shot per press/release,
+    # not something to call repeatedly while held.
+
+    def zoom_in_start(self, speed=4):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_ZoomIn_Raw, speed)
+
+    def zoom_in_stop(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_ZoomStop_Raw)
+
+    def zoom_out_start(self, speed=4):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_ZoomOut_Raw, speed)
+
+    def zoom_out_stop(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_ZoomStop_Raw)
+
+    def focus_plus_start(self, speed=4):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_FocusPlus_Raw, speed)
+
+    def focus_plus_stop(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_FocusStop_Raw)
+
+    def focus_minus_start(self, speed=4):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_FocusMinus_Raw, speed)
+
+    def focus_minus_stop(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_FocusStop_Raw)
 
     def start_takeoff(self):
         if self.takeoff_in_progress:
@@ -345,5 +404,3 @@ def _handle_widein(sender, cmd):
     if sender.state.GIMBAL_FOCUS <= 0:
            sender.state.GIMBAL_FOCUS = 0 
     sender.payloadFocus()
-
-    
