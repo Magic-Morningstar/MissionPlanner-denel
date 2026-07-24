@@ -1,8 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────
-# Raw Viewpro gimbal protocol (native frame format, sent as opaque bytes
-# tunneled through the FC via MAVLink SERIAL_CONTROL on a dedicated port).
-# ─────────────────────────────────────────────────────────────────────────
-
 class GimbalFrameBuilder:
     """
     Builds raw Viewpro gimbal protocol frames (big-endian), per the payload's
@@ -96,21 +91,30 @@ class GimbalFrameBuilder:
         A1 frame in Absolute Angle Mode (0x0B) — ICD 3.3.1.5. Points the
         gimbal to a fixed azimuth/tilt relative to home position (home = 0).
         param3/param4 are meaningless in this mode, left as 0.
+
+        NOTE: confirmed against real hardware that param1 carries tilt and
+        param2 carries azimuth — the reverse of how the ICD text labels
+        "Parameter 1 / Parameter 2" — so this maps accordingly rather than
+        following the doc's labeling literally.
         """
         return self.build_A1(
             servo_mode=self.SERVO_MANUAL_ABSOLUTE_ANGLE,
-            param1=self._angle_to_word(azimuth_deg),
-            param2=self._angle_to_word(tilt_deg),
+            param1=self._angle_to_word(tilt_deg),
+            param2=self._angle_to_word(azimuth_deg),
             param3=0,
             param4=0,
         )
 
     def build_A1_relative_angle(self, azimuth_delta_deg, tilt_delta_deg) -> bytes:
-        """A1 frame in Manual Relative Angle Mode (0x09): offset from current position."""
+        """
+        A1 frame in Manual Relative Angle Mode (0x09): offset from current
+        position. Same param1=tilt / param2=azimuth ordering as
+        build_A1_absolute_angle — see note there.
+        """
         return self.build_A1(
             servo_mode=self.SERVO_MANUAL_RELATIVE_ANGLE,
-            param1=self._angle_to_word(azimuth_delta_deg),
-            param2=self._angle_to_word(tilt_delta_deg),
+            param1=self._angle_to_word(tilt_delta_deg),
+            param2=self._angle_to_word(azimuth_delta_deg),
         )
 
     def build_A1_motor(self, on: bool) -> bytes:
@@ -124,3 +128,159 @@ class GimbalFrameBuilder:
     def build_A1_tracking(self) -> bytes:
         """A1 frame to switch the gimbal into tracking mode."""
         return self.build_A1(servo_mode=self.SERVO_TRACKING_MODE)
+
+    # ── C1: optical control (zoom / focus / video source / photo / record / LRF) ──
+    # ICD 3.7 "C1 Optical Control, Commonly Used, 2 Bytes". A single 16-bit,
+    # big-endian, bit-packed word:
+    #   bits 0-2   Sensor / video-source select
+    #   bits 3-5   Operation-command-1 parameter (zoom/focus speed, 0x01-0x07)
+    #   bits 6-12  Operation Command 1 (the actual action)
+    #   bits 13-15 Laser Rangefinder command
+    #
+    # NOTE: zoom (FOV+/-) and focus (Focus+/-) are RATE commands, not
+    # absolute levels like MAV_CMD_SET_CAMERA_ZOOM's 0-100 range — "rising
+    # edge is valid," i.e. they start a continuous zoom/focus move at the
+    # given speed until a stop command (0x01) is sent. Plan accordingly if
+    # you're driving these from a slider: send start, then send stop when
+    # the slider stops moving or a target is reached.
+
+    # Video/sensor source select (bits 0-2)
+    VIDEO_NO_ACTION    = 0x00
+    VIDEO_EO1          = 0x01
+    VIDEO_IR_THERMAL   = 0x02
+    VIDEO_EO1_IR_PIP   = 0x03
+    VIDEO_IR_EO1_PIP   = 0x04
+    VIDEO_EO2          = 0x05
+    VIDEO_FUSION       = 0x06
+
+    # Operation Command 1 (bits 6-12)
+    OP_NO_ACTION           = 0x00
+    OP_STOP_FOCUS_ZOOM     = 0x01
+    OP_BRIGHTNESS_PLUS     = 0x02
+    OP_BRIGHTNESS_MINUS    = 0x03
+    OP_CONTRAST_PLUS       = 0x04  # not supported yet, per ICD
+    OP_CONTRAST_MINUS      = 0x05  # not supported yet, per ICD
+    OP_APERTURE_PLUS       = 0x06  # not supported yet, per ICD
+    OP_APERTURE_MINUS      = 0x07  # not supported yet, per ICD
+    OP_ZOOM_OUT            = 0x08  # "FOV+" — zoom out
+    OP_ZOOM_IN             = 0x09  # "FOV-" — zoom in
+    OP_FOCUS_PLUS          = 0x0A
+    OP_FOCUS_MINUS         = 0x0B
+    OP_INTERNAL_NUC        = 0x0C  # not supported yet, per ICD
+    OP_EXTERNAL_NUC        = 0x0D  # not supported yet, per ICD
+    OP_POLARITY_WHITE_HOT  = 0x0E
+    OP_POLARITY_BLACK_HOT  = 0x0F
+    OP_GAIN_PLUS           = 0x10  # not supported yet, per ICD
+    OP_GAIN_MINUS          = 0x11  # not supported yet, per ICD
+    OP_IR_RAINBOW          = 0x12
+    OP_TAKE_PICTURE        = 0x13
+    OP_START_RECORD        = 0x14
+    OP_STOP_RECORD         = 0x15
+    OP_PICTURE_MODE        = 0x16
+    OP_RECORD_MODE         = 0x17
+    OP_PIC_RECORD_SWITCH   = 0x18
+    OP_AUTO_FOCUS          = 0x19
+    OP_MANUAL_FOCUS        = 0x1A
+    OP_IR_DZOOM_PLUS       = 0x1B
+    OP_IR_DZOOM_MINUS      = 0x1C
+    OP_FORMAT_SD           = 0x1D
+    OP_QUERY_SD_STATUS     = 0x1E
+    OP_QUERY_SD_TOTAL      = 0x1F
+    OP_QUERY_SD_FREE       = 0x20
+
+    # Laser Rangefinder command (bits 13-15)
+    LRF_NO_ACTION               = 0x00
+    LRF_SINGLE_RANGING          = 0x01
+    LRF_CONTINUOUS_START        = 0x02
+    LRF_LPCL_CONTINUOUS_START   = 0x03  # pro models
+    LRF_EXTERNAL_SYNC           = 0x04  # not supported yet, per ICD
+    LRF_STOP_RANGING            = 0x05
+
+    def build_C1(self, sensor=0, op_param=0, op_command=0, lrf_command=0) -> bytes:
+        """
+        Build a standalone C1 optical-control frame (frame ID 0x1C).
+        sensor: 3-bit video source select (VIDEO_* constants)
+        op_param: 3-bit generic parameter for op_command — for zoom/focus
+                  commands this is speed, 0x01 (slowest) to 0x07 (fastest)
+        op_command: 7-bit action (OP_* constants)
+        lrf_command: 3-bit laser rangefinder action (LRF_* constants)
+        """
+        word = (
+            ((lrf_command & 0x07) << 13)
+            | ((op_command & 0x7F) << 6)
+            | ((op_param & 0x07) << 3)
+            | (sensor & 0x07)
+        )
+        data = self._word_to_bytes(word)
+        return self._build(self.FRAME_ID_C1, data)
+
+    # ── C1 convenience wrappers ──────────────────────────────────────────
+
+    def build_C1_switch_video_source(self, source: int) -> bytes:
+        """Switch active video source (EO / IR thermal / PIP / fusion) — VIDEO_* constants."""
+        return self.build_C1(sensor=source)
+
+    def build_C1_zoom_in(self, speed=4) -> bytes:
+        """Start zooming in (telephoto) at the given speed, 1 (slowest) - 7 (fastest)."""
+        return self.build_C1(op_param=speed, op_command=self.OP_ZOOM_IN)
+
+    def build_C1_zoom_out(self, speed=4) -> bytes:
+        """Start zooming out (wide) at the given speed, 1 (slowest) - 7 (fastest)."""
+        return self.build_C1(op_param=speed, op_command=self.OP_ZOOM_OUT)
+
+    def build_C1_zoom_stop(self) -> bytes:
+        """Stop an in-progress zoom move (shared with focus-stop, per ICD 0x01)."""
+        return self.build_C1(op_command=self.OP_STOP_FOCUS_ZOOM)
+
+    def build_C1_focus_plus(self, speed=4) -> bytes:
+        """Start focusing far at the given speed, 1 (slowest) - 7 (fastest)."""
+        return self.build_C1(op_param=speed, op_command=self.OP_FOCUS_PLUS)
+
+    def build_C1_focus_minus(self, speed=4) -> bytes:
+        """Start focusing near at the given speed, 1 (slowest) - 7 (fastest)."""
+        return self.build_C1(op_param=speed, op_command=self.OP_FOCUS_MINUS)
+
+    def build_C1_focus_stop(self) -> bytes:
+        """Stop an in-progress focus move (shared with zoom-stop, per ICD 0x01)."""
+        return self.build_C1(op_command=self.OP_STOP_FOCUS_ZOOM)
+
+    def build_C1_auto_focus(self) -> bytes:
+        """Switch the camera to autofocus mode."""
+        return self.build_C1(op_command=self.OP_AUTO_FOCUS)
+
+    def build_C1_manual_focus(self) -> bytes:
+        """Switch the camera to manual focus mode."""
+        return self.build_C1(op_command=self.OP_MANUAL_FOCUS)
+
+    def build_C1_take_picture(self) -> bytes:
+        """Trigger a single photo capture."""
+        return self.build_C1(op_command=self.OP_TAKE_PICTURE)
+
+    def build_C1_start_record(self) -> bytes:
+        """Start video recording (native protocol, not MAVLink camera command)."""
+        return self.build_C1(op_command=self.OP_START_RECORD)
+
+    def build_C1_stop_record(self) -> bytes:
+        """Stop video recording (native protocol, not MAVLink camera command)."""
+        return self.build_C1(op_command=self.OP_STOP_RECORD)
+
+    def build_C1_polarity_white_hot(self) -> bytes:
+        """Set IR palette polarity to white-hot."""
+        return self.build_C1(op_command=self.OP_POLARITY_WHITE_HOT)
+
+    def build_C1_polarity_black_hot(self) -> bytes:
+        """Set IR palette polarity to black-hot."""
+        return self.build_C1(op_command=self.OP_POLARITY_BLACK_HOT)
+
+    def build_C1_laser_single_range(self) -> bytes:
+        """Trigger a single laser rangefinder measurement."""
+        return self.build_C1(lrf_command=self.LRF_SINGLE_RANGING)
+
+    def build_C1_laser_continuous_start(self) -> bytes:
+        """Start continuous laser rangefinding."""
+        return self.build_C1(lrf_command=self.LRF_CONTINUOUS_START)
+
+    def build_C1_laser_stop(self) -> bytes:
+        """Stop laser rangefinding."""
+        return self.build_C1(lrf_command=self.LRF_STOP_RANGING)
+

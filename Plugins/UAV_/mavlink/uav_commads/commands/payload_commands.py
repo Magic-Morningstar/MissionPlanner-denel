@@ -2,13 +2,13 @@
 
 from pymavlink import mavutil
 from mavlink.uav_commads.commands.base_command import BaseCommand
-from mavlink.uav_commads.commands.payload_services import GimbalFrameBuilder
 import logging
 logger = logging.getLogger(__name__)
 
 
-
-
+# ─────────────────────────────────────────────────────────────────────────
+# Payload command wrapper
+# ─────────────────────────────────────────────────────────────────────────
 
 class Payload(BaseCommand):
     """
@@ -72,6 +72,25 @@ class Payload(BaseCommand):
         logger.info("Neutral command sent.")
         return True
 
+    def initiate_PointAngle(self, pitch_deg, yaw_deg, roll_deg=0):
+        """
+        Point the gimbal at a fixed pitch/roll/yaw (degrees) via standard
+        MAVLink DO_MOUNT_CONTROL. Yaw is vehicle-relative: 0 = forward,
+        90 = right, -90 = left.
+        """
+        if not self._check(self._requires_payload_connection):
+            return False
+
+        logger.info(f"Pointing gimbal — pitch={pitch_deg}, roll={roll_deg}, yaw={yaw_deg}...")
+        self._send_command(
+            mavutil.mavlink.MAV_CMD_DO_MOUNT_CONTROL,
+            p1=pitch_deg,
+            p2=roll_deg,
+            p3=yaw_deg,
+            p7=mavutil.mavlink.MAV_MOUNT_MODE_MAVLINK_TARGETING
+        )
+        logger.info("Point-angle command sent.")
+        return True
 
     def initiate_PointROI(self, lat, lon, alt):
         """Point the gimbal at a fixed GPS location (region of interest)."""
@@ -218,14 +237,14 @@ class Payload(BaseCommand):
         flags = mavutil.mavlink.SERIAL_CONTROL_FLAG_EXCLUSIVE
         if expect_response:
             flags |= mavutil.mavlink.SERIAL_CONTROL_FLAG_RESPOND
-        
-        self.command_drone.mav.serial_control_send(
+
+        self.state.mav_connection.mav.serial_control_send(
             device=self.VIEWPRO_SERIAL_DEVICE,
             flags=flags,
             timeout=0,
-            baudrate=0,  
+            baudrate=0,  # 0 = don't change the port's configured baud rate
             count=len(frame),
-            data=bytes(frame).ljust(70, b'\x00')
+            data=bytes(frame).ljust(70, b'\x00'),
         )
         logger.info(f"Sent raw Viewpro frame ({len(frame)} bytes): {frame.hex(' ')}")
         return True
@@ -252,4 +271,100 @@ class Payload(BaseCommand):
     def initiate_Home_Raw(self, expect_response=False):
         """Drive the gimbal to its home position, using the native protocol."""
         frame = self._gimbal_frames.build_A1_home()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    # ── Raw zoom / focus / video source / photo / record / LRF (C1) ────────
+    # NOTE: zoom and focus here are RATE commands (start moving at `speed`,
+    # then call the matching *_Stop_Raw), not absolute levels like the
+    # MAVLink-native initiate_SetZoom/initiate_SetFocus above. Don't mix the
+    # two control paths for the same axis at the same time — same
+    # shared-control-conflict concern as DO_MOUNT_* vs raw angle commands.
+
+    def initiate_ZoomIn_Raw(self, speed=4, expect_response=False):
+        """Start zooming in (telephoto). speed: 1 (slowest) - 7 (fastest)."""
+        frame = self._gimbal_frames.build_C1_zoom_in(speed)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_ZoomOut_Raw(self, speed=4, expect_response=False):
+        """Start zooming out (wide). speed: 1 (slowest) - 7 (fastest)."""
+        frame = self._gimbal_frames.build_C1_zoom_out(speed)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_ZoomStop_Raw(self, expect_response=False):
+        """Stop an in-progress zoom move."""
+        frame = self._gimbal_frames.build_C1_zoom_stop()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_FocusPlus_Raw(self, speed=4, expect_response=False):
+        """Start focusing far. speed: 1 (slowest) - 7 (fastest)."""
+        frame = self._gimbal_frames.build_C1_focus_plus(speed)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_FocusMinus_Raw(self, speed=4, expect_response=False):
+        """Start focusing near. speed: 1 (slowest) - 7 (fastest)."""
+        frame = self._gimbal_frames.build_C1_focus_minus(speed)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_FocusStop_Raw(self, expect_response=False):
+        """Stop an in-progress focus move."""
+        frame = self._gimbal_frames.build_C1_focus_stop()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_AutoFocus_Raw(self, expect_response=False):
+        """Switch the camera to autofocus mode."""
+        frame = self._gimbal_frames.build_C1_auto_focus()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_ManualFocus_Raw(self, expect_response=False):
+        """Switch the camera to manual focus mode."""
+        frame = self._gimbal_frames.build_C1_manual_focus()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_SwitchVideoSource_Raw(self, source: int, expect_response=False):
+        """
+        Switch the active video source — this is the IR/EO switch. Use
+        GimbalFrameBuilder.VIDEO_EO1 / VIDEO_IR_THERMAL / VIDEO_EO1_IR_PIP /
+        VIDEO_IR_EO1_PIP / VIDEO_EO2 / VIDEO_FUSION as `source`.
+        """
+        frame = self._gimbal_frames.build_C1_switch_video_source(source)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TakePhoto_Raw(self, expect_response=False):
+        """Trigger a single photo capture, using the native protocol."""
+        frame = self._gimbal_frames.build_C1_take_picture()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_StartRecording_Raw(self, expect_response=False):
+        """Start video recording, using the native protocol."""
+        frame = self._gimbal_frames.build_C1_start_record()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_StopRecording_Raw(self, expect_response=False):
+        """Stop video recording, using the native protocol."""
+        frame = self._gimbal_frames.build_C1_stop_record()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_IRPolarityWhiteHot_Raw(self, expect_response=False):
+        """Set IR palette polarity to white-hot."""
+        frame = self._gimbal_frames.build_C1_polarity_white_hot()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_IRPolarityBlackHot_Raw(self, expect_response=False):
+        """Set IR palette polarity to black-hot."""
+        frame = self._gimbal_frames.build_C1_polarity_black_hot()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserRangeSingle_Raw(self, expect_response=False):
+        """Trigger a single laser rangefinder measurement."""
+        frame = self._gimbal_frames.build_C1_laser_single_range()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserRangeContinuousStart_Raw(self, expect_response=False):
+        """Start continuous laser rangefinding."""
+        frame = self._gimbal_frames.build_C1_laser_continuous_start()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserRangeStop_Raw(self, expect_response=False):
+        """Stop laser rangefinding."""
+        frame = self._gimbal_frames.build_C1_laser_stop()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
