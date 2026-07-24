@@ -24,6 +24,12 @@ GIMBAL_PITCH_DEG_PER_SEC = 30.0   # tilt
 GIMBAL_SEND_THRESHOLD_DEG = 0.5
 
 
+# Small deadzone around center — any deflection producing a percent in
+# this range is treated as exactly 0%, so tiny stick noise near center
+# doesn't produce drift on any axis using _percent_from_joystick.
+DEADZONE_PERCENT = 2.0
+
+
 def _percent_from_joystick(value):
     """
     Maps a raw ADC value (0-4095) to a signed percent, split at the
@@ -31,13 +37,19 @@ def _percent_from_joystick(value):
         0    -> -100%
         mid  ->    0%
         4095 -> +100%
-    No deadzone — only exact center reads as 0%. If a given axis moves
-    the wrong physical direction, flip its sign at the call site rather
-    than here, since this mapping itself is direction-agnostic.
+    Values within +/-DEADZONE_PERCENT of center are snapped to exactly 0%.
+    If a given axis moves the wrong physical direction, flip its sign at
+    the call site rather than here, since this mapping itself is
+    direction-agnostic.
     """
     if value <= ADC_MID:
-        return (value - ADC_MID) / ADC_MID * 100.0
-    return (value - ADC_MID) / (ADC_MAX - ADC_MID) * 100.0
+        percent = (value - ADC_MID) / ADC_MID * 100.0
+    else:
+        percent = (value - ADC_MID) / (ADC_MAX - ADC_MID) * 100.0
+
+    if -DEADZONE_PERCENT <= percent <= DEADZONE_PERCENT:
+        return 0.0
+    return percent
 
 
 class _EdgeTrigger:
@@ -65,7 +77,8 @@ class AnalogInputHandler:
 
     Gimbal control (Joystick2 X/Y) — pure RATE control, sent as relative
     angle deltas:
-      Deflection percent (see _percent_from_joystick) sets a deg/sec rate
+      Deflection percent (see _percent_from_joystick, +/-2% deadzone
+      around center) sets a deg/sec rate
       per axis. Each tick's delta (rate * dt) is added to a small pending
       buffer; once the buffer is big enough to be worth a MAVLink message
       it's flushed as one initiate_PointAngle_Relative_Raw call and reset
