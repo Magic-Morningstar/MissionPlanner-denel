@@ -117,10 +117,9 @@ class AnalogInputHandler:
             self._current_gimbal_yaw + yaw_rate_deg_s * dt,
             -GIMBAL_YAW_MAX_DEG, GIMBAL_YAW_MAX_DEG
         )
-        self._current_gimbal_pitch = _clamp(
-            self._current_gimbal_pitch + pitch_rate_deg_s * dt,
-            GIMBAL_PITCH_MIN_DEG, GIMBAL_PITCH_MAX_DEG
-        )
+        self._current_gimbal_pitch = (
+            self._current_gimbal_pitch + pitch_rate_deg_s * dt
+        ) % 360.0
 
         yaw_moved = abs(self._current_gimbal_yaw - self._last_sent_gimbal_yaw)
         pitch_moved = abs(self._current_gimbal_pitch - self._last_sent_gimbal_pitch)
