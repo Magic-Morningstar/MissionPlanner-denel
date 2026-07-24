@@ -377,23 +377,29 @@ def _handle_speedup(sender, cmd):
 def _handle_speeddown(sender, cmd):
     logger.info("SpeedDownCommand received")
 
-'''
+
+
+
 @register_handler(ZoomInCommand)
 def _handle_zoomin(sender, cmd):
     logger.info("CameraZoomInCommand received")
-    sender.state.GIMBAL_ZOOM +=1
-    if sender.state.GIMBAL_ZOOM >= 100:
-           sender.state.GIMBAL_ZOOM = 100
-    sender.payloadZoomIn()
+    sender.state.ZOOMIN_PRESSED = True
+
+@register_handler(ZoomInFallCommand)
+def _handle_zoomoutFall(sender, cmd):
+    logger.info("CameraZoomInFallCommand received")
+    sender.state.ZOOMIN_PRESSED = False
 
 @register_handler(ZoomOutCommand)
 def _handle_zoomout(sender, cmd):
     logger.info("CameraZoomOutCommand received")
-    sender.state.GIMBAL_ZOOM -=1
-    if sender.state.GIMBAL_ZOOM <= 0:
-           sender.state.GIMBAL_ZOOM = 0 
-    sender.payloadZoomOut()
+    sender.state.ZOOMOUT_PRESSED = True
 
+@register_handler(ZoomOutFallCommand)
+def _handle_zoomoutFall(sender, cmd):
+    logger.info("CameraZoomOutFallCommand received")
+    sender.state.ZOOMOUT_PRESSED = False
+'''
 @register_handler(WideInCommand)
 def _handle_wideout(sender, cmd):
     logger.info("CameraWideOutCommand received")

@@ -13,8 +13,8 @@ ADC_MID = ADC_MAX / 2.0   # 2047.5
 # are both continuous/360° on this gimbal, so there is intentionally no
 # angle clamping anywhere in this file — only the RATE is controlled,
 # total travel is never capped.
-GIMBAL_YAW_DEG_PER_SEC   = 30.0   # azimuth
-GIMBAL_PITCH_DEG_PER_SEC = 30.0   # tilt
+GIMBAL_YAW_DEG_PER_SEC   = 360.0   # azimuth
+GIMBAL_PITCH_DEG_PER_SEC = 360.0   # tilt
 
 # Small per-tick deltas are buffered and only flushed as an actual
 # relative-angle command once the pending amount reaches this size, so
@@ -27,7 +27,7 @@ GIMBAL_SEND_THRESHOLD_DEG = 0.5
 # Small deadzone around center — any deflection producing a percent in
 # this range is treated as exactly 0%, so tiny stick noise near center
 # doesn't produce drift on any axis using _percent_from_joystick.
-DEADZONE_PERCENT = 2.0
+DEADZONE_PERCENT = 6
 
 
 def _percent_from_joystick(value):
@@ -182,29 +182,35 @@ class AnalogInputHandler:
     # ── Zoom / focus — level-triggered start/stop ────────────────────────
 
     def _handle_zoom_focus(self):
-        zoom_in = self._zoom_in_trigger.update(bool(getattr(self.state, "get_Zoom_In_Pressed", False)))
-        if zoom_in == "start":
+        
+        zoom_in = self.sender.state.ZOOMIN_PRESSED
+        if zoom_in == True:
             self.sender.zoom_in_start()
-        elif zoom_in == "stop":
+            self.sender.state.ZOOMING_IN = True
+        elif self.sender.state.ZOOMING_IN:
+            self.sender.state.ZOOMING_IN = False
             self.sender.zoom_in_stop()
 
-        zoom_out = self._zoom_out_trigger.update(bool(getattr(self.state, "get_Zoom_Out_Pressed", False)))
-        if zoom_out == "start":
+        zoom_out =self.sender.state.ZOOMOUT_PRESSED
+        if zoom_out == True:
             self.sender.zoom_out_start()
-        elif zoom_out == "stop":
+            self.sender.state.ZOOMING_OUT =False
+        elif self.sender.state.ZOOMING_OUT:
+            self.sender.state.ZOOMING_OUT =True
             self.sender.zoom_out_stop()
 
-        focus_plus = self._focus_plus_trigger.update(bool(getattr(self.state, "get_Focus_Plus_Pressed", False)))
-        if focus_plus == "start":
+        '''
+        focus_plus = self.state.FOCUSIN_PRESSED
+        if focus_plus == True:
             self.sender.focus_plus_start()
-        elif focus_plus == "stop":
+        else:
             self.sender.focus_plus_stop()
 
-        focus_minus = self._focus_minus_trigger.update(bool(getattr(self.state, "get_Focus_Minus_Pressed", False)))
-        if focus_minus == "start":
+        focus_minus = self.state.FOCUSOUT_PRESSED
+        if focus_minus == True:
             self.sender.focus_minus_start()
-        elif focus_minus == "stop":
-            self.sender.focus_minus_stop()
+        else:
+            self.sender.focus_minus_stop()'''
 
     # ── Mapping helpers — heading / altitude, unrelated to the gimbal ────────
 

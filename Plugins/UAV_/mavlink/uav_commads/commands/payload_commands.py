@@ -240,7 +240,7 @@ class Payload(BaseCommand):
         if expect_response:
             flags |= mavutil.mavlink.SERIAL_CONTROL_FLAG_RESPOND
 
-        self.state.mav_connection.mav.serial_control_send(
+        self.command_drone.mav.serial_control_send(
             device=self.VIEWPRO_SERIAL_DEVICE,
             flags=flags,
             timeout=0,

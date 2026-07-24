@@ -63,6 +63,14 @@ class ZoomOutCommand(Command):
     pass
 
 @dataclass
+class ZoomInFallCommand(Command):
+    pass
+
+@dataclass
+class ZoomOutFallCommand(Command):
+    pass
+
+@dataclass
 class WideInCommand(Command):
     pass
 

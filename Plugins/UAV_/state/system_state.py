@@ -43,6 +43,15 @@ class SystemState:
         self._PAYLOAD_JOYSTICK_X = 0
         self._PAYLOAD_JOYSTICK_Y = 0
 
+        self.ZOOMIN_PRESSED = False
+        self.ZOOMING_IN = False
+        self.ZOOMING_OUT =False
+        self.ZOOMOUT_PRESSED = False
+
+        self.FOCUSIN_PRESSED = False
+        self.FOCUSOUT_PRESSED = False
+
+
         # ── Operation flags ───────────────────────────────────────────────────
         self.UAV_STATE_CHANGE = False
         self.ARMED_SWITCH = False

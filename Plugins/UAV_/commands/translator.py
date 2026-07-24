@@ -23,14 +23,13 @@ EDGE_TABLE = [
     ("autoland",   LandCommand,         None),
     ("speedup",   SpeedUpCommand,       None),
     ("speeddown",   SpeedDownCommand,   None),
-    ("zoomin",   ZoomInCommand,         None),
-    ("zoomout",   ZoomOutCommand,       None),
+    ("zoomin",   ZoomInCommand,         ZoomInFallCommand),
+    ("zoomout",   ZoomOutCommand,       ZoomOutFallCommand),
     ("widein",   WideInCommand,         None),
     ("wideout",   WideOutCommand,       None),
     ("manual",    ManualModeCommand,    None),
     ("auto",      AutoModeCommand,      None),
     ("emergency", EmergencyCommand,     None),
-   
 ]
 
 
@@ -51,8 +50,9 @@ class InputTranslator:
         elif isinstance(obj, Joystick):
             self.state.update_Joystick(obj.x, obj.y)
         elif isinstance(obj, Joystick2):
-
             self.state.update_Payload_Joystick(obj.x, obj.y) 
+        
+        
 
     def _translate_buttons(self, new: ButtonState):
         prev = self._prev
