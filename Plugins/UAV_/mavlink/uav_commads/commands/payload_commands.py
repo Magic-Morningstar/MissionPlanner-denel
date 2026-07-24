@@ -1,4 +1,4 @@
-# mavlink/uav_commads/payload_commands.py
+# mavlink/uav_commads/commands/payload_commands.py
 
 from pymavlink import mavutil
 from mavlink.uav_commads.commands.base_command import BaseCommand
@@ -20,10 +20,11 @@ class Payload(BaseCommand):
     ArduPilot's mount driver today. Swap in DO_GIMBAL_MANAGER_PITCHYAW if
     you're targeting a v2-only stack.
 
-    Also supports Viewpro's native raw protocol (see GimbalFrameBuilder)
-    for cases where DO_MOUNT_* doesn't cover a feature the payload exposes
-    natively. Raw frames are tunneled to the gimbal's dedicated serial port
-    via MAVLink SERIAL_CONTROL — the FC does not interpret these bytes.
+    Also supports Viewpro's native raw protocol (see GimbalFrameBuilder,
+    in payload_services.py) for cases where DO_MOUNT_* doesn't cover a
+    feature the payload exposes natively. Raw frames are tunneled to the
+    gimbal's dedicated serial port via MAVLink SERIAL_CONTROL — the FC
+    does not interpret these bytes.
     """
 
     # Device the gimbal is wired to, per MAVLink's SERIAL_CONTROL_DEV enum.
@@ -156,7 +157,7 @@ class Payload(BaseCommand):
         logger.info("Stop-recording command sent.")
         return True
 
-    # ── Zoom / focus ─────────────────────────────────────────────────────────
+    # ── Zoom / focus (MAVLink-native, absolute level) ───────────────────────
 
     def initiate_SetZoom(self, zoom_level):
         """
@@ -259,9 +260,19 @@ class Payload(BaseCommand):
         frame = self._gimbal_frames.build_A1_absolute_angle(azimuth_deg, tilt_deg)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
-    def initiate_PointAngle_Relative_Raw(self, azimuth_delta_deg, tilt_delta_deg, expect_response=False):
-        """Nudge the gimbal by a relative angle offset, using the native protocol."""
-        frame = self._gimbal_frames.build_A1_relative_angle(azimuth_delta_deg, tilt_delta_deg)
+    def initiate_PointAngle_Relative_Raw(self, azimuth_delta_deg, tilt_delta_deg,
+                                          azimuth_speed_deg_s=0, tilt_speed_deg_s=0,
+                                          expect_response=False):
+        """
+        Nudge the gimbal by a relative angle offset, using the native
+        protocol (Relative Angle Mode 0x09). Speeds default to 0 (gimbal's
+        own default rate) — pass explicit deg/s values if you want to
+        control rate directly through the payload's own velocity fields
+        instead of (or in addition to) the per-tick delta size.
+        """
+        frame = self._gimbal_frames.build_A1_relative_angle(
+            azimuth_delta_deg, tilt_delta_deg, azimuth_speed_deg_s, tilt_speed_deg_s
+        )
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
     def initiate_MotorPower_Raw(self, on: bool, expect_response=False):
@@ -277,9 +288,12 @@ class Payload(BaseCommand):
     # ── Raw zoom / focus / video source / photo / record / LRF (C1) ────────
     # NOTE: zoom and focus here are RATE commands (start moving at `speed`,
     # then call the matching *_Stop_Raw), not absolute levels like the
-    # MAVLink-native initiate_SetZoom/initiate_SetFocus above. Don't mix the
-    # two control paths for the same axis at the same time — same
-    # shared-control-conflict concern as DO_MOUNT_* vs raw angle commands.
+    # MAVLink-native initiate_SetZoom/initiate_SetFocus above. Per ICD 2.3(b),
+    # these run on edge-trigger logic — once started they keep going until a
+    # genuinely different enumeration (stop/no-action) arrives. Don't mix
+    # this raw path with the MAVLink-native path for the same axis at the
+    # same time — same shared-control-conflict concern as DO_MOUNT_* vs raw
+    # angle commands.
 
     def initiate_ZoomIn_Raw(self, speed=4, expect_response=False):
         """Start zooming in (telephoto). speed: 1 (slowest) - 7 (fastest)."""
