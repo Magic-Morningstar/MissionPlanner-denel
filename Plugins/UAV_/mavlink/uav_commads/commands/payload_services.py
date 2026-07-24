@@ -46,6 +46,16 @@ class GimbalFrameBuilder:
         return int(round((angle_deg / 360.0) * 65536)) & 0xFFFF
 
     @staticmethod
+    def _speed_to_word(speed_deg_s):
+        """
+        Signed 16-bit word for the velocity fields used in Relative Angle
+        Mode (0x09), per ICD 3.3.1.4: 1 LSB = 0.1 deg/s. NOTE: this is a
+        different scale than Manual Speed Mode's (0x01) 0.01 deg/s fields
+        (ICD 3.3.1.2) — don't reuse this for that mode.
+        """
+        return int(round(speed_deg_s * 10.0)) & 0xFFFF
+
+    @staticmethod
     def _word_to_bytes(word):
         """Big-endian 2-byte encoding (MSB first) — ICD specifies big-endian."""
         return bytes([(word >> 8) & 0xFF, word & 0xFF])
@@ -105,16 +115,31 @@ class GimbalFrameBuilder:
             param4=0,
         )
 
-    def build_A1_relative_angle(self, azimuth_delta_deg, tilt_delta_deg) -> bytes:
+    def build_A1_relative_angle(self, azimuth_delta_deg, tilt_delta_deg,
+                                 azimuth_speed_deg_s=0, tilt_speed_deg_s=0) -> bytes:
         """
-        A1 frame in Manual Relative Angle Mode (0x09): offset from current
-        position. Same param1=tilt / param2=azimuth ordering as
-        build_A1_absolute_angle — see note there.
+        A1 frame in Manual Relative Angle Mode (0x09) — ICD 3.3.1.4.
+
+        IMPORTANT: this mode's parameter layout is NOT the same two-slot
+        (tilt, azimuth) pattern used by build_A1_absolute_angle. It uses
+        four distinct fields:
+            param1 = azimuth velocity, 1 LSB = 0.1°/s (0 = gimbal's own default speed)
+            param2 = azimuth angle delta, 1 LSB = 360/65536°
+            param3 = tilt velocity, 1 LSB = 0.1°/s (0 = gimbal's own default speed)
+            param4 = tilt angle delta, 1 LSB = 360/65536°
+        Previously this only set param1/param2 (copying the absolute-angle
+        convention), which left param4 — where the tilt delta actually
+        lives in this mode — permanently at 0, so tilt never moved, and
+        put the tilt angle's raw word into param1 (read by the gimbal as
+        azimuth *speed*, wrong field and wrong units), corrupting azimuth
+        rate. Speeds default to 0 (system default speed) unless given.
         """
         return self.build_A1(
             servo_mode=self.SERVO_MANUAL_RELATIVE_ANGLE,
-            param1=self._angle_to_word(tilt_delta_deg),
+            param1=self._speed_to_word(azimuth_speed_deg_s),
             param2=self._angle_to_word(azimuth_delta_deg),
+            param3=self._speed_to_word(tilt_speed_deg_s),
+            param4=self._angle_to_word(tilt_delta_deg),
         )
 
     def build_A1_motor(self, on: bool) -> bytes:
@@ -283,4 +308,3 @@ class GimbalFrameBuilder:
     def build_C1_laser_stop(self) -> bytes:
         """Stop laser rangefinding."""
         return self.build_C1(lrf_command=self.LRF_STOP_RANGING)
-

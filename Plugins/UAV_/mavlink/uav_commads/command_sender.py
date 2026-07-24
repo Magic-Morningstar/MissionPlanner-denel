@@ -179,8 +179,11 @@ class UAVCommandSender(MavlinkWorker):
         if self.Manual:
             self.enqueue(self.Manual.initiate_Guided_Mode)
 
-    def payloadZoom(self):
+    def payloadZoomIn(self):
         self.enqueue(self.Payload.initiate_ZoomIn_Raw)
+
+    def payloadZoomOut(self):
+        self.enqueue(self.Payload.initiate_ZoomOut_Raw)
 
     def payloadFocus(self):
         self.enqueue(
@@ -378,7 +381,7 @@ def _handle_zoomin(sender, cmd):
     sender.state.GIMBAL_ZOOM +=1
     if sender.state.GIMBAL_ZOOM >= 100:
            sender.state.GIMBAL_ZOOM = 100
-    sender.payloadZoom() 
+    sender.payloadZoomIn()
 
 
 @register_handler(ZoomOutCommand)
@@ -387,7 +390,7 @@ def _handle_zoomout(sender, cmd):
     sender.state.GIMBAL_ZOOM -=1
     if sender.state.GIMBAL_ZOOM <= 0:
            sender.state.GIMBAL_ZOOM = 0 
-    sender.payloadZoom()
+    sender.payloadZoomOut()
 
 @register_handler(WideInCommand)
 def _handle_wideout(sender, cmd):
