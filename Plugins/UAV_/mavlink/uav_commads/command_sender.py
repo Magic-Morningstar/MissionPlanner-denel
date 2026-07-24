@@ -14,7 +14,7 @@ from mavlink.uav_commads.commands.payload_commands import Payload
 from mavlink.uav_commads.commands.payload_services import GimbalFrameBuilder
 from commands.intents import *
 from commands.registry import register_handler, dispatch
-
+import time
 logger = logging.getLogger(__name__)
 
 
@@ -185,6 +185,7 @@ class UAVCommandSender(MavlinkWorker):
     def payloadZoomOut(self):
         self.enqueue(self.Payload.initiate_ZoomOut_Raw)
 
+
     def payloadFocus(self):
         self.enqueue(
             self.Payload.initiate_SetFocus,
@@ -193,6 +194,8 @@ class UAVCommandSender(MavlinkWorker):
         )
 
     def payloadautofocus(self):
+        self.enqueue(self.Payload.initiate_SetFocus)
+        time.sleep(0.5)
         self.enqueue(self.Payload.initiate_SetFocus)
 
     def set_auto(self):
@@ -374,7 +377,7 @@ def _handle_speedup(sender, cmd):
 def _handle_speeddown(sender, cmd):
     logger.info("SpeedDownCommand received")
 
-
+'''
 @register_handler(ZoomInCommand)
 def _handle_zoomin(sender, cmd):
     logger.info("CameraZoomInCommand received")
@@ -382,7 +385,6 @@ def _handle_zoomin(sender, cmd):
     if sender.state.GIMBAL_ZOOM >= 100:
            sender.state.GIMBAL_ZOOM = 100
     sender.payloadZoomIn()
-
 
 @register_handler(ZoomOutCommand)
 def _handle_zoomout(sender, cmd):
@@ -406,4 +408,4 @@ def _handle_widein(sender, cmd):
     sender.state.GIMBAL_FOCUS -=1
     if sender.state.GIMBAL_FOCUS <= 0:
            sender.state.GIMBAL_FOCUS = 0 
-    sender.payloadFocus()
+    sender.payloadFocus()'''

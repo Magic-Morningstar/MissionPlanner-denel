@@ -295,12 +295,12 @@ class Payload(BaseCommand):
     # same time — same shared-control-conflict concern as DO_MOUNT_* vs raw
     # angle commands.
 
-    def initiate_ZoomIn_Raw(self, speed=4, expect_response=False):
+    def initiate_ZoomIn_Raw(self, speed=2, expect_response=False):
         """Start zooming in (telephoto). speed: 1 (slowest) - 7 (fastest)."""
         frame = self._gimbal_frames.build_C1_zoom_in(speed)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
-    def initiate_ZoomOut_Raw(self, speed=4, expect_response=False):
+    def initiate_ZoomOut_Raw(self, speed=2, expect_response=False):
         """Start zooming out (wide). speed: 1 (slowest) - 7 (fastest)."""
         frame = self._gimbal_frames.build_C1_zoom_out(speed)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
