@@ -2,6 +2,7 @@
 
 from pymavlink import mavutil
 from mavlink.uav_commads.commands.base_command import BaseCommand
+from mavlink.uav_commads.commands.payload_services import GimbalFrameBuilder
 import logging
 logger = logging.getLogger(__name__)
 

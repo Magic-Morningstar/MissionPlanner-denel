@@ -180,7 +180,7 @@ class UAVCommandSender(MavlinkWorker):
             self.enqueue(self.Manual.initiate_Guided_Mode)
 
     def payloadZoom(self):
-        self.enqueue(self.Payload.initiate_SetZoom, self.state.GIMBAL_ZOOM)
+        self.enqueue(self.Payload.initiate_ZoomIn_Raw)
 
     def payloadFocus(self):
         self.enqueue(
