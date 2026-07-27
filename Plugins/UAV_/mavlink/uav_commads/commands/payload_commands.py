@@ -455,7 +455,11 @@ class Payload(BaseCommand):
         if reply is False:
             return {'error': 'send failed (no payload connection or frame too long)'}
 
-        parsed = self._gimbal_frames.parse_reply_frame(reply)
+        # parse_status_from_buffer scans for a valid frame anywhere in
+        # the captured bytes, rather than assuming reply[0:3] is the
+        # header — see its docstring for why that assumption fails
+        # against a real SERIAL_CONTROL capture.
+        parsed = self._gimbal_frames.parse_status_from_buffer(reply)
         if parsed.get('cmd_id') != 0x40:
             parsed.setdefault('error', f"reply was not a T1+F1+B1+D1 status frame (cmd_id={parsed.get('cmd_id')})")
         return parsed
@@ -479,7 +483,7 @@ class Payload(BaseCommand):
         if reply is False:
             return {'error': 'send failed (no payload connection or frame too long)'}
 
-        parsed = self._gimbal_frames.parse_reply_frame(reply)
+        parsed = self._gimbal_frames.parse_status_from_buffer(reply)
         if parsed.get('cmd_id') != 0x40:
             parsed.setdefault('error', f"reply was not a T1+F1+B1+D1 status frame (cmd_id={parsed.get('cmd_id')})")
         return parsed

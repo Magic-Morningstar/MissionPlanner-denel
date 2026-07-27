@@ -594,6 +594,79 @@ class GimbalFrameBuilder:
     # packet. D1 (ICD 3.9) carries the laser rangefinder result.
 
     @staticmethod
+    def find_frames(raw: bytes) -> list:
+        """
+        Scan an arbitrary byte buffer for complete, checksum-valid
+        Viewlink frames, WITHOUT assuming byte 0 is a frame boundary.
+
+        Necessary because MAVLink SERIAL_CONTROL's "respond" flag has no
+        concept of the Viewlink application-layer framing — it just
+        captures whatever raw bytes happened to be sitting on the
+        gimbal's UART during a short window after we wrote. If the
+        gimbal is independently streaming its own status (heartbeat, or
+        continuous-ranging updates) on a timer not synchronized with our
+        poll, the captured window can start mid-frame, land on the tail
+        of one frame plus the start of the next, or contain several
+        frames back to back — any of which makes raw[0:3] != HEADER even
+        though a valid frame IS present somewhere in the buffer. This is
+        almost certainly why parse_reply_frame(reply) alone reports "bad
+        header" against a real capture, even when the gimbal did reply.
+
+        Returns a list of raw frame byte-strings (header through
+        checksum, inclusive), in the order found. Garbage before the
+        first header, a truncated trailing frame, or a header-like byte
+        sequence that fails its checksum (a false-positive match) are
+        all silently skipped rather than aborting the scan.
+        """
+        frames = []
+        i = 0
+        while i <= len(raw) - 5:  # minimum: header(3) + byte3(1) + checksum(1)
+            if raw[i:i + 3] != GimbalFrameBuilder.HEADER:
+                i += 1
+                continue
+            if i + 4 > len(raw):
+                break  # not enough bytes left even for byte3
+            n = raw[i + 3] & 0x3F
+            frame_len = 3 + n
+            if i + frame_len > len(raw):
+                i += 1  # incomplete frame here — keep scanning rather than giving up
+                continue
+            candidate = raw[i:i + frame_len]
+            body = candidate[3:3 + n - 1]
+            cs = 0
+            for b in body:
+                cs ^= b
+            if cs == candidate[3 + n - 1]:
+                frames.append(bytes(candidate))
+                i += frame_len  # jump past this valid frame
+            else:
+                i += 1  # checksum mismatch — false-positive header match, keep scanning
+
+        return frames
+
+    @staticmethod
+    def parse_status_from_buffer(raw: bytes) -> dict:
+        """
+        Find and parse a T1+F1+B1+D1 status frame (cmd_id 0x40) anywhere
+        within a raw captured reply buffer, using find_frames() rather
+        than assuming the buffer starts exactly on a frame boundary —
+        see find_frames()'s docstring for why that assumption doesn't
+        hold against a real SERIAL_CONTROL capture. This is the entry
+        point get_laser_range()/poll_status() actually use now.
+        """
+        if not raw:
+            return {'error': 'empty reply — nothing was captured on the gimbal UART in the response window',
+                    'checksum_ok': False, 'cmd_id': None}
+
+        frames = GimbalFrameBuilder.find_frames(raw)
+        if not frames:
+            return {'error': f'no valid Viewlink frame found in {len(raw)}-byte reply buffer: {raw.hex(" ")}',
+                    'checksum_ok': False, 'cmd_id': None}
+
+        status_frame = next((f for f in frames if f[4] == 0x40), frames[-1])
+        return GimbalFrameBuilder.parse_reply_frame(status_frame)
+
+    @staticmethod
     def parse_reply_frame(raw: bytes) -> dict:
         """
         Parse a raw reply frame captured from the payload (e.g. via
