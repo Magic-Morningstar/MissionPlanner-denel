@@ -25,10 +25,10 @@ EDGE_TABLE = [
     ("speeddown",   SpeedDownCommand,   None),
     ("zoomin",   ZoomInCommand,         ZoomInFallCommand),
     ("zoomout",   ZoomOutCommand,       ZoomOutFallCommand),
-    ("widein",   WideInCommand,         None),
-    ("wideout",   WideOutCommand,       None),
-    ("manual",    ManualModeCommand,    None),
-    ("auto",      AutoModeCommand,      None),
+    ("widein",   WideInCommand,         WideInFallCommand),
+    ("wideout",   WideOutCommand,       WideOutFallCommand),
+    ("manual",    LaserStartCommand,    LaserStopCommand),
+    ("auto",      ContiousLaserStartCommand,      ContiousLaserStopCommand),
     ("emergency", EmergencyCommand,     None),
 ]
 

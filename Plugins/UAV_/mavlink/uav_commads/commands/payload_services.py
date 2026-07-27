@@ -33,6 +33,10 @@ class GimbalFrameBuilder:
     FRAME_ID_A1       = 0x1A  # A1 alone (9 bytes of data)
     FRAME_ID_C1       = 0x1C  # C1 alone
     FRAME_ID_E1       = 0x1E  # E1 alone
+    FRAME_ID_C2       = 0x2C  # C2 alone (3 bytes of data) — infrequently-used optical control
+    FRAME_ID_A2       = 0x2A  # A2 alone (2 bytes) — infrequently-used servo control
+    FRAME_ID_E2       = 0x2E  # E2 alone (5 bytes) — infrequently-used tracking command
+    FRAME_ID_A2_C2_E2 = 0x31  # combined A2+C2+E2
     FRAME_ID_A1_C1_E1 = 0x30  # combined A1+C1+E1
 
     def __init__(self):
@@ -51,9 +55,20 @@ class GimbalFrameBuilder:
         Signed 16-bit word for the velocity fields used in Relative Angle
         Mode (0x09), per ICD 3.3.1.4: 1 LSB = 0.1 deg/s. NOTE: this is a
         different scale than Manual Speed Mode's (0x01) 0.01 deg/s fields
-        (ICD 3.3.1.2) — don't reuse this for that mode.
+        (ICD 3.3.1.2) — don't reuse this for that mode, use
+        _manual_speed_to_word instead.
         """
         return int(round(speed_deg_s * 10.0)) & 0xFFFF
+
+    @staticmethod
+    def _manual_speed_to_word(speed_deg_s):
+        """
+        Signed 16-bit word for Manual Speed Mode's (0x01) velocity fields,
+        per ICD 3.3.1.2: 1 LSB = 0.01 deg/s — ten times finer resolution
+        than Relative Angle Mode's velocity fields. Don't mix these up;
+        use _speed_to_word for 0x09 instead.
+        """
+        return int(round(speed_deg_s * 100.0)) & 0xFFFF
 
     @staticmethod
     def _word_to_bytes(word):
@@ -98,27 +113,31 @@ class GimbalFrameBuilder:
 
     def build_A1_absolute_angle(self, azimuth_deg, tilt_deg) -> bytes:
         """
-        A1 frame in Absolute Angle Mode (0x0B) — ICD 3.3.1.5. Points the
-        gimbal to a fixed azimuth/tilt relative to home position (home = 0).
-        param3/param4 are meaningless in this mode, left as 0.
+        Absolute Angle Mode (0x0B) — ICD 3.3.1.5, sent via the combined
+        A1+C1+E1 frame (matches every worked example in ICD section 4.1,
+        including "Angle control" — verified byte-for-byte against it).
+        Points the gimbal to a fixed azimuth/tilt relative to home
+        position (home = 0). param3/param4 are meaningless in this mode,
+        left as 0.
 
         NOTE: confirmed against real hardware that param1 carries tilt and
         param2 carries azimuth — the reverse of how the ICD text labels
         "Parameter 1 / Parameter 2" — so this maps accordingly rather than
         following the doc's labeling literally.
         """
-        return self.build_A1(
-            servo_mode=self.SERVO_MANUAL_ABSOLUTE_ANGLE,
-            param1=self._angle_to_word(tilt_deg),
-            param2=self._angle_to_word(azimuth_deg),
-            param3=0,
-            param4=0,
+        return self.build_combined_A1_C1_E1(
+            a1_servo_mode=self.SERVO_MANUAL_ABSOLUTE_ANGLE,
+            a1_param1=self._angle_to_word(tilt_deg),
+            a1_param2=self._angle_to_word(azimuth_deg),
+            a1_param3=0,
+            a1_param4=0,
         )
 
     def build_A1_relative_angle(self, azimuth_delta_deg, tilt_delta_deg,
                                  azimuth_speed_deg_s=0, tilt_speed_deg_s=0) -> bytes:
         """
-        A1 frame in Manual Relative Angle Mode (0x09) — ICD 3.3.1.4.
+        Manual Relative Angle Mode (0x09) — ICD 3.3.1.4, sent via the
+        combined A1+C1+E1 frame (see build_A1_absolute_angle's note on why).
 
         IMPORTANT: this mode's parameter layout is NOT the same two-slot
         (tilt, azimuth) pattern used by build_A1_absolute_angle. It uses
@@ -127,32 +146,72 @@ class GimbalFrameBuilder:
             param2 = azimuth angle delta, 1 LSB = 360/65536°
             param3 = tilt velocity, 1 LSB = 0.1°/s (0 = gimbal's own default speed)
             param4 = tilt angle delta, 1 LSB = 360/65536°
-        Previously this only set param1/param2 (copying the absolute-angle
-        convention), which left param4 — where the tilt delta actually
-        lives in this mode — permanently at 0, so tilt never moved, and
-        put the tilt angle's raw word into param1 (read by the gimbal as
-        azimuth *speed*, wrong field and wrong units), corrupting azimuth
-        rate. Speeds default to 0 (system default speed) unless given.
+        Speeds default to 0 (system default speed) unless given.
         """
-        return self.build_A1(
-            servo_mode=self.SERVO_MANUAL_RELATIVE_ANGLE,
-            param1=self._speed_to_word(azimuth_speed_deg_s),
-            param2=self._angle_to_word(azimuth_delta_deg),
-            param3=self._speed_to_word(tilt_speed_deg_s),
-            param4=self._angle_to_word(tilt_delta_deg),
+        return self.build_combined_A1_C1_E1(
+            a1_servo_mode=self.SERVO_MANUAL_RELATIVE_ANGLE,
+            a1_param1=self._speed_to_word(azimuth_speed_deg_s),
+            a1_param2=self._angle_to_word(azimuth_delta_deg),
+            a1_param3=self._speed_to_word(tilt_speed_deg_s),
+            a1_param4=self._angle_to_word(tilt_delta_deg),
+        )
+
+    def build_A1_manual_speed(self, azimuth_vel_deg_s=0.0, tilt_vel_deg_s=0.0) -> bytes:
+        """
+        Manual Speed Mode (0x01) — ICD 3.3.1.2. Pure velocity control: no
+        angle/position field at all. Send this ONCE when the desired rate
+        changes and the gimbal keeps moving at that rate autonomously
+        until a new speed (or mode change) arrives — this is the
+        protocol's purpose-built fit for continuous joystick control,
+        as opposed to repeatedly streaming small relative-angle deltas
+        (build_A1_relative_angle) to fake continuous motion.
+
+        NOTE: the scale here is 1 LSB = 0.01 deg/s — TEN TIMES finer than
+        Relative Angle Mode's velocity fields (1 LSB = 0.1 deg/s, ICD
+        3.3.1.4). Don't reuse _speed_to_word for this mode; it uses
+        _manual_speed_to_word instead.
+
+        param1 = azimuth velocity, param2 = tilt velocity, per ICD's
+        literal labeling — this mode's doc example wasn't diagnostic for
+        a possible swap the way absolute/relative angle mode's was, so
+        this follows the ICD text directly. Verify direction on hardware
+        before relying on it.
+        """
+        return self.build_combined_A1_C1_E1(
+            a1_servo_mode=self.SERVO_MANUAL_SPEED,
+            a1_param1=self._manual_speed_to_word(azimuth_vel_deg_s),
+            a1_param2=self._manual_speed_to_word(tilt_vel_deg_s),
         )
 
     def build_A1_motor(self, on: bool) -> bytes:
-        """A1 frame to turn the gimbal servo motor on/off."""
-        return self.build_A1(servo_mode=self.SERVO_MOTOR_ON_OFF, param1=1 if on else 0)
+        """
+        Turn the gimbal servo motor on/off, via the combined A1+C1+E1
+        frame. Verified byte-for-byte against the ICD's own "Motor ON"
+        example: param1 = 0x0100 for ON, 0x0001 for OFF (ICD 3.3.1.1).
+        """
+        return self.build_combined_A1_C1_E1(
+            a1_servo_mode=self.SERVO_MOTOR_ON_OFF,
+            a1_param1=0x0100 if on else 0x0001,
+        )
 
     def build_A1_home(self) -> bytes:
-        """A1 frame to drive the gimbal back to its home position."""
-        return self.build_A1(servo_mode=self.SERVO_HOME_POSITION)
+        """
+        Drive the gimbal back to its home position ("Recenter" in the
+        ICD's examples), via the combined A1+C1+E1 frame.
+        """
+        return self.build_combined_A1_C1_E1(a1_servo_mode=self.SERVO_HOME_POSITION)
 
     def build_A1_tracking(self) -> bytes:
-        """A1 frame to switch the gimbal into tracking mode."""
-        return self.build_A1(servo_mode=self.SERVO_TRACKING_MODE)
+        """Switch the gimbal into tracking mode, via the combined A1+C1+E1 frame."""
+        return self.build_combined_A1_C1_E1(a1_servo_mode=self.SERVO_TRACKING_MODE)
+
+    def build_A1_enable_follow_yaw(self) -> bytes:
+        """Enable follow-yaw, via the combined A1+C1+E1 frame (ICD example 4.1)."""
+        return self.build_combined_A1_C1_E1(a1_servo_mode=self.SERVO_FOLLOW_YAW)
+
+    def build_A1_disable_follow_yaw(self) -> bytes:
+        """Disable follow-yaw, via the combined A1+C1+E1 frame (ICD example 4.1)."""
+        return self.build_combined_A1_C1_E1(a1_servo_mode=self.SERVO_FOLLOW_YAW_DISABLE)
 
     # ── C1: optical control (zoom / focus / video source / photo / record / LRF) ──
     # ICD 3.7 "C1 Optical Control, Commonly Used, 2 Bytes". A single 16-bit,
@@ -223,12 +282,21 @@ class GimbalFrameBuilder:
 
     def build_C1(self, sensor=0, op_param=0, op_command=0, lrf_command=0) -> bytes:
         """
-        Build a standalone C1 optical-control frame (frame ID 0x1C).
+        Build a STANDALONE C1 optical-control frame (frame ID 0x1C).
         sensor: 3-bit video source select (VIDEO_* constants)
         op_param: 3-bit generic parameter for op_command — for zoom/focus
                   commands this is speed, 0x01 (slowest) to 0x07 (fastest)
         op_command: 7-bit action (OP_* constants)
         lrf_command: 3-bit laser rangefinder action (LRF_* constants)
+
+        NOTE: every worked example in the ICD's own section 4 (zoom,
+        focus, laser-adjacent, motor, angle control — all of them) sends
+        C1 wrapped inside the COMBINED A1+C1+E1 frame (cmd_id 0x30), never
+        as this standalone form. Section 2.3(c) also only documents a
+        status reply being sent in response to a heartbeat or an
+        "A1+C1+E1+(S1)" packet — not a lone C1. Prefer
+        build_combined_A1_C1_E1() (used by all the *_C1_* convenience
+        methods below) unless you have a specific reason to send C1 alone.
         """
         word = (
             ((lrf_command & 0x07) << 13)
@@ -239,72 +307,340 @@ class GimbalFrameBuilder:
         data = self._word_to_bytes(word)
         return self._build(self.FRAME_ID_C1, data)
 
-    # ── C1 convenience wrappers ──────────────────────────────────────────
+    def build_combined_A1_C1_E1(self, c1_sensor=0, c1_op_param=0, c1_op_command=0,
+                                 c1_lrf_command=0, a1_servo_mode=None,
+                                 a1_param1=0, a1_param2=0, a1_param3=0, a1_param4=0,
+                                 e1_bytes: bytes = b'\x00\x00\x00') -> bytes:
+        """
+        Build the COMBINED A1+C1+E1 frame (cmd_id 0x30) — the format every
+        worked example in ICD section 4 actually uses, including for pure
+        C1-only actions like zoom/focus/photo/laser. In those examples A1
+        is set to SERVO_NO_CHANGE (0x0F, a genuine no-op — "do not change
+        the servo state, the parameter is meaningless") and E1 is all
+        zero, so C1 rides along without disturbing whatever the gimbal is
+        currently doing angle-wise. Defaults here match that pattern:
+        a1_servo_mode defaults to SERVO_NO_CHANGE if not given.
+        """
+        if a1_servo_mode is None:
+            a1_servo_mode = self.SERVO_NO_CHANGE
+        a1_byte1 = a1_servo_mode & 0x0F
+        a1_data = bytes([a1_byte1])
+        for p in (a1_param1, a1_param2, a1_param3, a1_param4):
+            a1_data += self._word_to_bytes(p & 0xFFFF)
+
+        c1_word = (
+            ((c1_lrf_command & 0x07) << 13)
+            | ((c1_op_command & 0x7F) << 6)
+            | ((c1_op_param & 0x07) << 3)
+            | (c1_sensor & 0x07)
+        )
+        c1_data = self._word_to_bytes(c1_word)
+
+        if len(e1_bytes) != 3:
+            raise ValueError(f"e1_bytes must be exactly 3 bytes, got {len(e1_bytes)}")
+
+        data = a1_data + c1_data + e1_bytes  # 9 + 2 + 3 = 14 bytes
+        return self._build(self.FRAME_ID_A1_C1_E1, data)
+
+    # ── C1 convenience wrappers (sent via the combined A1+C1+E1 frame) ─────
 
     def build_C1_switch_video_source(self, source: int) -> bytes:
         """Switch active video source (EO / IR thermal / PIP / fusion) — VIDEO_* constants."""
-        return self.build_C1(sensor=source)
+        return self.build_combined_A1_C1_E1(c1_sensor=source)
 
     def build_C1_zoom_in(self, speed=4) -> bytes:
         """Start zooming in (telephoto) at the given speed, 1 (slowest) - 7 (fastest)."""
-        return self.build_C1(op_param=speed, op_command=self.OP_ZOOM_IN)
+        return self.build_combined_A1_C1_E1(c1_op_param=speed, c1_op_command=self.OP_ZOOM_IN)
 
     def build_C1_zoom_out(self, speed=4) -> bytes:
         """Start zooming out (wide) at the given speed, 1 (slowest) - 7 (fastest)."""
-        return self.build_C1(op_param=speed, op_command=self.OP_ZOOM_OUT)
+        return self.build_combined_A1_C1_E1(c1_op_param=speed, c1_op_command=self.OP_ZOOM_OUT)
 
     def build_C1_zoom_stop(self) -> bytes:
-        """Stop an in-progress zoom move (shared with focus-stop, per ICD 0x01)."""
-        return self.build_C1(op_command=self.OP_STOP_FOCUS_ZOOM)
+        """
+        Stop an in-progress zoom move (shared with focus-stop).
+
+        NOTE: table 3.7 names 0x01 ("Stop focus, stop zoom") as the
+        explicit stop enumeration, but the ICD's own worked "Stop zoom"
+        example (section 4.2) actually sends 0x00 ("No action") instead.
+        This uses the table's documented 0x01 by default since it's the
+        semantically explicit value; if it doesn't actually halt zoom on
+        your hardware, try build_C1_zoom_stop(use_no_action=True) to match
+        the vendor's own example instead.
+        """
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_STOP_FOCUS_ZOOM)
 
     def build_C1_focus_plus(self, speed=4) -> bytes:
         """Start focusing far at the given speed, 1 (slowest) - 7 (fastest)."""
-        return self.build_C1(op_param=speed, op_command=self.OP_FOCUS_PLUS)
+        return self.build_combined_A1_C1_E1(c1_op_param=speed, c1_op_command=self.OP_FOCUS_PLUS)
 
     def build_C1_focus_minus(self, speed=4) -> bytes:
         """Start focusing near at the given speed, 1 (slowest) - 7 (fastest)."""
-        return self.build_C1(op_param=speed, op_command=self.OP_FOCUS_MINUS)
+        return self.build_combined_A1_C1_E1(c1_op_param=speed, c1_op_command=self.OP_FOCUS_MINUS)
 
     def build_C1_focus_stop(self) -> bytes:
-        """Stop an in-progress focus move (shared with zoom-stop, per ICD 0x01)."""
-        return self.build_C1(op_command=self.OP_STOP_FOCUS_ZOOM)
+        """Stop an in-progress focus move. See build_C1_zoom_stop's note on 0x01 vs 0x00."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_STOP_FOCUS_ZOOM)
+
+    def build_C1_stop_no_action_variant(self) -> bytes:
+        """
+        Alternate stop for zoom/focus using op_command=0x00 ("No action"),
+        matching the ICD's own worked "Stop zoom" example byte-for-byte
+        instead of the table's documented 0x01. Try this if
+        build_C1_zoom_stop()/build_C1_focus_stop() don't actually halt
+        motion on your hardware.
+        """
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_NO_ACTION)
 
     def build_C1_auto_focus(self) -> bytes:
         """Switch the camera to autofocus mode."""
-        return self.build_C1(op_command=self.OP_AUTO_FOCUS)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_AUTO_FOCUS)
 
     def build_C1_manual_focus(self) -> bytes:
         """Switch the camera to manual focus mode."""
-        return self.build_C1(op_command=self.OP_MANUAL_FOCUS)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_MANUAL_FOCUS)
 
     def build_C1_take_picture(self) -> bytes:
         """Trigger a single photo capture."""
-        return self.build_C1(op_command=self.OP_TAKE_PICTURE)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_TAKE_PICTURE)
 
     def build_C1_start_record(self) -> bytes:
         """Start video recording (native protocol, not MAVLink camera command)."""
-        return self.build_C1(op_command=self.OP_START_RECORD)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_START_RECORD)
 
     def build_C1_stop_record(self) -> bytes:
         """Stop video recording (native protocol, not MAVLink camera command)."""
-        return self.build_C1(op_command=self.OP_STOP_RECORD)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_STOP_RECORD)
 
     def build_C1_polarity_white_hot(self) -> bytes:
         """Set IR palette polarity to white-hot."""
-        return self.build_C1(op_command=self.OP_POLARITY_WHITE_HOT)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_POLARITY_WHITE_HOT)
 
     def build_C1_polarity_black_hot(self) -> bytes:
         """Set IR palette polarity to black-hot."""
-        return self.build_C1(op_command=self.OP_POLARITY_BLACK_HOT)
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_POLARITY_BLACK_HOT)
 
     def build_C1_laser_single_range(self) -> bytes:
         """Trigger a single laser rangefinder measurement."""
-        return self.build_C1(lrf_command=self.LRF_SINGLE_RANGING)
+        return self.build_combined_A1_C1_E1(c1_lrf_command=self.LRF_SINGLE_RANGING)
 
     def build_C1_laser_continuous_start(self) -> bytes:
         """Start continuous laser rangefinding."""
-        return self.build_C1(lrf_command=self.LRF_CONTINUOUS_START)
+        return self.build_combined_A1_C1_E1(c1_lrf_command=self.LRF_CONTINUOUS_START)
 
     def build_C1_laser_stop(self) -> bytes:
         """Stop laser rangefinding."""
-        return self.build_C1(lrf_command=self.LRF_STOP_RANGING)
+        return self.build_combined_A1_C1_E1(c1_lrf_command=self.LRF_STOP_RANGING)
+
+    # ── FOV+/- (ICD's own naming — same op codes as zoom_in/zoom_out) ──────
+    # OP_ZOOM_OUT (0x08) is literally "FOV+" in the ICD; OP_ZOOM_IN (0x09)
+    # is "FOV-". These are thin aliases so both naming conventions are
+    # discoverable — they produce identical frames to build_C1_zoom_out/in.
+
+    def build_C1_fov_plus(self, speed=4) -> bytes:
+        """FOV+ (ICD naming) — zoom OUT (wide). Same as build_C1_zoom_out."""
+        return self.build_C1_zoom_out(speed)
+
+    def build_C1_fov_minus(self, speed=4) -> bytes:
+        """FOV- (ICD naming) — zoom IN (telephoto). Same as build_C1_zoom_in."""
+        return self.build_C1_zoom_in(speed)
+
+    # ── Picture / record mode switching, SD card ────────────────────────────
+
+    def build_C1_picture_mode(self) -> bytes:
+        """Switch the camera to picture (still-photo) mode."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_PICTURE_MODE)
+
+    def build_C1_record_mode(self) -> bytes:
+        """Switch the camera to video-record mode."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_RECORD_MODE)
+
+    def build_C1_pic_record_switch(self) -> bytes:
+        """Toggle between picture and record mode."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_PIC_RECORD_SWITCH)
+
+    def build_C1_format_sd(self) -> bytes:
+        """DESTRUCTIVE — formats the SD card, erasing all stored photos/video."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_FORMAT_SD)
+
+    def build_C1_query_sd_status(self) -> bytes:
+        """
+        Query SD card status (T series). Send with expect_response=True
+        to get a reply — NOTE: the reply's byte layout for this specific
+        query isn't in the ICD pages available here (likely the separate
+        60-byte "N" status packet, cmd_id 0xB2, not yet documented/parsed
+        in this codebase), so this can trigger the query but there's no
+        parser yet to decode the actual status value from the reply.
+        """
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_QUERY_SD_STATUS)
+
+    def build_C1_query_sd_total(self) -> bytes:
+        """Query SD card total capacity (T series). See build_C1_query_sd_status's note on reply parsing."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_QUERY_SD_TOTAL)
+
+    def build_C1_query_sd_free(self) -> bytes:
+        """Query SD card remaining free capacity (T series). See build_C1_query_sd_status's note on reply parsing."""
+        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_QUERY_SD_FREE)
+
+    # ── Combined A2+C2+E2 frame (cmd_id 0x31) — absolute zoom, etc. ─────────
+    # Verified byte-for-byte against the ICD's own "Directly zoom to 20x
+    # times" example (section 4.2).
+
+    def build_combined_A2_C2_E2(self, c2_command1=0, c2_param_word=0,
+                                 a2_bytes: bytes = b'\x00\x00',
+                                 e2_bytes: bytes = b'\x00\x00\x00\x00\x00') -> bytes:
+        """
+        Build the combined A2+C2+E2 frame (cmd_id 0x31). a2_bytes/e2_bytes
+        default to all-zero ("no action") — pass explicit bytes if you
+        need A2's servo-action/adjustment fields (ICD 3.4) or E2's
+        extended tracking display commands (ICD 3.12) alongside a C2
+        action in the same frame.
+        """
+        if len(a2_bytes) != 2:
+            raise ValueError(f"a2_bytes must be exactly 2 bytes, got {len(a2_bytes)}")
+        if len(e2_bytes) != 5:
+            raise ValueError(f"e2_bytes must be exactly 5 bytes, got {len(e2_bytes)}")
+
+        c2_data = bytes([c2_command1 & 0xFF]) + self._word_to_bytes(c2_param_word & 0xFFFF)
+        data = a2_bytes + c2_data + e2_bytes  # 2 + 3 + 5 = 10 bytes
+        return self._build(self.FRAME_ID_A2_C2_E2, data)
+
+    def build_C2_set_eo_zoom(self, zoom_times: float) -> bytes:
+        """
+        Directly set the EO camera's absolute zoom level (ICD 3.8.1.2,
+        C2 command 0x53) — jumps straight to a zoom multiplier instead of
+        ramping via the FOV+/- rate commands. zoom_times: e.g. 20.0 for
+        20x. Verified byte-for-byte against the ICD's own "Directly zoom
+        to 20x times" example.
+        """
+        zoom_word = int(round(zoom_times * 10.0)) & 0xFFFF  # 1 LSB = 0.1x, per ICD
+        return self.build_combined_A2_C2_E2(
+            c2_command1=self.C2_CMD_SET_EO_ZOOM,
+            c2_param_word=zoom_word,
+        )
+
+    # ── C2: optical control, infrequently used (laser power/zoom/sync) ─────
+    # ICD 3.8 "C2 Optical Control Infrequently Used, 3 Bytes": byte1 selects
+    # WHICH sub-function this packet performs; bytes2-3 are a parameter
+    # whose bit layout depends on byte1. For the laser specifically, byte1
+    # = 0x74 ("Laser control command"), ICD 3.8.1.3.
+
+    C2_CMD_LASER_CONTROL = 0x74  # byte1 value selecting laser control
+    C2_CMD_POWER_CONTROL = 0x75  # byte1 value selecting the alternate hard-power path
+    C2_CMD_SET_EO_ZOOM   = 0x53  # byte1 value selecting "set EO zoom to parameter value" (ICD 3.8.1.2)
+
+    # Laser control sub-command (bits 0-4 of the 2-byte parameter, when byte1=0x74)
+    LASER_CTRL_NO_ACTION            = 0x00
+    LASER_CTRL_ON                   = 0x01
+    LASER_CTRL_OFF                  = 0x02
+    LASER_CTRL_AUTOCHECK            = 0x03  # not supported yet, per ICD
+    LASER_CTRL_ZOOM_OUT             = 0x04  # the laser's OWN zoom (beam), not EO/IR zoom
+    LASER_CTRL_ZOOM_IN              = 0x05
+    LASER_CTRL_SYNC_EO_MODE         = 0x06  # laser zoom auto-syncs with EO zoom
+    LASER_CTRL_MANUAL_MODE          = 0x07  # laser zoom under independent manual control
+    LASER_CTRL_ELEVATION_PROT_OFF   = 0x0E  # not supported yet, per ICD
+    LASER_CTRL_ELEVATION_PROT_ON    = 0x0F  # not supported yet, per ICD
+
+    def build_C2(self, command1: int, param_word: int) -> bytes:
+        """
+        Build a standalone C2 (Optical Control Infrequently Used) frame,
+        frame ID 0x2C. `command1` selects the C2 sub-function (ICD 3.8's
+        "Command 1" byte); `param_word` is the 2-byte parameter whose
+        meaning depends on command1 (ICD 3.8.1.x).
+        """
+        data = bytes([command1 & 0xFF]) + self._word_to_bytes(param_word & 0xFFFF)
+        return self._build(self.FRAME_ID_C2, data)
+
+    def build_C2_laser_on(self) -> bytes:
+        """Turn the laser rangefinder module on (ICD 3.8.1.3)."""
+        return self.build_C2(self.C2_CMD_LASER_CONTROL, self.LASER_CTRL_ON)
+
+    def build_C2_laser_off(self) -> bytes:
+        """Turn the laser rangefinder module off (ICD 3.8.1.3)."""
+        return self.build_C2(self.C2_CMD_LASER_CONTROL, self.LASER_CTRL_OFF)
+
+    def build_C2_laser_zoom_out(self) -> bytes:
+        """Laser's own zoom out (beam), separate from EO/IR optical zoom."""
+        return self.build_C2(self.C2_CMD_LASER_CONTROL, self.LASER_CTRL_ZOOM_OUT)
+
+    def build_C2_laser_zoom_in(self) -> bytes:
+        """Laser's own zoom in (beam), separate from EO/IR optical zoom."""
+        return self.build_C2(self.C2_CMD_LASER_CONTROL, self.LASER_CTRL_ZOOM_IN)
+
+    def build_C2_laser_sync_eo_mode(self) -> bytes:
+        """Laser zoom auto-syncs with the EO camera's zoom level."""
+        return self.build_C2(self.C2_CMD_LASER_CONTROL, self.LASER_CTRL_SYNC_EO_MODE)
+
+    def build_C2_laser_manual_mode(self) -> bytes:
+        """Laser zoom under independent manual control (not synced to EO zoom)."""
+        return self.build_C2(self.C2_CMD_LASER_CONTROL, self.LASER_CTRL_MANUAL_MODE)
+
+    def build_C2_laser_power(self, on: bool) -> bytes:
+        """
+        Alternate laser power toggle via the Power Control command (0x75),
+        bits 14-15 specifically for laser power (0=no change, 1=ON,
+        2=OFF), leaving EO1/IR/EO2 power bits at 0 (no change). Some
+        firmware gates the laser on this "hard power" bit separately from
+        the 0x74 logical enable — try this if build_C2_laser_on()/off()
+        doesn't produce the expected behavior.
+        """
+        laser_bits = 0b01 if on else 0b10  # 1=ON, 2=OFF in the 2-bit field
+        param_word = (laser_bits & 0x03) << 14
+        return self.build_C2(self.C2_CMD_POWER_CONTROL, param_word)
+
+    # ── Reply parsing (T1+F1+B1+D1 status frame, cmd_id 0x40) ──────────────
+    # Per ICD 2.3(c), the payload replies with T1+F1+B1+D1 (41 bytes: T1=22,
+    # F1=1, B1=6, D1=12) in response to a heartbeat or an A1+C1+E1(+S1)
+    # packet. D1 (ICD 3.9) carries the laser rangefinder result.
+
+    @staticmethod
+    def parse_reply_frame(raw: bytes) -> dict:
+        """
+        Parse a raw reply frame captured from the payload (e.g. via
+        SERIAL_CONTROL with expect_response=True). Verifies header and
+        checksum; if cmd_id is 0x40 (the combined T1+F1+B1+D1 status
+        frame), also extracts the laser rangefinder fields from D1.
+
+        Returns a dict:
+          cmd_id, checksum_ok            — always present
+          error                          — present if parsing failed early
+          laser_range_m                  — meters (int), or None if the
+                                            reading is invalid/zero
+          laser_range_new                — bool; toggles each time a fresh
+                                            ranging result lands (ICD D1
+                                            byte2 bit0) — compare against
+                                            the previous call's value to
+                                            tell a new reading from a repeat
+        """
+        result = {'checksum_ok': False, 'cmd_id': None}
+        if len(raw) < 5 or raw[0:3] != GimbalFrameBuilder.HEADER:
+            result['error'] = 'bad header'
+            return result
+
+        n = raw[3] & 0x3F
+        if len(raw) < 3 + n:
+            result['error'] = 'frame shorter than declared length'
+            return result
+
+        body = raw[3:3 + n - 1]  # byte3 .. last data byte, checksum excluded
+        checksum = 0
+        for b in body:
+            checksum ^= b
+        result['checksum_ok'] = (checksum == raw[3 + n - 1])
+        result['cmd_id'] = raw[4]
+
+        if raw[4] != 0x40:
+            return result  # not the T1+F1+B1+D1 status frame — nothing more to extract here
+
+        data = raw[5:5 + 41]  # T1(22) + F1(1) + B1(6) + D1(12) = 41 bytes
+        if len(data) < 41:
+            result['error'] = 'T1+F1+B1+D1 data shorter than expected (41 bytes)'
+            return result
+
+        d1 = data[29:41]  # D1 is the final 12 bytes of the combined payload
+        laser_range_new = bool(d1[1] & 0x01)    # D1 byte2, bit0
+        rlf_raw = (d1[4] << 8) | d1[5]           # D1 bytes5-6, 1 LSB = 1 meter, 0 = invalid
+        result['laser_range_new'] = laser_range_new
+        result['laser_range_m'] = rlf_raw if rlf_raw != 0 else None
+
+        return result

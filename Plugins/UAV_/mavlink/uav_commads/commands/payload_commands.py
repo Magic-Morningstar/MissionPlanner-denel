@@ -222,12 +222,19 @@ class Payload(BaseCommand):
 
     # ── Raw Viewpro protocol passthrough (bypasses DO_MOUNT_*) ─────────────
 
-    def _send_raw_gimbal_frame(self, frame: bytes, expect_response=False):
+    def _send_raw_gimbal_frame(self, frame: bytes, expect_response=False, response_timeout=1.0):
         """
         Tunnel a raw Viewpro protocol frame to the gimbal through the FC's
         dedicated serial port, via MAVLink SERIAL_CONTROL. The FC does not
         parse or validate these bytes — it just writes them out the target
         UART, so this bypasses DO_MOUNT_*/camera-command semantics entirely.
+
+        Returns:
+          - True  : sent OK, expect_response=False (fire-and-forget)
+          - False : failed precondition or frame too long
+          - bytes : the raw reply payload, if expect_response=True and a
+                     SERIAL_CONTROL reply arrived within response_timeout
+          - None  : expect_response=True but no reply arrived in time
         """
         if not self._check(self._requires_payload_connection):
             return False
@@ -240,6 +247,21 @@ class Payload(BaseCommand):
         if expect_response:
             flags |= mavutil.mavlink.SERIAL_CONTROL_FLAG_RESPOND
 
+        # Locked: this can now be called from a background polling thread
+        # (see UAVCommandSender.start_laser_polling) concurrently with the
+        # main command-processing thread's own sends on the same
+        # connection — pymavlink connections aren't safe for unsynchronized
+        # concurrent send/recv, and the rest of this codebase already
+        # locks its other MAVLink sends (see _switch_to_fbwb).
+        lock = getattr(self, 'lock', None)
+        if lock:
+            with lock:
+                reply_bytes = self._do_send_and_maybe_recv(frame, flags, expect_response, response_timeout)
+        else:
+            reply_bytes = self._do_send_and_maybe_recv(frame, flags, expect_response, response_timeout)
+        return reply_bytes
+
+    def _do_send_and_maybe_recv(self, frame, flags, expect_response, response_timeout):
         self.command_drone.mav.serial_control_send(
             device=self.VIEWPRO_SERIAL_DEVICE,
             flags=flags,
@@ -249,7 +271,20 @@ class Payload(BaseCommand):
             data=bytes(frame).ljust(70, b'\x00'),
         )
         logger.info(f"Sent raw Viewpro frame ({len(frame)} bytes): {frame.hex(' ')}")
-        return True
+
+        if not expect_response:
+            return True
+
+        reply = self.command_drone.recv_match(
+            type='SERIAL_CONTROL', blocking=True, timeout=response_timeout
+        )
+        if reply is None:
+            logger.warning(f"No SERIAL_CONTROL reply within {response_timeout}s.")
+            return None
+
+        reply_bytes = bytes(reply.data[:reply.count])
+        logger.info(f"Received raw reply ({reply.count} bytes): {reply_bytes.hex(' ')}")
+        return reply_bytes
 
     def initiate_PointAngle_Raw(self, azimuth_deg, tilt_deg, expect_response=False):
         """
@@ -280,6 +315,19 @@ class Payload(BaseCommand):
         frame = self._gimbal_frames.build_A1_motor(on)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
+    def initiate_ManualSpeed_Raw(self, azimuth_vel_deg_s=0.0, tilt_vel_deg_s=0.0, expect_response=False):
+        """
+        Set the gimbal moving at a continuous azimuth/tilt rate (Manual
+        Speed Mode 0x01) — send once when the desired rate changes, the
+        gimbal keeps moving on its own until the next call. Pass (0, 0)
+        to stop. This is the preferred way to drive the gimbal from a
+        joystick — see AnalogInputHandler, which sends this on rate
+        change plus a periodic keepalive, rather than repeatedly
+        streaming small relative-angle deltas.
+        """
+        frame = self._gimbal_frames.build_A1_manual_speed(azimuth_vel_deg_s, tilt_vel_deg_s)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
     def initiate_Home_Raw(self, expect_response=False):
         """Drive the gimbal to its home position, using the native protocol."""
         frame = self._gimbal_frames.build_A1_home()
@@ -295,12 +343,12 @@ class Payload(BaseCommand):
     # same time — same shared-control-conflict concern as DO_MOUNT_* vs raw
     # angle commands.
 
-    def initiate_ZoomIn_Raw(self, speed=2, expect_response=False):
+    def initiate_ZoomIn_Raw(self, speed=4, expect_response=False):
         """Start zooming in (telephoto). speed: 1 (slowest) - 7 (fastest)."""
         frame = self._gimbal_frames.build_C1_zoom_in(speed)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
-    def initiate_ZoomOut_Raw(self, speed=2, expect_response=False):
+    def initiate_ZoomOut_Raw(self, speed=4, expect_response=False):
         """Start zooming out (wide). speed: 1 (slowest) - 7 (fastest)."""
         frame = self._gimbal_frames.build_C1_zoom_out(speed)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
@@ -370,7 +418,7 @@ class Payload(BaseCommand):
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
     def initiate_LaserRangeSingle_Raw(self, expect_response=False):
-        """Trigger a single laser rangefinder measurement."""
+        """Trigger a single laser rangefinder measurement. Use get_laser_range() instead if you want the distance back directly."""
         frame = self._gimbal_frames.build_C1_laser_single_range()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
@@ -382,4 +430,167 @@ class Payload(BaseCommand):
     def initiate_LaserRangeStop_Raw(self, expect_response=False):
         """Stop laser rangefinding."""
         frame = self._gimbal_frames.build_C1_laser_stop()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def get_laser_range(self, response_timeout=1.0):
+        """
+        Trigger a single laser rangefinder measurement AND read the
+        distance back, in one call. This is the piece that was completely
+        missing before — initiate_LaserRangeSingle_Raw() only ever sent
+        the trigger; nothing captured or parsed a reply.
+
+        Returns a dict from GimbalFrameBuilder.parse_reply_frame(), e.g.
+        {'cmd_id': 0x40, 'checksum_ok': True, 'laser_range_m': 142,
+         'laser_range_new': True}. 'laser_range_m' is None if the reading
+        is invalid (raw value 0) or if the payload replied with something
+        other than the T1+F1+B1+D1 status frame. Returns
+        {'error': ...} if nothing came back — see the error string for
+        why (e.g. 'no reply' vs a parse failure).
+        """
+        frame = self._gimbal_frames.build_C1_laser_single_range()
+        reply = self._send_raw_gimbal_frame(frame, expect_response=True, response_timeout=response_timeout)
+
+        if reply is None:
+            return {'error': 'no reply received within timeout'}
+        if reply is False:
+            return {'error': 'send failed (no payload connection or frame too long)'}
+
+        parsed = self._gimbal_frames.parse_reply_frame(reply)
+        if parsed.get('cmd_id') != 0x40:
+            parsed.setdefault('error', f"reply was not a T1+F1+B1+D1 status frame (cmd_id={parsed.get('cmd_id')})")
+        return parsed
+
+    def poll_status(self, response_timeout=1.0):
+        """
+        Send a no-op combined A1+C1+E1 frame (servo=no-change, no C1/E1
+        action) purely to solicit a T1+F1+B1+D1 status reply — unlike
+        get_laser_range(), this does NOT send a new single-ranging
+        trigger, so it's safe to call repeatedly (e.g. from a polling
+        loop) without repeatedly re-triggering or interrupting an
+        already-active continuous ranging session. Returns the same dict
+        shape as get_laser_range() — check 'laser_range_m' for the
+        latest reading a continuous session has produced.
+        """
+        frame = self._gimbal_frames.build_combined_A1_C1_E1()  # all defaults = no-op
+        reply = self._send_raw_gimbal_frame(frame, expect_response=True, response_timeout=response_timeout)
+
+        if reply is None:
+            return {'error': 'no reply received within timeout'}
+        if reply is False:
+            return {'error': 'send failed (no payload connection or frame too long)'}
+
+        parsed = self._gimbal_frames.parse_reply_frame(reply)
+        if parsed.get('cmd_id') != 0x40:
+            parsed.setdefault('error', f"reply was not a T1+F1+B1+D1 status frame (cmd_id={parsed.get('cmd_id')})")
+        return parsed
+
+    # ── C2: laser power / laser-own-zoom / sync mode ────────────────────────
+    # Separate from the C1 ranging trigger above — this controls whether the
+    # laser module itself is powered on at all. If ranging triggers appear
+    # to do nothing, try initiate_LaserPowerOn_Raw() first; some firmware
+    # gates the rangefinder on this explicit enable.
+
+    def initiate_LaserPowerOn_Raw(self, expect_response=False):
+        """Turn the laser rangefinder module on (ICD 3.8.1.3, C2 command 0x74)."""
+        frame = self._gimbal_frames.build_C2_laser_on()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserPowerOff_Raw(self, expect_response=False):
+        """Turn the laser rangefinder module off."""
+        frame = self._gimbal_frames.build_C2_laser_off()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserPowerOn_Alt_Raw(self, expect_response=False):
+        """
+        Alternate laser power-on via the Power Control command (0x75)
+        instead of 0x74. Try this if initiate_LaserPowerOn_Raw() doesn't
+        actually enable the laser on your hardware.
+        """
+        frame = self._gimbal_frames.build_C2_laser_power(True)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserPowerOff_Alt_Raw(self, expect_response=False):
+        """Alternate laser power-off via the Power Control command (0x75)."""
+        frame = self._gimbal_frames.build_C2_laser_power(False)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserZoomIn_Raw(self, expect_response=False):
+        """Laser's own zoom in (beam divergence) — separate from EO/IR optical zoom."""
+        frame = self._gimbal_frames.build_C2_laser_zoom_in()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserZoomOut_Raw(self, expect_response=False):
+        """Laser's own zoom out (beam divergence) — separate from EO/IR optical zoom."""
+        frame = self._gimbal_frames.build_C2_laser_zoom_out()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserSyncEOMode_Raw(self, expect_response=False):
+        """Laser zoom auto-syncs with the EO camera's zoom level."""
+        frame = self._gimbal_frames.build_C2_laser_sync_eo_mode()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_LaserManualMode_Raw(self, expect_response=False):
+        """Laser zoom under independent manual control (not synced to EO zoom)."""
+        frame = self._gimbal_frames.build_C2_laser_manual_mode()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    # ── FOV+/- ────────────────────────────────────────────────────────────
+    # ICD naming for the same rate-based zoom commands above — FOV+ =
+    # zoom out, FOV- = zoom in. Same "rising edge valid" behavior: call
+    # the matching Stop (initiate_ZoomStop_Raw, shared with focus) to halt.
+
+    def initiate_FOVPlus_Raw(self, speed=4, expect_response=False):
+        """FOV+ (ICD naming) — zoom out (wide). Same as initiate_ZoomOut_Raw."""
+        frame = self._gimbal_frames.build_C1_fov_plus(speed)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_FOVMinus_Raw(self, speed=4, expect_response=False):
+        """FOV- (ICD naming) — zoom in (telephoto). Same as initiate_ZoomIn_Raw."""
+        frame = self._gimbal_frames.build_C1_fov_minus(speed)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_SetFOV_Raw(self, zoom_times, expect_response=False):
+        """
+        Directly set an absolute zoom level (e.g. 20.0 for 20x) instead
+        of ramping via FOV+/-'s rate control. Verified byte-for-byte
+        against the ICD's own worked example.
+        """
+        frame = self._gimbal_frames.build_C2_set_eo_zoom(zoom_times)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    # ── Picture / record mode, SD card ───────────────────────────────────
+
+    def initiate_PictureMode_Raw(self, expect_response=False):
+        """Switch the camera to picture (still-photo) mode."""
+        frame = self._gimbal_frames.build_C1_picture_mode()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_RecordMode_Raw(self, expect_response=False):
+        """Switch the camera to video-record mode."""
+        frame = self._gimbal_frames.build_C1_record_mode()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_PicRecordSwitch_Raw(self, expect_response=False):
+        """Toggle between picture and record mode."""
+        frame = self._gimbal_frames.build_C1_pic_record_switch()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_FormatSD_Raw(self, expect_response=False):
+        """DESTRUCTIVE — formats the SD card, erasing all stored photos/video. No confirmation step here; add one at the call site."""
+        frame = self._gimbal_frames.build_C1_format_sd()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_QuerySDStatus_Raw(self, expect_response=True):
+        """Query SD card status. Reply parsing isn't implemented yet — see build_C1_query_sd_status's note."""
+        frame = self._gimbal_frames.build_C1_query_sd_status()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_QuerySDTotal_Raw(self, expect_response=True):
+        """Query SD card total capacity. Reply parsing isn't implemented yet."""
+        frame = self._gimbal_frames.build_C1_query_sd_total()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_QuerySDFree_Raw(self, expect_response=True):
+        """Query SD card free capacity. Reply parsing isn't implemented yet."""
+        frame = self._gimbal_frames.build_C1_query_sd_free()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)

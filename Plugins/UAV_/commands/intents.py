@@ -79,6 +79,14 @@ class WideOutCommand(Command):
     pass
 
 @dataclass
+class WideInFallCommand(Command):
+    pass
+
+@dataclass
+class WideOutFallCommand(Command):
+    pass
+
+@dataclass
 class RTLCommand(Command):
     pass
 
@@ -91,6 +99,19 @@ class AutoModeCommand(Command):
 class EmergencyCommand(Command):
     pass
 
+@dataclass
+class LaserStartCommand(Command):
+    pass
+
+@dataclass
+class LaserStopCommand(Command):
+    pass
+
+class ContiousLaserStopCommand(Command):
+    pass
+
+class ContiousLaserStartCommand(Command):
+    pass
 
 # Reserved for when it's wired up — config.py already defines the bit,
 # it's just not acted on yet:

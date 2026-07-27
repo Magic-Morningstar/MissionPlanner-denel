@@ -186,17 +186,7 @@ class UAVCommandSender(MavlinkWorker):
         self.enqueue(self.Payload.initiate_ZoomOut_Raw)
 
 
-    def payloadFocus(self):
-        self.enqueue(
-            self.Payload.initiate_SetFocus,
-            focus_type=mavutil.mavlink.FOCUS_TYPE_RANGE,
-            focus_value=self.state.GIMBAL_FOCUS
-        )
 
-    def payloadautofocus(self):
-        self.enqueue(self.Payload.initiate_SetFocus)
-        time.sleep(0.5)
-        self.enqueue(self.Payload.initiate_SetFocus)
 
     def set_auto(self):
         if self.Manual:
@@ -227,8 +217,10 @@ class UAVCommandSender(MavlinkWorker):
     def point_gimbal(self, pitch_deg, yaw_deg):
         """
         pitch_deg / yaw_deg here are RELATIVE deltas (degrees to move by
-        this call), not absolute targets — AnalogInputHandler streams
-        small per-tick deltas while the stick is held.
+        this call), not absolute targets. Still available for one-shot
+        nudges (e.g. a UI "+5deg" button) — AnalogInputHandler no longer
+        uses this for continuous joystick control; see set_gimbal_rate
+        for that.
 
         Fixed two bugs that were here before:
           1. initiate_PointAngle_Relative_Raw(azimuth_delta_deg, tilt_delta_deg)
@@ -251,12 +243,91 @@ class UAVCommandSender(MavlinkWorker):
             pitch_deg,   # tilt_delta_deg
         )
 
+    def set_gimbal_rate(self, pitch_deg_s, yaw_deg_s):
+        """
+        Set the gimbal moving at a continuous azimuth/tilt rate (Manual
+        Speed Mode) — send once when the desired rate changes, the
+        gimbal keeps moving on its own until the next call. (0, 0) stops
+        it. This is what AnalogInputHandler now calls for joystick
+        control, instead of repeatedly streaming small relative-angle
+        deltas via point_gimbal — see AnalogInputHandler's docstring for
+        why this is the better fit for continuous stick input.
+        """
+        if not self.Payload:
+            logger.warning("set_gimbal_rate called with no Payload connection — ignoring.")
+            return
+        self.enqueue(
+            self.Payload.initiate_ManualSpeed_Raw,
+            yaw_deg_s,     # azimuth_vel_deg_s
+            pitch_deg_s,   # tilt_vel_deg_s
+        )
+
     # ── Zoom / focus — level-triggered raw start/stop ───────────────────────
     # Called by AnalogInputHandler on rising/falling edges of the held
     # zoom/focus flags. Per the ICD, zoom-in/out and focus+/- are "rising
     # edge valid" — one start command keeps the gimbal moving until a
     # matching stop is sent, so these are one-shot per press/release,
     # not something to call repeatedly while held.
+
+    def laser_start(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_LaserPowerOn_Raw)
+
+    def laser_stop(self):
+            if self.Payload:
+                self.enqueue(self.Payload.initiate_LaserPowerOff_Raw)
+
+    def continous_laser_start(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_LaserRangeContinuousStart_Raw)
+    
+    def continous_laser_stop(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_LaserRangeStop_Raw)
+
+    # ── Laser range polling — this is how you actually SEE it working ──────
+    # laser_start()/continous_laser_start() only ever SEND commands to the
+    # gimbal — nothing about sending a command tells you whether ranging
+    # is actually happening or what the distance is. This runs
+    # Payload.poll_status() on a background thread (poll_status, not
+    # get_laser_range, so it doesn't re-trigger single-ranging and
+    # potentially interrupt an active continuous session) and logs
+    # whatever distance comes back. Runs on its own thread rather than
+    # inline in _run_once() because poll_status() blocks for up to
+    # response_timeout waiting on a SERIAL_CONTROL reply — doing that on
+    # the main loop would stall gimbal/zoom/focus command processing for
+    # up to a second on every single poll.
+
+    def start_laser_polling(self, interval_sec=1.0, response_timeout=1.0):
+        if getattr(self, '_laser_poll_thread', None) and self._laser_poll_thread.is_alive():
+            return  # already running
+        self._laser_poll_stop_event = threading.Event()
+        self._laser_poll_thread = threading.Thread(
+            target=self._laser_poll_loop,
+            args=(interval_sec, response_timeout),
+            daemon=True,
+            name="LaserRangePoll",
+        )
+        self._laser_poll_thread.start()
+        logger.info(f"Laser range polling started (every {interval_sec}s).")
+
+    def stop_laser_polling(self):
+        if getattr(self, '_laser_poll_stop_event', None):
+            self._laser_poll_stop_event.set()
+        logger.info("Laser range polling stopped.")
+
+    def _laser_poll_loop(self, interval_sec, response_timeout):
+        while not self._laser_poll_stop_event.is_set():
+            if self.Payload:
+                result = self.Payload.poll_status(response_timeout=response_timeout)
+                distance = result.get('laser_range_m')
+                if distance is not None:
+                    logger.info(f"Laser range: {distance}m (new_reading={result.get('laser_range_new')})")
+                elif 'error' in result:
+                    logger.debug(f"Laser range poll: {result['error']}")
+                else:
+                    logger.debug("Laser range poll: reply received but no valid reading yet (0/invalid).")
+            self._laser_poll_stop_event.wait(interval_sec)
 
     def zoom_in_start(self, speed=4):
         if self.Payload:
@@ -276,7 +347,7 @@ class UAVCommandSender(MavlinkWorker):
 
     def focus_plus_start(self, speed=4):
         if self.Payload:
-            self.enqueue(self.Payload.initiate_FocusPlus_Raw, speed)
+            self.enqueue(self.Payload.initiate_FocusPlus_Raw, speed)  # was initiate_FOVPlus_Raw — that's zoom out, not focus
 
     def focus_plus_stop(self):
         if self.Payload:
@@ -284,11 +355,11 @@ class UAVCommandSender(MavlinkWorker):
 
     def focus_minus_start(self, speed=4):
         if self.Payload:
-            self.enqueue(self.Payload.initiate_FocusMinus_Raw, speed)
+            self.enqueue(self.Payload.initiate_FocusMinus_Raw, speed)  # was initiate_FOVMinus_Raw — that's zoom in, not focus
 
     def focus_minus_stop(self):
         if self.Payload:
-            self.enqueue(self.Payload.initiate_FocusStop_Raw)
+            self.enqueue(self.Payload.initiate_FocusStop_Raw)  # was initiate_FOVMinus_Raw — a start command, so this never stopped anything
 
     def start_takeoff(self):
         if self.takeoff_in_progress:
@@ -315,11 +386,11 @@ class UAVCommandSender(MavlinkWorker):
 
 
 # ── Registered handlers ───────────────────────────────────────────────────────
-
+'''
 @register_handler(ArmCommand)
 def _handle_arm(sender, cmd):
     logger.debug("ArmCommand received")
-    sender.arm()
+    sender.arm()'''
 
 
 @register_handler(DisarmCommand)
@@ -333,12 +404,12 @@ def _handle_takeoff(sender, cmd):
     logger.debug("TakeoffCommand received")
     sender.start_takeoff() 
 
-
+''''
 @register_handler(ManualModeCommand)
 def _handle_manual(sender, cmd):
     logger.debug("ManualModeCommand received")
     sender._cancel_takeoff_if_active()
-    sender.set_fbwb()
+    sender.set_fbwb()'''
 
 
 @register_handler(RTLCommand)
@@ -368,15 +439,37 @@ def _handle_land(sender, cmd):
 
 
 
-@register_handler(SpeedUpCommand)
-def _handle_speedup(sender, cmd):
-    logger.info("SpeedUpCommand received")
+@register_handler(ContiousLaserStartCommand)
+def _handle_continous_laser_start(sender, cmd):
+    logger.info("ContiousLaserStartCommand received")
+    sender.laser_start()
+    sender.continous_laser_start()   # was continous_laser_stop() — sent stop immediately after power-on, so ranging never actually began
+    sender.start_laser_polling()     # so the distance is actually visible somewhere — see start_laser_polling's docstring
+
+@register_handler(ContiousLaserStopCommand)
+def _handle_continous_laser_stop(sender, cmd):
+    logger.info("ContiousLaserStopCommand received")
+    sender.stop_laser_polling()
+    sender.continous_laser_stop()
+    sender.laser_stop()
+    
 
 
 @register_handler(SpeedDownCommand)
 def _handle_speeddown(sender, cmd):
     logger.info("SpeedDownCommand received")
 
+
+@register_handler(LaserStartCommand)
+def _handle_laser_start(sender, cmd):
+    logger.debug("LaserStartCommand received")
+    sender.laser_start()
+
+
+@register_handler(LaserStopCommand)
+def _handle_laser_stop(sender, cmd):
+    logger.debug("LaserStopCommand received")
+    sender.laser_stop()
 
 
 
@@ -386,7 +479,7 @@ def _handle_zoomin(sender, cmd):
     sender.state.ZOOMIN_PRESSED = True
 
 @register_handler(ZoomInFallCommand)
-def _handle_zoomoutFall(sender, cmd):
+def _handle_zoominFall(sender, cmd):
     logger.info("CameraZoomInFallCommand received")
     sender.state.ZOOMIN_PRESSED = False
 
@@ -399,19 +492,32 @@ def _handle_zoomout(sender, cmd):
 def _handle_zoomoutFall(sender, cmd):
     logger.info("CameraZoomOutFallCommand received")
     sender.state.ZOOMOUT_PRESSED = False
-'''
+
+
+# "Wide" is the wire-level/button name for what State and
+# AnalogInputHandler call "Focus" — bridged here rather than renaming the
+# Command classes, so the change stays isolated to this one seam. Level
+# state now (was one-shot GIMBAL_FOCUS incrementing via the old, now
+# unused, payloadFocus() MAVLink-native path); AnalogInputHandler's
+# _EdgeTrigger turns these levels into start/stop calls to
+# focus_plus_start/stop and focus_minus_start/stop.
+
 @register_handler(WideInCommand)
-def _handle_wideout(sender, cmd):
-    logger.info("CameraWideOutCommand received")
-    sender.state.GIMBAL_FOCUS +=1
-    if sender.state.GIMBAL_FOCUS >= 100:
-           sender.state.GIMBAL_FOCUS = 100
-    sender.payloadFocus()
+def _handle_widein(sender, cmd):
+    logger.info("CameraWideInCommand received")
+    sender.state.FOCUSIN_PRESSED = True
+
+@register_handler(WideInFallCommand)
+def _handle_wideinFall(sender, cmd):
+    logger.info("CameraWideInFallCommand received")
+    sender.state.FOCUSIN_PRESSED = False
 
 @register_handler(WideOutCommand)
-def _handle_widein(sender, cmd):
+def _handle_wideout(sender, cmd):
     logger.info("CameraWideOutCommand received")
-    sender.state.GIMBAL_FOCUS -=1
-    if sender.state.GIMBAL_FOCUS <= 0:
-           sender.state.GIMBAL_FOCUS = 0 
-    sender.payloadFocus()'''
+    sender.state.FOCUSOUT_PRESSED = True
+
+@register_handler(WideOutFallCommand)
+def _handle_wideoutFall(sender, cmd):
+    logger.info("CameraWideOutFallCommand received")
+    sender.state.FOCUSOUT_PRESSED = False

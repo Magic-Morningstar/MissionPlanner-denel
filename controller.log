@@ -873,3 +873,9 @@
 13:14:16.893 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
 13:14:17.907 [MainThread      ] INFO     serial_controller.status_builder StatusBuilder: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
 13:14:17.908 [MainThread      ] INFO     serial_controller.serial_handler PC -> STM32: StatusUpdate(armed=True, manual_mode=True, auto_mode=False, autoland_mode=False, is_flying=True)
+11:40:25.520 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+11:40:25.521 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+11:40:25.521 [MainThread      ] INFO     __main__                     Controller started.
+11:40:25.522 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+11:40:25.523 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+11:40:25.532 [Thread-1 (_run) ] INFO     serial_controller.serial_handler No STM32 device found on any COM port.
