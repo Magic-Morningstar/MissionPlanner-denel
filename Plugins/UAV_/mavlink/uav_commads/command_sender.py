@@ -323,11 +323,77 @@ class UAVCommandSender(MavlinkWorker):
                 distance = result.get('laser_range_m')
                 if distance is not None:
                     logger.info(f"Laser range: {distance}m (new_reading={result.get('laser_range_new')})")
+                    self._send_distance_to_gcs(distance)
                 elif 'error' in result:
                     logger.debug(f"Laser range poll: {result['error']}")
                 else:
                     logger.debug("Laser range poll: reply received but no valid reading yet (0/invalid).")
             self._laser_poll_stop_event.wait(interval_sec)
+
+    def _send_distance_to_gcs(self, distance_m):
+        """
+        Relay the laser distance to any connected GCS (QGroundControl,
+        Mission Planner, etc.) as a standard MAVLink message, so it's
+        visible there without your Python app needing to do anything
+        with the value itself. Uses NAMED_VALUE_FLOAT — the simplest
+        path to "just show me a number": in QGC, Widgets -> Values ->
+        add field -> "LaserRange". See _send_distance_sensor_to_gcs for
+        the DISTANCE_SENSOR alternative.
+
+        NOTE: whether this shows up attached to the SAME vehicle panel
+        in QGC (rather than as a separate/unassociated system) can
+        depend on whether this connection's system_id matches the
+        vehicle's own. If it doesn't show where expected, check QGC's
+        Analyze -> MAVLink Inspector first to confirm the message is
+        arriving at all before troubleshooting display placement.
+        """
+        if not self.command_drone:
+            return
+        try:
+            self.command_drone.mav.named_value_float_send(
+                int(time.time() * 1000) & 0xFFFFFFFF,  # time_boot_ms
+                b"LaserRange",                          # name, max 10 chars
+                float(distance_m),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to relay laser distance to GCS: {e}")
+
+    def _send_distance_sensor_to_gcs(self, distance_m):
+        """
+        Alternative to _send_distance_to_gcs: sends the semantically
+        "proper" DISTANCE_SENSOR message instead of a generic named
+        value — more work to get right, potentially picked up by
+        built-in rangefinder-aware displays instead of a manually added
+        Values widget. Not currently called by the polling loop; swap
+        the call in _laser_poll_loop if you want this instead.
+
+        min_distance/max_distance below (cm) are placeholders — the ICD
+        doesn't document this Viewpro unit's actual measurement range,
+        adjust to the real spec if you know it. Both are uint16 fields
+        (max 65535 cm = 655.35m) — max_distance is capped at that limit
+        here; if your unit's actual max range is genuinely beyond ~655m,
+        this field can't represent it and would need clamping anyway.
+        orientation is set to NONE as a simplification: a gimbal-mounted
+        laser's true pointing direction changes as the gimbal moves,
+        which a fixed orientation value doesn't capture (MAVLink
+        supports a quaternion-based ROTATION_CUSTOM orientation for
+        exactly this case; not implemented here to keep this simple).
+        """
+        if not self.command_drone:
+            return
+        try:
+            self.command_drone.mav.distance_sensor_send(
+                int(time.time() * 1000) & 0xFFFFFFFF,      # time_boot_ms
+                100,                                         # min_distance, cm — placeholder
+                65535,                                        # max_distance, cm — placeholder, uint16 max
+                min(int(distance_m * 100), 65535),           # current_distance, cm, clamped to uint16
+                mavutil.mavlink.MAV_DISTANCE_SENSOR_LASER,
+                0,                                            # id
+                mavutil.mavlink.MAV_SENSOR_ROTATION_NONE,      # orientation — see docstring
+                0,                                            # covariance, 0 = unknown
+            )
+        except Exception as e:
+            logger.warning(f"Failed to relay laser distance sensor to GCS: {e}")
 
     def zoom_in_start(self, speed=4):
         if self.Payload:
@@ -360,6 +426,22 @@ class UAVCommandSender(MavlinkWorker):
     def focus_minus_stop(self):
         if self.Payload:
             self.enqueue(self.Payload.initiate_FocusStop_Raw)  # was initiate_FOVMinus_Raw — a start command, so this never stopped anything
+
+    # ── Object tracking ───────────────────────────────────────────────────
+    # tracking_start locks the tracker onto whatever's currently under the
+    # search cross — pair with a search/nudge step (not wired up here yet)
+    # if you need to move the cross onto a target first. Note this only
+    # engages the image tracker; the gimbal won't physically follow unless
+    # A1 servo mode is also put into tracking mode (build_A1_tracking /
+    # SERVO_TRACKING_MODE) — not wired here either, ask if you want it.
+
+    def tracking_start(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_TrackingTurnOn_Raw)
+
+    def tracking_stop(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_TrackingStop_Raw)
 
     def start_takeoff(self):
         if self.takeoff_in_progress:
@@ -470,6 +552,18 @@ def _handle_laser_start(sender, cmd):
 def _handle_laser_stop(sender, cmd):
     logger.debug("LaserStopCommand received")
     sender.laser_stop()
+
+
+@register_handler(TrackingStartCommand)
+def _handle_tracking_start(sender, cmd):
+    logger.debug("TrackingStartCommand received")
+    sender.tracking_start()
+
+
+@register_handler(TrackingStopCommand)
+def _handle_tracking_stop(sender, cmd):
+    logger.debug("TrackingStopCommand received")
+    sender.tracking_stop()
 
 
 

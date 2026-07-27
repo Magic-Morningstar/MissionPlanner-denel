@@ -598,3 +598,103 @@ class Payload(BaseCommand):
         """Query SD card free capacity. Reply parsing isn't implemented yet."""
         frame = self._gimbal_frames.build_C1_query_sd_free()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    # ── Object tracking (E1 common / E2 infrequent) ─────────────────────────
+    # Two layers: E1 controls the image tracker itself (find/lock/follow a
+    # target in the video); separately, put the gimbal's A1 servo mode into
+    # SERVO_TRACKING_MODE (initiate_MotorPower_Raw doesn't do this —
+    # build_A1_tracking / servo_mode=0x06 does) for the physical gimbal to
+    # actually chase wherever the tracker says the target is. Locking the
+    # tracker on without also engaging servo tracking mode won't move the
+    # gimbal.
+
+    def initiate_TrackingStop_Raw(self, expect_response=False):
+        """Stop tracking."""
+        frame = self._gimbal_frames.build_E1_stop_tracking()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingSearch_Raw(self, azimuth_nudge=0, tilt_nudge=0, expect_response=False):
+        """
+        Bring up the search cross and nudge it. azimuth_nudge/tilt_nudge
+        in [-15, 15] — see GimbalFrameBuilder.build_E1_search for the
+        wire-format mapping.
+        """
+        frame = self._gimbal_frames.build_E1_search(azimuth_nudge, tilt_nudge)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingTurnOn_Raw(self, expect_response=False):
+        """Lock onto whatever's currently under the search cross.""" 
+        frame = self._gimbal_frames.build_E1_turn_on_tracking()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingSwitchToCross_Raw(self, expect_response=False):
+        """Switch the active tracking point to the cross position."""
+        frame = self._gimbal_frames.build_E1_switch_to_cross()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingAIOn_Raw(self, expect_response=False):
+        """Turn AI-assisted recognition on."""
+        frame = self._gimbal_frames.build_E1_ai_on()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingAIOff_Raw(self, expect_response=False):
+        """Turn AI-assisted recognition off."""
+        frame = self._gimbal_frames.build_E1_ai_off()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingAIAutoTrack_Raw(self, expect_response=False):
+        """Auto-track whatever the AI recognizes, without manually placing the cross first."""
+        frame = self._gimbal_frames.build_E1_ai_auto_track()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingSetTemplateSize_Raw(self, template: int, expect_response=False):
+        """template: one of GimbalFrameBuilder.E1_TEMPLATE_* (32x32 small, 64x64 medium, 128x128 big, or self-adapting combinations)."""
+        frame = self._gimbal_frames.build_E1_set_template_size(template)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingSetVelocity_Raw(self, deg_per_sec: float, expect_response=False):
+        """Set the gimbal's absolute tracking (chase) speed. 0 = system default."""
+        frame = self._gimbal_frames.build_E1_set_tracking_velocity(deg_per_sec)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingSetVelocityCoefficient_Raw(self, coefficient: float, expect_response=False):
+        """Scale the default tracking speed by a multiplier instead of setting an absolute value. 0 = system default."""
+        frame = self._gimbal_frames.build_E1_set_tracking_velocity_coefficient(coefficient)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackPointToPixel_Raw(self, x_pixel: int, y_pixel: int, expect_response=False):
+        """Move the tracking point directly to a pixel coordinate — the precise alternative to initiate_TrackingSearch_Raw's cross-nudging."""
+        frame = self._gimbal_frames.build_E2_track_point_to_pixel(x_pixel, y_pixel)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackRectAreaPoint1_Raw(self, x_pixel: int, y_pixel: int, expect_response=False):
+        """First corner of a rectangular tracking region — send both corners to define a box around a target."""
+        frame = self._gimbal_frames.build_E2_rect_area_point1(x_pixel, y_pixel)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackRectAreaPoint2_Raw(self, x_pixel: int, y_pixel: int, expect_response=False):
+        """Second (opposite) corner of a rectangular tracking region."""
+        frame = self._gimbal_frames.build_E2_rect_area_point2(x_pixel, y_pixel)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingShowCross_Raw(self, show=True, expect_response=False):
+        """Show/hide the center targeting cross overlay."""
+        frame = self._gimbal_frames.build_E2_display_cross(show)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_TrackingShowGimbalAngle_Raw(self, show=True, expect_response=False):
+        """Show/hide the gimbal angle overlay."""
+        frame = self._gimbal_frames.build_E2_gimbal_angle_display(show)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def get_tracking_status(self, response_timeout=1.0):
+        """
+        Poll the gimbal and return the current tracking sensor + state
+        ('stop'/'search'/'tracking'/'lost'), read from the F1 field of
+        the T1+F1+B1+D1 status reply — the same reply the laser distance
+        comes from, so this is the same dict shape as
+        get_laser_range()/poll_status() (which also now includes
+        'tracking_sensor'/'tracking_status' — call whichever you already
+        have a result from rather than polling twice).
+        """
+        return self.poll_status(response_timeout=response_timeout)

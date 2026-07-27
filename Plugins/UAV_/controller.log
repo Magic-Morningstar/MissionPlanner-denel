@@ -1,0 +1,317 @@
+12:53:57.925 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+12:53:57.926 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+12:53:57.928 [MainThread      ] INFO     __main__                     Controller started.
+12:53:57.929 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+12:53:57.930 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+12:53:57.957 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM17 — 'USB-Enhanced-SERIAL-D CH344 (COM17)'
+12:53:57.994 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM17.
+12:53:57.995 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+12:53:57.995 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+12:53:58.032 [SerialProcessor ] INFO     commands.translator          manual rising edge -> LaserStartCommand
+12:53:58.032 [SerialProcessor ] INFO     commands.translator          auto rising edge -> ContiousLaserStartCommand
+12:53:58.187 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender heartbeat received — system 42 component 100
+12:53:58.197 [Thread-2 (_run) ] INFO     mavlink.uav_commads.command_sender UAVCommandSender connected.
+12:53:58.198 [UAVCommandSender] DEBUG    mavlink.uav_commads.command_sender LaserStartCommand received
+12:53:58.198 [UAVCommandSender] INFO     mavlink.uav_commads.command_sender ContiousLaserStartCommand received
+12:53:58.198 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender loop started.
+12:53:58.199 [UAVCommandSender] INFO     mavlink.uav_commads.command_sender Laser range polling started (every 1.0s).
+12:53:58.199 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 2e
+12:53:58.200 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:53:58.321 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 b0 fb c0 00 00 00 01 00 00 00 82 00 e6 01 2c a0 55 aa dc c4 ac 30 58 55 aa dc ec 40 01 00 ff ff 55 aa dc 04 ac 30 98 55 aa dc ac 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:53:58.321 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:53:58.322 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (9 bytes): 55 aa dc 46 2c 74 00 01 1f
+12:53:58.383 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (9 bytes): 55 aa dc 86 2c 74 00 01 df
+12:53:58.438 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 40 00 00 00 00 ae
+12:53:58.501 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:53:58.503 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:53:58.557 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:53:58.839 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:53:58.840 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:53:59.217 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:53:59.219 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:53:59.323 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 2e
+12:53:59.446 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 00 82 00 e6 01 2c 30 55 aa dc 44 ac 30 d8 55 aa dc 6c 40 01 00 ff ff 55 aa dc 04 ac 30 98 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:53:59.447 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:53:59.607 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:53:59.609 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:53:59.996 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:53:59.998 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:00.388 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:00.389 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:00.460 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 2e
+12:54:00.507 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 00 8c 00 fa 01 1a 54 55 aa dc 44 ac 30 d8 55 aa dc ac 40 01 00 ff ff 55 aa dc c4 ac 30 58 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:00.507 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:00.786 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:00.786 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:01.185 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:01.186 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:01.514 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:01.561 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 00 96 01 04 01 0b 60 fd 09 00 00 ec 01 64 04 01 00 82 8a 72 00 00 66 55 aa dc c4 ac 30 58 55 aa dc ac 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:01.561 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:01.575 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:01.576 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:01.964 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:01.965 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:02.352 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:02.353 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:02.567 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:02.677 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 00 d1 01 7c 00 b7 62 fd 09 00 00 ee 01 64 04 01 00 6c 8e 72 00 00 48 55 aa dc c4 ac 30 58 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:02.678 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:02.769 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:02.770 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:03.159 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:03.161 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:03.543 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:03.544 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:03.689 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:03.736 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 01 ae 02 f8 00 5c 30 55 aa dc 04 ac 30 98 55 aa dc ac 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc 6c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:03.737 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:03.944 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:03.945 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:08.157 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+12:54:08.157 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+12:54:08.159 [MainThread      ] INFO     __main__                     Controller started.
+12:54:08.160 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+12:54:08.160 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+12:54:08.167 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM17 — 'USB-Enhanced-SERIAL-D CH344 (COM17)'
+12:54:08.168 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM17.
+12:54:08.169 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+12:54:08.169 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+12:54:08.196 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender heartbeat received — system 42 component 100
+12:54:08.198 [Thread-2 (_run) ] INFO     mavlink.uav_commads.command_sender UAVCommandSender connected.
+12:54:08.199 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=-30.0deg/s, yaw=-30.0deg/s
+12:54:08.199 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender loop started.
+12:54:08.199 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 f4 48 f4 48 00 00 00 00 00 00 00 00 00 20
+12:54:08.257 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:08.259 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:08.663 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:08.664 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:09.071 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:09.088 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:09.386 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:09.388 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:09.763 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:09.764 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:10.155 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:10.157 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:10.539 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:10.542 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:10.921 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:10.922 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:11.221 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:11.223 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:11.323 [SerialProcessor ] INFO     commands.translator          manual rising edge -> LaserStartCommand
+12:54:11.383 [UAVCommandSender] DEBUG    mavlink.uav_commads.command_sender LaserStartCommand received
+12:54:11.383 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (9 bytes): 55 aa dc 86 2c 74 00 01 df
+12:54:11.554 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:11.556 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:11.954 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:11.956 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:12.353 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:12.356 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:12.420 [SerialProcessor ] INFO     commands.translator          auto rising edge -> ContiousLaserStartCommand
+12:54:12.515 [UAVCommandSender] INFO     mavlink.uav_commads.command_sender ContiousLaserStartCommand received
+12:54:12.515 [UAVCommandSender] INFO     mavlink.uav_commads.command_sender Laser range polling started (every 1.0s).
+12:54:12.516 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:12.566 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 03 fc 07 08 00 27 6e 55 aa dc c4 ac 30 58 55 aa dc 2c 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:12.566 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:12.566 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (9 bytes): 55 aa dc c6 2c 74 00 01 9f
+12:54:12.614 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 40 00 00 00 00 6e
+12:54:12.676 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:12.677 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:13.060 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:13.062 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:13.440 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:13.441 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:13.563 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 2e
+12:54:13.666 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 06 b8 0b cc 00 17 57 55 aa dc c4 ac 30 58 55 aa dc ac 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc 6c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:13.668 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:13.831 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:13.832 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:14.216 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:14.219 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:14.588 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:14.590 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:14.669 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 2e
+12:54:14.716 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0a 1e 11 58 00 0f eb 55 aa dc c4 ac 30 58 55 aa dc 2c 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:14.717 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:14.970 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:14.972 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:15.356 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:15.361 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:15.720 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:15.759 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:15.769 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0e 9c 18 42 00 0a fb fd 09 00 00 d8 01 64 00 00 00 00 00 00 00 1e 03 55 aa dc 84 ac 30 18 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:15.770 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:15.771 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:16.158 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:16.161 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:16.540 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:16.542 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:16.774 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:16.826 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a 0c fd 09 00 00 fb 01 64 04 01 00 dd a7 72 00 00 00 55 aa dc 84 ac 30 18 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:16.827 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:16.936 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:16.938 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:17.315 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:17.317 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:17.695 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:17.696 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:17.835 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:17.943 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 b0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a 1c 55 aa dc c4 ac 30 58 55 aa dc 6c 40 01 00 ff ff 55 aa dc c4 ac 30 58 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:17.944 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:18.079 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:18.081 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:18.478 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:18.479 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:18.890 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:18.893 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:18.951 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:19.067 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a cc 55 aa dc 04 ac 30 98 55 aa dc ec 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:19.068 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:19.284 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:19.285 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:19.677 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:19.678 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:20.063 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:20.065 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:20.074 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:20.121 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a cc 55 aa dc c4 ac 30 58 55 aa dc 6c 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:20.121 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:20.471 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:20.471 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:20.867 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:20.869 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:21.126 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:21.176 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 b0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a dc 55 aa dc c4 ac 30 58 55 aa dc 6c 40 01 00 ff ff 55 aa dc 04 ac 30 98 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:21.177 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:21.268 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:21.269 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:21.671 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:21.673 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:21.981 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:21.982 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:22.188 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:22.305 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a cc 55 aa dc 44 ac 2c c4 55 aa dc ec 40 01 00 ff ff 55 aa dc 04 ac 30 98 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:22.306 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:22.367 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:22.368 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:22.750 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:22.752 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:23.149 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:23.151 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:23.309 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:23.356 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a 0c fd 09 00 00 5b 01 64 04 01 00 be 42 79 00 00 00 55 aa dc 04 ac 30 98 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:23.357 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:23.544 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:23.545 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:23.912 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:23.913 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:24.309 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:24.311 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:24.359 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:24.470 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a cc fd 09 00 00 5d 01 64 04 01 00 a8 46 79 00 00 00 55 aa dc c4 ac 30 58 55 aa dc 6c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:24.471 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:24.610 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:24.612 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:25.004 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:25.005 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:25.397 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:25.399 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:25.476 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:25.526 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a 4c fd 09 00 00 40 01 64 00 00 00 00 00 00 00 1e 03 55 aa dc c4 ac 30 58 55 aa dc ac 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:25.527 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:25.564 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=-11.8deg/s
+12:54:25.565 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 fb 67 00 00 00 00 00 00 00 00 00 00 00 7c
+12:54:25.847 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=-20.5deg/s
+12:54:25.847 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 f8 00 00 00 00 00 00 00 00 00 00 00 00 d8
+12:54:26.227 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=-21.0deg/s
+12:54:26.229 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 f7 ca 00 00 00 00 00 00 00 00 00 00 00 5d
+12:54:26.529 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:26.622 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=-21.1deg/s
+12:54:26.630 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 90 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a bc 55 aa dc 04 ac 30 98 55 aa dc ec 40 01 00 ff ff 55 aa dc c4 ac 30 58 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:26.631 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:26.631 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 f7 c1 00 00 00 00 00 00 00 00 00 00 00 d6
+12:54:27.026 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=-21.2deg/s
+12:54:27.027 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 f7 bd 00 00 00 00 00 00 00 00 00 00 00 6a
+12:54:27.402 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=-8.0deg/s
+12:54:27.403 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 fc e2 00 00 00 00 00 00 00 00 00 00 00 7e
+12:54:27.637 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:27.684 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:27.702 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 a0 fb c0 00 00 00 01 00 00 0f 0a 18 e2 00 0a cc 55 aa dc 04 ac 30 98 55 aa dc 6c 40 01 00 ff ff 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8 89 ff ff fd 55 00 00
+12:54:27.703 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:27.704 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:28.084 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:28.086 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:28.493 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:28.495 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:28.708 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:28.755 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 08 17 ff c2 00 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a e3 55 aa dc 84 ac 30 18 55 aa dc 6c 40 01 00 ff ff df 25 ff ff f6 19 00 55 aa dc 04 ac 30 98 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:28.756 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:28.902 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:28.905 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:29.306 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:29.307 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:29.697 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:29.699 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:29.769 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:29.818 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 00 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a 03 55 aa dc 44 ac 30 d8 55 aa dc ec 40 01 00 ff ff 55 aa dc 04 ac 30 98 55 aa dc ac 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:29.818 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:30.080 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:30.081 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:30.476 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:30.478 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:30.754 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+3.1deg/s
+12:54:30.756 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 01 34 00 00 00 00 00 00 00 00 00 00 00 55
+12:54:30.827 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ae
+12:54:30.927 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=-2.4deg/s, yaw=+12.9deg/s
+12:54:30.943 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 00 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a 83 55 aa dc 44 ac 30 d8 55 aa dc 6c 40 01 00 ff ff 55 aa dc c4 ac 30 58 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:30.944 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:30.944 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 05 0f ff 0e 00 00 00 00 00 00 00 00 00 1b
+12:54:31.113 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=-3.2deg/s, yaw=+20.4deg/s
+12:54:31.114 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 07 f5 fe bd 00 00 00 00 00 00 00 00 00 91
+12:54:31.495 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=-3.2deg/s, yaw=+20.7deg/s
+12:54:31.497 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 08 13 fe c0 00 00 00 00 00 00 00 00 00 45
+12:54:31.785 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=-2.6deg/s, yaw=+17.0deg/s
+12:54:31.787 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 06 a6 fe fd 00 00 00 00 00 00 00 00 00 03
+12:54:31.949 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:31.959 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+5.3deg/s
+12:54:32.073 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 00 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a 03 55 aa dc 04 ac 30 98 55 aa dc ac 40 01 00 ff ff 55 aa dc c4 ac 30 58 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:32.074 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:32.075 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 02 15 00 00 00 00 00 00 00 00 00 00 00 37
+12:54:32.142 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:32.144 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:32.539 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:32.541 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:32.924 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:32.928 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 e0
+12:54:33.081 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 2e
+12:54:33.132 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c1 f0 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a f0 55 aa dc 04 ac 30 98 55 aa dc 2c 40 01 00 ff ff 55 aa dc c4 ac 30 58 55 aa dc 2c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:33.133 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:33.334 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:33.335 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:33.735 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:33.737 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:34.140 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:34.141 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:34.201 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c1 f0 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a f0 fd 09 00 00 80 01 64 04 01 00 27 8b 79 00 00 00 55 aa dc c4 ac 30 58 55 aa dc 6c 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:34.202 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:34.203 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:34.473 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:34.479 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:34.871 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:34.872 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:35.205 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:35.272 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:35.286 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 00 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a 43 fd 09 00 00 82 01 64 04 01 00 11 8f 79 00 00 00 55 aa dc c4 ac 30 58 55 aa dc ec 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:35.287 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:35.287 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20
+12:54:35.668 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:35.669 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 51 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+12:54:36.063 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:36.064 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 91 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 a0
+12:54:36.299 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc d1 30 0f 00 00 00 00 00 00 00 00 00 00 00 00 00 ee
+12:54:36.350 [LaserRangePoll  ] INFO     mavlink.uav_commads.commands.payload_commands Received raw reply (70 bytes): 89 ff ff fd 55 00 00 08 f7 ff c2 00 fc 68 00 00 00 01 00 00 0f 0a 18 e2 00 0a c3 55 aa dc 04 ac 30 98 55 aa dc 2c 40 01 00 ff ff 55 aa dc 84 ac 30 18 55 aa dc ac 40 01 00 ff ff df 25 ff ff f6 19 00 00 ff ff f8
+12:54:36.376 [LaserRangePoll  ] DEBUG    mavlink.uav_commads.command_sender Laser range poll: reply was not a T1+F1+B1+D1 status frame (cmd_id=172)
+12:54:36.473 [UAVCommandSender] INFO     mavlink.uav_commads.analog_input_handler Gimbal rate: pitch=+0.0deg/s, yaw=+0.0deg/s
+12:54:36.474 [UAVCommandSender] INFO     mavlink.uav_commads.commands.payload_commands Sent raw Viewpro frame (20 bytes): 55 aa dc 11 30 01 00 00 00 00 00 00 00 00 00 00 00 00 00 20

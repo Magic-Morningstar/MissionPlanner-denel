@@ -113,6 +113,14 @@ class ContiousLaserStopCommand(Command):
 class ContiousLaserStartCommand(Command):
     pass
 
+@dataclass
+class TrackingStartCommand(Command):
+    pass
+ 
+@dataclass
+class TrackingStopCommand(Command):
+    pass
+
 # Reserved for when it's wired up — config.py already defines the bit,
 # it's just not acted on yet:
 #

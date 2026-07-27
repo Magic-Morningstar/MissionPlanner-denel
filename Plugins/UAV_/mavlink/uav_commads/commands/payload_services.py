@@ -588,6 +588,205 @@ class GimbalFrameBuilder:
         param_word = (laser_bits & 0x03) << 14
         return self.build_C2(self.C2_CMD_POWER_CONTROL, param_word)
 
+    # ── E1: tracking command, commonly used, 3 bytes ────────────────────────
+    # ICD 3.11 — the section heading in the ICD itself says "E2" but the
+    # byte count (3) and the frame-composition table both identify this as
+    # E1 (frame ID 0x1E, 3 bytes); the doc's own heading looks like a
+    # typo. Embedded in the combined A1+C1+E1 frame via
+    # build_combined_A1_C1_E1(e1_bytes=...), same as everything else.
+    #
+    # Layout:
+    #   byte1  bits0-2: tracking source select (TRACK_SOURCE_*)
+    #          bits3-7: Parameter1 (5 bits) — meaning depends on basic_command
+    #   byte2  Basic Command (E1_CMD_*)
+    #   byte3  Parameter2 (1 byte) — meaning depends on basic_command
+
+    TRACK_SOURCE_NONE = 0x00
+    TRACK_SOURCE_EO1  = 0x01
+    TRACK_SOURCE_IR   = 0x02
+    TRACK_SOURCE_EO2  = 0x03
+
+    E1_CMD_NO_ACTION              = 0x00
+    E1_CMD_STOP                   = 0x01
+    E1_CMD_SEARCH                 = 0x02  # bring up the targeting cross
+    E1_CMD_TURN_ON_TRACKING       = 0x03  # lock onto whatever's under the cross
+    E1_CMD_SWITCH_TO_CROSS        = 0x04  # switch tracking point to cross position
+    E1_CMD_AI_ON_OFF              = 0x05
+    E1_CMD_ADJUST_TRACK_VELOCITY  = 0x06
+    E1_CMD_ADJUST_TRACK_VEL_COEF  = 0x07
+    E1_CMD_AI_AUTO_TRACK          = 0x08  # auto-track once AI recognizes something
+
+    # Tracking template size (E1_CMD_* slot — sent as basic_command itself)
+    E1_TEMPLATE_16x16_ULTRA_SMALL   = 0x20  # not supported yet, per ICD
+    E1_TEMPLATE_32x32_SMALL         = 0x21
+    E1_TEMPLATE_64x64_MEDIUM        = 0x22
+    E1_TEMPLATE_128x128_BIG         = 0x23
+    E1_TEMPLATE_SMALL_MEDIUM_ADAPT  = 0x24
+    E1_TEMPLATE_SMALL_BIG_ADAPT     = 0x25
+    E1_TEMPLATE_MEDIUM_BIG_ADAPT    = 0x26
+    # 0x27 is not defined in the ICD — it jumps straight to 0x28
+    E1_TEMPLATE_SMALL_MEDIUM_BIG_ADAPT = 0x28
+
+    def build_E1(self, tracking_source=0, param1_5bit=0, basic_command=0, param2=0) -> bytes:
+        """
+        Build the raw 3-byte E1 tracking-command payload, for embedding
+        via build_combined_A1_C1_E1(e1_bytes=...). Prefer the specific
+        build_E1_* convenience methods below unless you need a
+        combination they don't cover.
+        """
+        byte1 = ((param1_5bit & 0x1F) << 3) | (tracking_source & 0x07)
+        return bytes([byte1, basic_command & 0xFF, param2 & 0xFF])
+
+    def build_E1_stop_tracking(self) -> bytes:
+        """Stop tracking."""
+        e1 = self.build_E1(basic_command=self.E1_CMD_STOP)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_search(self, azimuth_nudge=0, tilt_nudge=0) -> bytes:
+        """
+        Bring up the search cross and nudge it (ICD 3.11.1.1). Unlike a
+        normal signed integer, the wire format splits direction across
+        two ranges: 1-15 = one direction, 16-31 = the other (right/down
+        for the low half, left/up for the high half) — this accepts a
+        plain signed value in [-15, 15] and maps it to that scheme:
+        positive -> 1-15, negative -> 16-30, 0 -> "no action" on that axis.
+        """
+        def to_split_range(v):
+            v = max(-15, min(15, int(round(v))))
+            if v == 0:
+                return 0
+            return v if v > 0 else 16 + (-v) - 1
+        e1 = self.build_E1(
+            param1_5bit=to_split_range(azimuth_nudge),
+            basic_command=self.E1_CMD_SEARCH,
+            param2=to_split_range(tilt_nudge),
+        )
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_turn_on_tracking(self) -> bytes:
+        """Lock onto whatever's currently under the search cross."""
+        e1 = self.build_E1(basic_command=self.E1_CMD_TURN_ON_TRACKING)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_switch_to_cross(self) -> bytes:
+        """Switch the active tracking point to the cross position."""
+        e1 = self.build_E1(basic_command=self.E1_CMD_SWITCH_TO_CROSS)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_ai_on(self) -> bytes:
+        """Turn AI-assisted recognition on."""
+        e1 = self.build_E1(basic_command=self.E1_CMD_AI_ON_OFF, param2=1)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_ai_off(self) -> bytes:
+        """Turn AI-assisted recognition off."""
+        e1 = self.build_E1(basic_command=self.E1_CMD_AI_ON_OFF, param2=0)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_ai_auto_track(self) -> bytes:
+        """Auto-track whatever the AI recognizes, without manually placing the cross first."""
+        e1 = self.build_E1(basic_command=self.E1_CMD_AI_AUTO_TRACK)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_set_template_size(self, template: int) -> bytes:
+        """template: one of the E1_TEMPLATE_* constants."""
+        e1 = self.build_E1(basic_command=template)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_set_tracking_velocity(self, deg_per_sec: float) -> bytes:
+        """
+        Absolute tracking (gimbal-chase) speed (ICD 3.11.1.4). 1 LSB =
+        0.2 deg/s, 0 = system default speed. Clamped to what a single
+        unsigned byte can hold (0-51 deg/s in 0.2 steps).
+        """
+        val = max(0, min(255, int(round(deg_per_sec / 0.2))))
+        e1 = self.build_E1(basic_command=self.E1_CMD_ADJUST_TRACK_VELOCITY, param2=val)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    def build_E1_set_tracking_velocity_coefficient(self, coefficient: float) -> bytes:
+        """
+        Scale the gimbal's own default tracking speed by a multiplier
+        instead of setting an absolute speed (ICD 3.11.1.3). 1 LSB =
+        0.1x, 0 = system default. E.g. 1.5 for 1.5x default speed.
+        """
+        val = max(0, min(255, int(round(coefficient / 0.1))))
+        e1 = self.build_E1(basic_command=self.E1_CMD_ADJUST_TRACK_VEL_COEF, param2=val)
+        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+
+    # ── E2: tracking command, infrequently used, 5 bytes ────────────────────
+    # ICD 3.12. Embedded via build_combined_A2_C2_E2(e2_bytes=...).
+    #   byte1    Extended Command1 (E2_CMD_*)
+    #   bytes2-3 Parameter1 (2 bytes) — meaning depends on command1
+    #   bytes4-5 Parameter2 (2 bytes) — meaning depends on command1
+
+    E2_CMD_CHAR_DISPLAY_ON          = 0x02
+    E2_CMD_CHAR_DISPLAY_OFF         = 0x03
+    E2_CMD_DISPLAY_CROSS            = 0x04
+    E2_CMD_HIDE_CROSS               = 0x05
+    E2_CMD_GPS_DISPLAY_ON           = 0x06
+    E2_CMD_GPS_DISPLAY_OFF          = 0x07
+    E2_CMD_GIMBAL_ANGLE_DISPLAY_ON  = 0x08
+    E2_CMD_GIMBAL_ANGLE_DISPLAY_OFF = 0x09
+    E2_CMD_TRACK_POINT_TO_POSITION  = 0x0A  # move tracking point to a pixel coordinate
+    E2_CMD_RECT_AREA_POINT_1        = 0x0B  # first corner of a rectangular tracking region
+    E2_CMD_RECT_AREA_POINT_2        = 0x0C  # second (opposite) corner
+
+    def build_E2(self, command1=0, param1_word=0, param2_word=0) -> bytes:
+        """
+        Build the raw 5-byte E2 extended-tracking-command payload, for
+        embedding via build_combined_A2_C2_E2(e2_bytes=...). Prefer the
+        specific build_E2_* convenience methods below.
+        """
+        return (bytes([command1 & 0xFF])
+                + self._word_to_bytes(param1_word & 0xFFFF)
+                + self._word_to_bytes(param2_word & 0xFFFF))
+
+    def build_E2_track_point_to_pixel(self, x_pixel: int, y_pixel: int) -> bytes:
+        """
+        Move the tracking point directly to a pixel coordinate (ICD
+        3.12.1.1) — signed integers, 1 LSB = 1 pixel, origin presumably
+        image center per the ICD's sign convention (left/up negative,
+        right/down positive is implied by the rectangular-area point
+        convention below, though not explicitly restated here). This is
+        the direct alternative to build_E1_search's cross-nudging.
+        """
+        e2 = self.build_E2(
+            command1=self.E2_CMD_TRACK_POINT_TO_POSITION,
+            param1_word=x_pixel & 0xFFFF,
+            param2_word=y_pixel & 0xFFFF,
+        )
+        return self.build_combined_A2_C2_E2(e2_bytes=e2)
+
+    def build_E2_rect_area_point1(self, x_pixel: int, y_pixel: int) -> bytes:
+        """First corner of a rectangular tracking region (ICD 3.12.1.2): left negative/right positive, up negative/down positive, 1 LSB = 1 pixel."""
+        e2 = self.build_E2(
+            command1=self.E2_CMD_RECT_AREA_POINT_1,
+            param1_word=x_pixel & 0xFFFF,
+            param2_word=y_pixel & 0xFFFF,
+        )
+        return self.build_combined_A2_C2_E2(e2_bytes=e2)
+
+    def build_E2_rect_area_point2(self, x_pixel: int, y_pixel: int) -> bytes:
+        """Second (opposite) corner of a rectangular tracking region."""
+        e2 = self.build_E2(
+            command1=self.E2_CMD_RECT_AREA_POINT_2,
+            param1_word=x_pixel & 0xFFFF,
+            param2_word=y_pixel & 0xFFFF,
+        )
+        return self.build_combined_A2_C2_E2(e2_bytes=e2)
+
+    def build_E2_display_cross(self, show: bool) -> bytes:
+        """Show/hide the center targeting cross overlay."""
+        cmd = self.E2_CMD_DISPLAY_CROSS if show else self.E2_CMD_HIDE_CROSS
+        e2 = self.build_E2(command1=cmd)
+        return self.build_combined_A2_C2_E2(e2_bytes=e2)
+
+    def build_E2_gimbal_angle_display(self, show: bool) -> bytes:
+        """Show/hide the gimbal angle overlay."""
+        cmd = self.E2_CMD_GIMBAL_ANGLE_DISPLAY_ON if show else self.E2_CMD_GIMBAL_ANGLE_DISPLAY_OFF
+        e2 = self.build_E2(command1=cmd)
+        return self.build_combined_A2_C2_E2(e2_bytes=e2)
+
     # ── Reply parsing (T1+F1+B1+D1 status frame, cmd_id 0x40) ──────────────
     # Per ICD 2.3(c), the payload replies with T1+F1+B1+D1 (41 bytes: T1=22,
     # F1=1, B1=6, D1=12) in response to a heartbeat or an A1+C1+E1(+S1)
@@ -684,6 +883,9 @@ class GimbalFrameBuilder:
                                             byte2 bit0) — compare against
                                             the previous call's value to
                                             tell a new reading from a repeat
+          tracking_sensor                — 'EO1'/'IR'/'EO2'/'unknown' (F1)
+          tracking_status                — 'stop'/'search'/'tracking'/
+                                            'lost'/'unknown' (F1)
         """
         result = {'checksum_ok': False, 'cmd_id': None}
         if len(raw) < 5 or raw[0:3] != GimbalFrameBuilder.HEADER:
@@ -709,6 +911,13 @@ class GimbalFrameBuilder:
         if len(data) < 41:
             result['error'] = 'T1+F1+B1+D1 data shorter than expected (41 bytes)'
             return result
+
+        # F1 (ICD 3.13) — 1 byte, sits right after T1's 22 bytes.
+        f1 = data[22]
+        tracking_sensor_code = f1 & 0x07
+        tracking_status_code = (f1 >> 3) & 0x03
+        result['tracking_sensor'] = {0: 'EO1', 1: 'IR', 2: 'EO2'}.get(tracking_sensor_code, 'unknown')
+        result['tracking_status'] = {0: 'stop', 1: 'search', 2: 'tracking', 3: 'lost'}.get(tracking_status_code, 'unknown')
 
         d1 = data[29:41]  # D1 is the final 12 bytes of the combined payload
         laser_range_new = bool(d1[1] & 0x01)    # D1 byte2, bit0

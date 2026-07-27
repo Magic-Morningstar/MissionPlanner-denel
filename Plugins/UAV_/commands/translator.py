@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # (ButtonState field name, rising-edge command, falling-edge command or None)
 EDGE_TABLE = [
-    ("arm",       ArmCommand,           DisarmCommand),
+    ("arm",       TrackingStartCommand,           TrackingStopCommand),
     ("rtl",       RTLCommand,           None),
     ("takeoff",   TakeoffCommand,       None),
     ("autoland",   LandCommand,         None),
