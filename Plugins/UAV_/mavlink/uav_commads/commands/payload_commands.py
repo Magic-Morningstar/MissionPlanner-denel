@@ -646,7 +646,7 @@ class Payload(BaseCommand):
         """Auto-track whatever the AI recognizes, without manually placing the cross first."""
         frame = self._gimbal_frames.build_E1_ai_auto_track()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
-
+  
     def initiate_TrackingSetTemplateSize_Raw(self, template: int, expect_response=False):
         """template: one of GimbalFrameBuilder.E1_TEMPLATE_* (32x32 small, 64x64 medium, 128x128 big, or self-adapting combinations)."""
         frame = self._gimbal_frames.build_E1_set_template_size(template)

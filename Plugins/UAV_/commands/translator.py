@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # (ButtonState field name, rising-edge command, falling-edge command or None)
 EDGE_TABLE = [
-    ("arm",       TrackingStartCommand,           TrackingStopCommand),
+    ("arm",       ArmCommand,           DisarmCommand),
     ("rtl",       RTLCommand,           None),
     ("takeoff",   TakeoffCommand,       None),
     ("autoland",   LandCommand,         None),
@@ -30,6 +30,15 @@ EDGE_TABLE = [
     ("manual",    LaserStartCommand,    LaserStopCommand),
     ("auto",      ContiousLaserStartCommand,      ContiousLaserStopCommand),
     ("emergency", EmergencyCommand,     None),
+    ("tracking",  TrackingStartCommand, TrackingStopCommand),
+    ("focus_in",         FocusPlusCommand,          FocusPlusFallCommand),
+    ("focus_out",        FocusMinusCommand,         FocusMinusFallCommand),
+    ("video_ip",         VideoSourceToggleCommand,  None),
+    ("laser_on_off",     LaserPowerOnCommand,       LaserPowerOffCommand),
+    ("laser_cont_mode",  LaserContModeStartCommand, LaserContModeStopCommand),
+    ("laser_single_mode",LaserSingleTriggerCommand, None),
+    ("ai_tracking",      AITrackingOnCommand,       AITrackingOffCommand),
+    ("joystick_track",   JoystickTrackModeOnCommand,JoystickTrackModeOffCommand),
 ]
 
 
@@ -42,6 +51,10 @@ class InputTranslator:
             arm=False, rtl=False, manual=False, takeoff=False,
             emergency=False, autoland = False, auto = False, speedup = False, speeddown = False, 
             zoomin = False, zoomout = False, widein = False, wideout = False,
+            tracking = False,
+            focus_in = False, focus_out = False, video_ip = False,
+            laser_on_off = False, laser_cont_mode = False, laser_single_mode = False,
+            ai_tracking = False, joystick_track = False,
         )
 
     def handle(self, obj):

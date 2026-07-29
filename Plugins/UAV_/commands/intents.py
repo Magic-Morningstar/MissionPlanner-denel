@@ -116,9 +116,65 @@ class ContiousLaserStartCommand(Command):
 @dataclass
 class TrackingStartCommand(Command):
     pass
- 
+
 @dataclass
 class TrackingStopCommand(Command):
+    pass
+
+@dataclass
+class FocusPlusCommand(Command):
+    pass
+
+@dataclass
+class FocusPlusFallCommand(Command):
+    pass
+
+@dataclass
+class FocusMinusCommand(Command):
+    pass
+
+@dataclass
+class FocusMinusFallCommand(Command):
+    pass
+
+@dataclass
+class VideoSourceToggleCommand(Command):
+    pass
+
+@dataclass
+class LaserPowerOnCommand(Command):
+    pass
+
+@dataclass
+class LaserPowerOffCommand(Command):
+    pass
+
+@dataclass
+class LaserContModeStartCommand(Command):
+    pass
+
+@dataclass
+class LaserContModeStopCommand(Command):
+    pass
+
+@dataclass
+class LaserSingleTriggerCommand(Command):
+    pass
+
+@dataclass
+class AITrackingOnCommand(Command):
+    pass
+
+@dataclass
+class AITrackingOffCommand(Command):
+    pass
+
+@dataclass
+class JoystickTrackModeOnCommand(Command):
+    pass
+
+@dataclass
+class JoystickTrackModeOffCommand(Command):
     pass
 
 # Reserved for when it's wired up — config.py already defines the bit,

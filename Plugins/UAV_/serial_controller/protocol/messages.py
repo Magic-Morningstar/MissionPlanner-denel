@@ -54,6 +54,15 @@ class ButtonState:
     zoomout: bool
     widein: bool
     wideout: bool
+    tracking: bool
+    focus_in: bool
+    focus_out: bool
+    video_ip: bool
+    laser_on_off: bool
+    laser_cont_mode: bool
+    laser_single_mode: bool
+    ai_tracking: bool
+    joystick_track: bool
 
 
 
@@ -76,6 +85,15 @@ class ButtonStateDecoder(Decoder):
             rtl          = bool((value >> 25) & 1),
             widein       = bool((value >> WIDE_IN_BIT) & 1),
             wideout      = bool((value >> WIDE_OUT_BIT) & 1),
+            tracking     = bool((value >> TRACKING_BIT) & 1),
+            focus_in         = bool((value >> FOCUS_IN_BIT) & 1),
+            focus_out        = bool((value >> FOCUS_OUT_BIT) & 1),
+            video_ip         = bool((value >> VIDEO_IP_BIT) & 1),
+            laser_on_off     = bool((value >> LASER_ON_OFF_BIT) & 1),
+            laser_cont_mode  = bool((value >> LASER_CONT_MODE_BIT) & 1),
+            laser_single_mode= bool((value >> LASER_SINGLE_MODE_BIT) & 1),
+            ai_tracking      = bool((value >> AI_TRACKING_ON_OFF_BIT) & 1),
+            joystick_track   = bool((value >> JOYSTICK_TRACK_BIT) & 1),
 
         )
 

@@ -51,6 +51,11 @@ class SystemState:
         self.FOCUSIN_PRESSED = False
         self.FOCUSOUT_PRESSED = False
 
+        # When True, Joystick2 nudges the tracking search cross instead
+        # of setting gimbal rate — set by JoystickTrackModeOnCommand /
+        # JoystickTrackModeOffCommand, read by AnalogInputHandler.
+        self.JOYSTICK_TRACK_MODE = False
+
 
         # ── Operation flags ───────────────────────────────────────────────────
         self.UAV_STATE_CHANGE = False

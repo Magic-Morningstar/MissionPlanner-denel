@@ -443,6 +443,75 @@ class UAVCommandSender(MavlinkWorker):
         if self.Payload:
             self.enqueue(self.Payload.initiate_TrackingStop_Raw)
 
+    def tracking_search(self, azimuth_nudge, tilt_nudge):
+        """Nudge the tracking search cross — used by AnalogInputHandler when JOYSTICK_TRACK_MODE is on."""
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_TrackingSearch_Raw, azimuth_nudge, tilt_nudge)
+
+    def ai_tracking_on(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_TrackingAIOn_Raw)
+
+    def ai_tracking_off(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_TrackingAIOff_Raw)
+
+    def joystick_track_mode_on(self):
+        """Joystick2 now nudges the tracking search cross instead of setting gimbal rate."""
+        if self.state:
+            self.state.JOYSTICK_TRACK_MODE = True
+            logger.info("Joystick track mode ON — Joystick2 now nudges the tracking cross.")
+
+    def joystick_track_mode_off(self):
+        """Joystick2 back to controlling gimbal rate."""
+        if self.state:
+            self.state.JOYSTICK_TRACK_MODE = False
+            logger.info("Joystick track mode OFF — Joystick2 back to gimbal rate control.")
+
+    # ── Video source toggle (BIT_VIDEO_IP) ──────────────────────────────────
+    # Simple two-way EO1<->IR toggle. Expand _video_source_cycle if you
+    # want PIP/EO2/Fusion included in the rotation too.
+
+    _video_source_cycle = None  # set lazily on first use, avoids importing GimbalFrameBuilder at class-definition time
+
+    def video_source_toggle(self):
+        if not self.Payload:
+            return
+        if self._video_source_cycle is None:
+            self._video_source_cycle = [GimbalFrameBuilder.VIDEO_EO1, GimbalFrameBuilder.VIDEO_IR_THERMAL]
+            self._video_source_index = 0
+        self._video_source_index = (self._video_source_index + 1) % len(self._video_source_cycle)
+        source = self._video_source_cycle[self._video_source_index]
+        self.enqueue(self.Payload.initiate_SwitchVideoSource_Raw, source)
+
+    # ── Laser: continuous mode (BIT_LASER_CONT_MODE) and single-shot trigger
+    # (BIT_LASER_SINGLE_MODE) — separate from laser power (BIT_LASER_ON_OFF,
+    # via laser_start/laser_stop above). Continuous mode reuses
+    # continous_laser_start/stop; single-shot needs its own background
+    # thread for the same reason start_laser_polling does — the query
+    # blocks waiting for a reply, and firing it directly in a
+    # register_handler (which runs on the main command loop) would stall
+    # everything else for up to a second.
+
+    def single_laser_range(self, response_timeout=1.0):
+        if not self.Payload:
+            return
+        threading.Thread(
+            target=self._single_laser_range_thread,
+            args=(response_timeout,),
+            daemon=True,
+            name="LaserSingleShot",
+        ).start()
+
+    def _single_laser_range_thread(self, response_timeout):
+        result = self.Payload.get_laser_range(response_timeout=response_timeout)
+        distance = result.get('laser_range_m')
+        if distance is not None:
+            logger.info(f"Laser single-shot range: {distance}m")
+            self._send_distance_to_gcs(distance)
+        elif 'error' in result:
+            logger.debug(f"Laser single-shot: {result['error']}")
+
     def start_takeoff(self):
         if self.takeoff_in_progress:
             logger.info("Takeoff already in progress — ignoring duplicate request.")
@@ -564,6 +633,93 @@ def _handle_tracking_start(sender, cmd):
 def _handle_tracking_stop(sender, cmd):
     logger.debug("TrackingStopCommand received")
     sender.tracking_stop()
+
+
+@register_handler(FocusPlusCommand)
+def _handle_focus_plus(sender, cmd):
+    logger.debug("FocusPlusCommand received")
+    sender.focus_plus_start()
+
+
+@register_handler(FocusPlusFallCommand)
+def _handle_focus_plus_fall(sender, cmd):
+    logger.debug("FocusPlusFallCommand received")
+    sender.focus_plus_stop()
+
+
+@register_handler(FocusMinusCommand)
+def _handle_focus_minus(sender, cmd):
+    logger.debug("FocusMinusCommand received")
+    sender.focus_minus_start()
+
+
+@register_handler(FocusMinusFallCommand)
+def _handle_focus_minus_fall(sender, cmd):
+    logger.debug("FocusMinusFallCommand received")
+    sender.focus_minus_stop()
+
+
+@register_handler(VideoSourceToggleCommand)
+def _handle_video_source_toggle(sender, cmd):
+    logger.debug("VideoSourceToggleCommand received")
+    sender.video_source_toggle()
+
+
+@register_handler(LaserPowerOnCommand)
+def _handle_laser_power_on(sender, cmd):
+    logger.debug("LaserPowerOnCommand received")
+    sender.laser_start()
+
+
+@register_handler(LaserPowerOffCommand)
+def _handle_laser_power_off(sender, cmd):
+    logger.debug("LaserPowerOffCommand received")
+    sender.laser_stop()
+
+
+@register_handler(LaserContModeStartCommand)
+def _handle_laser_cont_mode_start(sender, cmd):
+    logger.debug("LaserContModeStartCommand received")
+    sender.continous_laser_start()
+    sender.start_laser_polling()
+
+
+@register_handler(LaserContModeStopCommand)
+def _handle_laser_cont_mode_stop(sender, cmd):
+    logger.debug("LaserContModeStopCommand received")
+    sender.stop_laser_polling()
+    sender.continous_laser_stop()
+
+
+@register_handler(LaserSingleTriggerCommand)
+def _handle_laser_single_trigger(sender, cmd):
+    logger.debug("LaserSingleTriggerCommand received")
+    sender.single_laser_range()
+
+
+@register_handler(AITrackingOnCommand)
+def _handle_ai_tracking_on(sender, cmd):
+    logger.debug("AITrackingOnCommand received")
+    sender.ai_tracking_on()
+
+
+@register_handler(AITrackingOffCommand)
+def _handle_ai_tracking_off(sender, cmd):
+    logger.debug("AITrackingOffCommand received")
+    sender.ai_tracking_off()
+
+
+@register_handler(JoystickTrackModeOnCommand)
+def _handle_joystick_track_mode_on(sender, cmd):
+    logger.debug("JoystickTrackModeOnCommand received")
+    sender.joystick_track_mode_on()
+
+
+@register_handler(JoystickTrackModeOffCommand)
+def _handle_joystick_track_mode_off(sender, cmd):
+    logger.debug("JoystickTrackModeOffCommand received")
+    sender.joystick_track_mode_off()
+
 
 
 

@@ -29,6 +29,25 @@ WIDE_IN_BIT             = 12
 WIDE_OUT_BIT          = 13
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Object tracking — matches main.c's BIT_TRCKING_START_STOP (26). Firmware
+# also defines BIT_FOCUS_IN(14)/BIT_FOCUS_OUT(15), BIT_VIDEO_IP(21),
+# BIT_LASER_ON_OFF(22)/BIT_LASER_CONT_MODE(24)/BIT_LASER_SINGLE_MODE(25),
+# BIT_AI_TRACKING_ON_OFF(27), and BIT_JOYSTICK_TRACK(28) — all now wired
+# up below too.
+# ─────────────────────────────────────────────────────────────────────────────
+
+TRACKING_BIT            = 26
+FOCUS_IN_BIT             = 14
+FOCUS_OUT_BIT            = 15
+VIDEO_IP_BIT             = 21
+LASER_ON_OFF_BIT         = 22
+LASER_CONT_MODE_BIT      = 24
+LASER_SINGLE_MODE_BIT    = 25
+AI_TRACKING_ON_OFF_BIT   = 27
+JOYSTICK_TRACK_BIT       = 28
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Potentiometer value

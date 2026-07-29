@@ -45,7 +45,17 @@
 #define BIT_ZOOM_OUT            11
 #define BIT_WIDE_IN             12
 #define BIT_WIDE_OUT            13
+#define BIT_FOCUS_IN            14
+#define BIT_FOCUS_OUT           15
+#define BIT_VIDEO_IP            21
+#define BIT_LASER_ON_OFF        22
+#define BIT_LASER_CONT_MODE     24
+#define BIT_LASER_SINGLE_MODE   25
+#define BIT_TRCKING_START_STOP  26
+#define BIT_AI_TRACKING_ON_OFF  27
+#define BIT_JOYSTICK_TRACK      28
 #define DEBOUNCE_MS  15
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -117,7 +127,7 @@ static uint32_t lastZoomOutTime  = 0;
 static uint32_t lastWideInTime   = 0;
 static uint32_t lastWideOutTime  = 0;
 uint32_t USB_MESSAGE = 0x00;
-
+uint8_t menu_register = 0b001;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -232,12 +242,20 @@ void onARM_Button_Press(void)
     else                              USB_MESSAGE |= (1 << BIT_ARM);
 }
 
+void onMenuSelect_Button_Press(void)
+{
+    if (menu_register & (1 << 2)) menu_register = 0b001;
+    else                              menu_register = menu_register << 1 ;
+}
+
+
+/*
 void onManual_Button_Press(void)
 {
 
     if (USB_MESSAGE & (1 << BIT_MANUAL)) USB_MESSAGE &= ~(1 << BIT_MANUAL);
     else                                 USB_MESSAGE |= (1 << BIT_MANUAL);
-}
+}*/
 
 void onAuto_Button_Press(void)
 {
@@ -250,7 +268,7 @@ void onAutoLand_Button_Press(void)
     if (USB_MESSAGE & (1 << BIT_AUTO_LAND)) USB_MESSAGE &= ~(1 << BIT_AUTO_LAND);
     else                                     USB_MESSAGE |= (1 << BIT_AUTO_LAND);
 }
-
+/*
 void onSpeedUp_Button_Press(void)
 {
     if (USB_MESSAGE & (1 << BIT_SPEED_UP)) USB_MESSAGE &= ~(1 << BIT_SPEED_UP);
@@ -261,7 +279,86 @@ void onSpeedDown_Button_Press(void)
 {
     if (USB_MESSAGE & (1 << BIT_SPEED_DOWN)) USB_MESSAGE &= ~(1 << BIT_SPEED_DOWN);
     else                                      USB_MESSAGE |= (1 << BIT_SPEED_DOWN);
+}*/
+
+
+
+
+
+
+
+
+
+
+
+
+void onAI_JOYSTICK_TRACK_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_JOYSTICK_TRACK)) USB_MESSAGE &= ~(1 << BIT_JOYSTICK_TRACK);
+    else                                    USB_MESSAGE |= (1 << BIT_JOYSTICK_TRACK);
 }
+
+
+void onAI_TRACKING_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_AI_TRACKING_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_AI_TRACKING_ON_OFF);
+    else                                    USB_MESSAGE |= (1 << BIT_AI_TRACKING_ON_OFF);
+}
+
+
+void onTRACKING_START_STOP_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_TRCKING_START_STOP)) USB_MESSAGE &= ~(1 << BIT_TRCKING_START_STOP);
+    else                                    USB_MESSAGE |= (1 << BIT_TRCKING_START_STOP);
+}
+
+
+
+
+
+void onLASERSINGLE_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_LASER_SINGLE_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_SINGLE_MODE);
+    else                                    USB_MESSAGE |= (1 << BIT_LASER_SINGLE_MODE);
+}
+
+
+
+void onLASERCONT_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_LASER_CONT_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_CONT_MODE);
+    else                                    USB_MESSAGE |= (1 << BIT_LASER_CONT_MODE);
+}
+
+
+void onLASER_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_LASER_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_LASER_ON_OFF);
+    else                                    USB_MESSAGE |= (1 << BIT_LASER_ON_OFF);
+}
+
+
+
+void onVIDEOIP_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_VIDEO_IP)) USB_MESSAGE &= ~(1 << BIT_VIDEO_IP);
+    else                                    USB_MESSAGE |= (1 << BIT_VIDEO_IP);
+}
+
+
+void onFocusIn_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_FOCUS_IN)) USB_MESSAGE &= ~(1 << BIT_FOCUS_IN);
+    else                                    USB_MESSAGE |= (1 << BIT_FOCUS_IN);
+}
+
+void onFocusOut_Button_Press(void)
+{
+    if (USB_MESSAGE & (1 << BIT_FOCUS_OUT)) USB_MESSAGE &= ~(1 << BIT_FOCUS_OUT);
+    else                                      USB_MESSAGE |= (1 << BIT_FOCUS_OUT);
+}
+
+
 
 void onZoomIn_Button_Press(void)
 {
@@ -288,6 +385,64 @@ void onWideOUT_Button_Press(void)
     else                                    USB_MESSAGE |= (1 << BIT_WIDE_OUT);
 }
 
+
+
+static inline void Set_LED_From_Bit(uint8_t led_idx, uint32_t bit)
+{
+    HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin,
+                       (USB_MESSAGE & (1UL << bit)) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+static inline void Set_LED_Off(uint8_t led_idx)
+{
+    HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin, GPIO_PIN_RESET);
+}
+
+/* Shows what each button currently DOES in USB_MESSAGE, per the active menu.
+   leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] (Auto-Land)
+   is menu-independent since that poll_button() runs every iteration regardless. */
+static void Update_Button_LEDs(void)
+{
+    Set_LED_From_Bit(2, BIT_AUTO_LAND);
+
+    if (menu_register & (1 << 0))
+    {
+        Set_LED_From_Bit(7, BIT_FOCUS_IN);     /* GPIOD11 - YELLOW BTN */
+        Set_LED_From_Bit(9, BIT_FOCUS_OUT);    /* GPIOD13 - GREEN BTN  */
+        Set_LED_From_Bit(6, BIT_ZOOM_IN);      /* GPIOE14 - RED BTN    */
+        Set_LED_From_Bit(5, BIT_ZOOM_OUT);     /* GPIOE12 - BLUE BTN   */
+        Set_LED_From_Bit(8, BIT_WIDE_IN);      /* GPIOD12 - WHITE BTN  */
+        Set_LED_From_Bit(4, BIT_WIDE_OUT);     /* GPIOE10 - BLACK BTN  */
+    }
+    else if (menu_register & (1 << 1))
+    {
+        Set_LED_From_Bit(6, BIT_VIDEO_IP);
+        Set_LED_From_Bit(5, BIT_LASER_ON_OFF);
+        Set_LED_From_Bit(8, BIT_LASER_CONT_MODE);
+        Set_LED_From_Bit(4, BIT_LASER_SINGLE_MODE);
+        Set_LED_Off(7);   /* not used in this menu */
+        Set_LED_Off(9);
+    }
+    else if (menu_register & (1 << 2))
+    {
+        Set_LED_From_Bit(6, BIT_TRCKING_START_STOP);
+        Set_LED_From_Bit(5, BIT_JOYSTICK_TRACK);
+        Set_LED_Off(4);  /* not used in this menu */
+        Set_LED_Off(7);
+        Set_LED_Off(8);
+        Set_LED_Off(9);
+    }
+}
+
+/* Menu-status indicator: exactly one LED lit for the active menu
+   (menu_register is one-hot: 0b001 / 0b010 / 0b100).
+   Reuses leds[0], leds[1], leds[3] — call AFTER Test_Loop() so it wins. */
+static void Update_Menu_LEDs(void)
+{
+    HAL_GPIO_WritePin(leds[0].port, leds[0].pin, (menu_register & 0b001) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(leds[1].port, leds[1].pin, (menu_register & 0b010) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(leds[3].port, leds[3].pin, (menu_register & 0b100) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
 /* polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
 static void poll_button(GPIO_TypeDef *port, uint16_t pin, uint8_t active_low,
                          GPIO_PinState *lastState, uint32_t *lastTime,
@@ -368,7 +523,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
     {
-  	  Test_Loop();
+
+	    Update_Button_LEDs();
         pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
         pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
         pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
@@ -378,19 +534,36 @@ int main(void)
 
         /* Persistent MODE buttons: toggle/latch on press, stay set until pressed again. */
         /*                port      pin           active_low  lastState            lastTime            now  handler */
-        poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onARM_Button_Press);
-        poll_button(GPIOC, GPIO_PIN_7, 1, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
-        poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onAuto_Button_Press);
+        poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onMenuSelect_Button_Press);
+        //poll_button(GPIOC, GPIO_PIN_7, 1, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
+        //poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onFocusIn_Button_Press);
         poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
-
+        Update_Menu_LEDs();
         /* MOMENTARY command buttons: bit mirrors the pin, set only while held. */
         /*                  port      pin           active_low  bit */
-        set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_SPEED_UP);
-        set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_SPEED_DOWN);
-        set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_IN);
-        set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_ZOOM_OUT);
-        set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_WIDE_IN);
-        set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_WIDE_OUT);
+
+        if(menu_register& (1<<0)){
+			set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_FOCUS_IN);// YELLOW BTN
+			set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_FOCUS_OUT);// GREEN BTN
+			set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_IN);//RED BTN
+			set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_ZOOM_OUT);//BLUE BTN
+			set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_WIDE_IN);// WHITE BTN
+			set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_WIDE_OUT);// BLACK BTN
+        }
+
+        if(menu_register& (1<<1)){
+
+        	poll_button(GPIOE, GPIO_PIN_14, 1, &zoomInLastState,    &lastZoomInTime,    now, onVIDEOIP_Button_Press);// RED BTN
+        	poll_button(GPIOE, GPIO_PIN_12, 1, &zoomOutLastState,    &lastZoomOutTime,    now, onLASER_Button_Press);// BLUE BTN
+
+			poll_button(GPIOD, GPIO_PIN_12, 1, &wideInLastState,    &lastWideInTime,    now, onLASERCONT_Button_Press);// RED BTN
+			poll_button(GPIOE, GPIO_PIN_10, 1, &wideOutLastState,    &lastWideOutTime,    now, onLASERSINGLE_Button_Press);// RED BTN
+		}
+
+        if(menu_register& (1<<2)){
+        	poll_button(GPIOE, GPIO_PIN_14, 1, &zoomInLastState,    &lastZoomInTime,    now, onTRACKING_START_STOP_Button_Press);// RED BTN
+        	poll_button(GPIOE, GPIO_PIN_12, 1, &zoomOutLastState,    &lastZoomOutTime,    now, onAI_JOYSTICK_TRACK_Button_Press);// BLUE BTN
+		}
 
         counter++;
 
@@ -432,7 +605,14 @@ int main(void)
         }
 
 
+        if(menu_register& (1<<2)){
+			poll_button(GPIOE, GPIO_PIN_14, 1, &zoomInLastState,    &lastZoomInTime,    now, onTRACKING_START_STOP_Button_Press);
+			poll_button(GPIOE, GPIO_PIN_12, 1, &zoomOutLastState,    &lastZoomOutTime,    now, onAI_JOYSTICK_TRACK_Button_Press);
+		}
 
+		Update_Button_LEDs();   /* <-- add this line here */
+
+		counter++;
 
 
     }

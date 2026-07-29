@@ -13,8 +13,8 @@ ADC_MID = ADC_MAX / 2.0   # 2047.5
 # are both continuous/360° on this gimbal, so there is intentionally no
 # angle clamping anywhere in this file — only the RATE is controlled,
 # total travel is never capped.
-GIMBAL_YAW_DEG_PER_SEC   = 30.0   # azimuth
-GIMBAL_PITCH_DEG_PER_SEC = 30.0   # tilt
+GIMBAL_YAW_DEG_PER_SEC   = 45.0   # azimuth
+GIMBAL_PITCH_DEG_PER_SEC = 45.0   # tilt
 
 # Gimbal rate is now sent via Manual Speed Mode (set_gimbal_rate), not
 # repeated relative-angle deltas — see AnalogInputHandler's docstring.
@@ -134,6 +134,14 @@ class AnalogInputHandler:
         self._focus_plus_trigger  = _EdgeTrigger()
         self._focus_minus_trigger = _EdgeTrigger()
 
+        # Last tracking-search nudge sent, when JOYSTICK_TRACK_MODE is on
+        # (see _handle_joystick2_tracking_search) — send-on-change, same
+        # spirit as the gimbal-rate keepalive logic above, just without a
+        # keepalive since a search nudge is a discrete move, not a
+        # continuous rate the gimbal needs reminding of.
+        self._last_search_azimuth = 0
+        self._last_search_tilt    = 0
+
     def process(self):
         current_mode = self.state.get_UAV_Current_Mode
 
@@ -145,6 +153,10 @@ class AnalogInputHandler:
     # ── Joystick2 X/Y → gimbal yaw/pitch (Manual Speed Mode, send-on-change) ─
 
     def _handle_joystick2_gimbal(self):
+        if getattr(self.state, 'JOYSTICK_TRACK_MODE', False):
+            self._handle_joystick2_tracking_search()
+            return
+
         payload_joy_x = self.state.get_Payload_Joystick_X
         payload_joy_y = self.state.get_Payload_Joystick_Y
 
@@ -176,6 +188,35 @@ class AnalogInputHandler:
         self._last_sent_yaw_vel = yaw_vel
         self._last_sent_pitch_vel = pitch_vel
         self._last_gimbal_send_time = now
+
+    def _handle_joystick2_tracking_search(self):
+        """
+        When JOYSTICK_TRACK_MODE is on (set by JoystickTrackModeOnCommand,
+        BIT_JOYSTICK_TRACK in firmware), Joystick2 nudges the tracking
+        search cross (E1 Search command, ICD 3.11.1.1) instead of setting
+        gimbal rate. Reuses the same percent/deadzone mapping, scaled into
+        the search command's -15..+15 nudge range, and only sends on
+        change rather than every tick.
+        """
+        payload_joy_x = self.state.get_Payload_Joystick_X
+        payload_joy_y = self.state.get_Payload_Joystick_Y
+
+        x_percent = _percent_from_joystick(payload_joy_x)
+        y_percent = _percent_from_joystick(payload_joy_y)
+
+        azimuth_nudge = int(round((x_percent / 100.0) * 15))
+        tilt_nudge = int(round((y_percent / 100.0) * 15))
+
+        if azimuth_nudge == self._last_search_azimuth and tilt_nudge == self._last_search_tilt:
+            return
+        self._last_search_azimuth = azimuth_nudge
+        self._last_search_tilt = tilt_nudge
+
+        if azimuth_nudge == 0 and tilt_nudge == 0:
+            return  # centered — nothing to nudge
+
+        logger.info(f"Tracking search nudge: azimuth={azimuth_nudge:+d}, tilt={tilt_nudge:+d}")
+        self.sender.tracking_search(azimuth_nudge, tilt_nudge)
 
     # ── Joystick X/Y → mode-dependent control ────────────────────────────────
 
