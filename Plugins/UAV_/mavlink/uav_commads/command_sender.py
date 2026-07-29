@@ -438,10 +438,14 @@ class UAVCommandSender(MavlinkWorker):
     def tracking_start(self):
         if self.Payload:
             self.enqueue(self.Payload.initiate_TrackingTurnOn_Raw)
+        if self.state:
+            self.state.TRACKING_ENGAGED = True
 
     def tracking_stop(self):
         if self.Payload:
             self.enqueue(self.Payload.initiate_TrackingStop_Raw)
+        if self.state:
+            self.state.TRACKING_ENGAGED = False
 
     def tracking_search(self, azimuth_nudge, tilt_nudge):
         """Nudge the tracking search cross — used by AnalogInputHandler when JOYSTICK_TRACK_MODE is on."""
@@ -451,10 +455,14 @@ class UAVCommandSender(MavlinkWorker):
     def ai_tracking_on(self):
         if self.Payload:
             self.enqueue(self.Payload.initiate_TrackingAIOn_Raw)
+        if self.state:
+            self.state.AI_TRACKING_ENGAGED = True
 
     def ai_tracking_off(self):
         if self.Payload:
             self.enqueue(self.Payload.initiate_TrackingAIOff_Raw)
+        if self.state:
+            self.state.AI_TRACKING_ENGAGED = False
 
     def joystick_track_mode_on(self):
         """Joystick2 now nudges the tracking search cross instead of setting gimbal rate."""

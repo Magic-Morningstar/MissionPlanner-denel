@@ -153,6 +153,21 @@ class AnalogInputHandler:
     # ── Joystick2 X/Y → gimbal yaw/pitch (Manual Speed Mode, send-on-change) ─
 
     def _handle_joystick2_gimbal(self):
+        if getattr(self.state, 'TRACKING_ENGAGED', False) or getattr(self.state, 'AI_TRACKING_ENGAGED', False):
+            # Tracking (or AI tracking) owns the gimbal now. The keepalive
+            # below sends A1=SERVO_MANUAL_SPEED roughly every
+            # GIMBAL_RATE_KEEPALIVE_SEC regardless of stick position —
+            # including at zero velocity — which is a genuine servo-mode
+            # change away from SERVO_TRACKING_MODE, not a no-op. Left
+            # running, it forces the gimbal back out of tracking-follow
+            # on the very next keepalive tick, which is almost certainly
+            # why tracking previously appeared to "work for a second and
+            # let go." Suppressing entirely here — including search-cross
+            # nudging, since nudging a cross you're already locked onto
+            # doesn't do anything useful — until tracking_stop()/
+            # ai_tracking_off() clears these flags.
+            return
+
         if getattr(self.state, 'JOYSTICK_TRACK_MODE', False):
             self._handle_joystick2_tracking_search()
             return

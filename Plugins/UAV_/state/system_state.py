@@ -56,6 +56,15 @@ class SystemState:
         # JoystickTrackModeOffCommand, read by AnalogInputHandler.
         self.JOYSTICK_TRACK_MODE = False
 
+        # When either of these is True, AnalogInputHandler suppresses
+        # its joystick-rate gimbal keepalive entirely — that keepalive
+        # sends A1=SERVO_MANUAL_SPEED every ~0.3s regardless of stick
+        # position, which forces the gimbal servo out of tracking-follow
+        # mode almost immediately after tracking engages. Set/cleared by
+        # tracking_start/stop and ai_tracking_on/off in command_sender.py.
+        self.TRACKING_ENGAGED = False
+        self.AI_TRACKING_ENGAGED = False
+
 
         # ── Operation flags ───────────────────────────────────────────────────
         self.UAV_STATE_CHANGE = False

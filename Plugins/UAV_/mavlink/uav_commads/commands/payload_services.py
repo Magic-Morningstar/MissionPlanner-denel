@@ -663,10 +663,24 @@ class GimbalFrameBuilder:
         )
         return self.build_combined_A1_C1_E1(e1_bytes=e1)
 
-    def build_E1_turn_on_tracking(self) -> bytes:
-        """Lock onto whatever's currently under the search cross."""
+    def build_E1_turn_on_tracking(self, engage_servo_tracking: bool = True) -> bytes:
+        """
+        Lock onto whatever's currently under the search cross. By
+        default this ALSO sets A1 servo mode to SERVO_TRACKING_MODE
+        (0x06) in the same frame, so the gimbal servo explicitly enters
+        tracking-follow mode rather than relying on an assumed
+        side-effect of the E1 command alone. Pass
+        engage_servo_tracking=False to send E1 only, leaving A1 at
+        SERVO_NO_CHANGE, if you want to control servo mode separately.
+
+        This matters: previously A1 was left at NO_CHANGE here, and
+        nothing else ever explicitly requested tracking servo mode
+        either — so tracking-follow likely only ever happened as an
+        unconfirmed side-effect of E1 alone, if at all.
+        """
         e1 = self.build_E1(basic_command=self.E1_CMD_TURN_ON_TRACKING)
-        return self.build_combined_A1_C1_E1(e1_bytes=e1)
+        a1_mode = self.SERVO_TRACKING_MODE if engage_servo_tracking else None
+        return self.build_combined_A1_C1_E1(e1_bytes=e1, a1_servo_mode=a1_mode)
 
     def build_E1_switch_to_cross(self) -> bytes:
         """Switch the active tracking point to the cross position."""
