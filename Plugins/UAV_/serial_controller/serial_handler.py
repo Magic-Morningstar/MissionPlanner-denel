@@ -172,8 +172,8 @@ class SerialHandler(ConnectionManager):
                 self._frame_queue.task_done()
             except queue.Empty:
                 continue
-            except Exception as e:
-                logger.error(f"SerialProcessor error: {e}")
+            #except Exception as e:
+                #logger.error(f"SerialProcessor error: {e}")
 
         logger.info("SerialProcessor: stopped.")
 

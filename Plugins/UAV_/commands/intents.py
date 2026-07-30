@@ -42,7 +42,56 @@ class ManualModeCommand(Command):
 
 
 @dataclass
+class LandCommand(Command):
+    pass
+
+
+@dataclass
+class SpeedUpCommand(Command):
+    pass
+
+@dataclass
+class SpeedDownCommand(Command):
+    pass
+
+@dataclass
+class ZoomInCommand(Command):
+    pass
+
+@dataclass
+class ZoomOutCommand(Command):
+    pass
+
+@dataclass
+class ZoomInFallCommand(Command):
+    pass
+
+@dataclass
+class ZoomOutFallCommand(Command):
+    pass
+
+@dataclass
+class WideInCommand(Command):
+    pass
+
+@dataclass
+class WideOutCommand(Command):
+    pass
+
+@dataclass
+class WideInFallCommand(Command):
+    pass
+
+@dataclass
+class WideOutFallCommand(Command):
+    pass
+
+@dataclass
 class RTLCommand(Command):
+    pass
+
+@dataclass
+class AutoModeCommand(Command):
     pass
 
 
@@ -50,6 +99,83 @@ class RTLCommand(Command):
 class EmergencyCommand(Command):
     pass
 
+@dataclass
+class LaserStartCommand(Command):
+    pass
+
+@dataclass
+class LaserStopCommand(Command):
+    pass
+
+class ContiousLaserStopCommand(Command):
+    pass
+
+class ContiousLaserStartCommand(Command):
+    pass
+
+@dataclass
+class TrackingStartCommand(Command):
+    pass
+
+@dataclass
+class TrackingStopCommand(Command):
+    pass
+
+@dataclass
+class FocusPlusCommand(Command):
+    pass
+
+@dataclass
+class FocusPlusFallCommand(Command):
+    pass
+
+@dataclass
+class FocusMinusCommand(Command):
+    pass
+
+@dataclass
+class FocusMinusFallCommand(Command):
+    pass
+
+@dataclass
+class VideoSourceToggleCommand(Command):
+    pass
+
+@dataclass
+class LaserPowerOnCommand(Command):
+    pass
+
+@dataclass
+class LaserPowerOffCommand(Command):
+    pass
+
+@dataclass
+class LaserContModeStartCommand(Command):
+    pass
+
+@dataclass
+class LaserContModeStopCommand(Command):
+    pass
+
+@dataclass
+class LaserSingleTriggerCommand(Command):
+    pass
+
+@dataclass
+class AITrackingOnCommand(Command):
+    pass
+
+@dataclass
+class AITrackingOffCommand(Command):
+    pass
+
+@dataclass
+class JoystickTrackModeOnCommand(Command):
+    pass
+
+@dataclass
+class JoystickTrackModeOffCommand(Command):
+    pass
 
 # Reserved for when it's wired up — config.py already defines the bit,
 # it's just not acted on yet:

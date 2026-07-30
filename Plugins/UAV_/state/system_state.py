@@ -43,6 +43,29 @@ class SystemState:
         self._PAYLOAD_JOYSTICK_X = 0
         self._PAYLOAD_JOYSTICK_Y = 0
 
+        self.ZOOMIN_PRESSED = False
+        self.ZOOMING_IN = False
+        self.ZOOMING_OUT =False
+        self.ZOOMOUT_PRESSED = False
+
+        self.FOCUSIN_PRESSED = False
+        self.FOCUSOUT_PRESSED = False
+
+        # When True, Joystick2 nudges the tracking search cross instead
+        # of setting gimbal rate — set by JoystickTrackModeOnCommand /
+        # JoystickTrackModeOffCommand, read by AnalogInputHandler.
+        self.JOYSTICK_TRACK_MODE = False
+
+        # When either of these is True, AnalogInputHandler suppresses
+        # its joystick-rate gimbal keepalive entirely — that keepalive
+        # sends A1=SERVO_MANUAL_SPEED every ~0.3s regardless of stick
+        # position, which forces the gimbal servo out of tracking-follow
+        # mode almost immediately after tracking engages. Set/cleared by
+        # tracking_start/stop and ai_tracking_on/off in command_sender.py.
+        self.TRACKING_ENGAGED = False
+        self.AI_TRACKING_ENGAGED = False
+
+
         # ── Operation flags ───────────────────────────────────────────────────
         self.UAV_STATE_CHANGE = False
         self.ARMED_SWITCH = False
@@ -51,6 +74,12 @@ class SystemState:
         # ── Speed limits ──────────────────────────────────────────────────────
         self.MIN_SPEED = 5.0
         self.MAX_SPEED = 25.0
+
+        # ── Payload options ──────────────────────────────────────────────────────    
+        self.GIMBAL_ZOOM  = 0
+        self.GIMBAL_FOCUS = 0
+
+
 
         # ── Thread safety ─────────────────────────────────────────────────────
         self._lock = threading.Lock()

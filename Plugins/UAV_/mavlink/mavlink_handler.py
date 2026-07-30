@@ -21,7 +21,7 @@ class Mavlink_controller:
         )
 
     def connect(self):
-        self.state_poller.connect()
+        #self.state_poller.connect()
         self.command_sender.connect()
 
     def disconnect(self):

@@ -25,17 +25,14 @@ def find_stm_port():
 
     for port in ports:
         if port.vid == 0x0483 and port.pid == 0x5740:
-
             return port.device
 
     for port in ports:
         if port.vid == 0x1A86 and port.pid == 0x7523:
-
             return port.device
         
 
         if "USB-Enhanced-SERIAL-D" in port.description:
-
             return port.device
 
 

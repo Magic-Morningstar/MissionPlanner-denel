@@ -1,35 +1,67 @@
 # serial_controller/protocol/bit_definitions.py
 #
-# Bit layout for the incoming BUTTON_STATE register (message type 0x01).
-# This is the ONLY file allowed to know these numbers. Every other file —
-# on the serial side AND the mavlink side — must go through
-# serial_controller.protocol.messages.ButtonState and never touch a bit
-# position directly.
-#
-# Values below match the existing config.py assignments so firmware
-# doesn't need to change.
+# Shared bit definitions between STM32 firmware and Python.
+# This file is the single source of truth for all register layouts.
 
-ARM_BIT             = 4
-RTL_BIT             = 2
-MANUAL_BIT          = 11
-AUTOTAKEOFF_BIT     = 6
-EMERGENCY_BIT       = 0
-SYSTEM_CHECK_BIT    = 8
+# ─────────────────────────────────────────────────────────────────────────────
+# Incoming BUTTON_STATE register (message type 0x01)
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Reserved for future discrete commands — just pick the next free bit
-# and add a field to ButtonState in messages.py. Nothing else changes.
-# e.g. SYSTEM_ARM_OVERRIDE_BIT = 9
+ARM_BIT                 = 0
+ARM_STATUS_BIT          = 1
 
-# Pot value occupies its own byte, not a single bit
+AUTO_BIT                = 2
+AUTO_STATUS_BIT         = 3
+
+MANUAL_BIT              = 4
+MANUAL_STATUS_BIT       = 5
+
+AUTO_LAND_BIT           = 6  
+AUTO_LAND_STATUS_BIT    = 7
+
+SPEED_UP_BIT            = 8
+SPEED_DOWN_BIT          = 9
+
+ZOOM_IN_BIT             = 10
+ZOOM_OUT_BIT            = 11
+
+WIDE_IN_BIT             = 12
+WIDE_OUT_BIT          = 13
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Object tracking — matches main.c's BIT_TRCKING_START_STOP (26). Firmware
+# also defines BIT_FOCUS_IN(14)/BIT_FOCUS_OUT(15), BIT_VIDEO_IP(21),
+# BIT_LASER_ON_OFF(22)/BIT_LASER_CONT_MODE(24)/BIT_LASER_SINGLE_MODE(25),
+# BIT_AI_TRACKING_ON_OFF(27), and BIT_JOYSTICK_TRACK(28) — all now wired
+# up below too.
+# ─────────────────────────────────────────────────────────────────────────────
+
+TRACKING_BIT            = 26
+FOCUS_IN_BIT             = 14
+FOCUS_OUT_BIT            = 15
+VIDEO_IP_BIT             = 21
+LASER_ON_OFF_BIT         = 22
+LASER_CONT_MODE_BIT      = 24
+LASER_SINGLE_MODE_BIT    = 25
+AI_TRACKING_ON_OFF_BIT   = 27
+JOYSTICK_TRACK_BIT       = 28
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Potentiometer value
+# Stored in bits 16–23 (one byte)
+# ─────────────────────────────────────────────────────────────────────────────
+
 POT_VALUE_SHIFT = 16
 POT_VALUE_MASK  = 0xFF
 
-
-# ── Outgoing STATUS register (message type 0x10) ────────────────────────────
-# Separate bit space from the incoming register above — these are PC-owned
-# facts sent TO the STM32, not button state read FROM it. Kept in the same
-# file since both belong to the same "shared wire vocabulary" concern.
+# ─────────────────────────────────────────────────────────────────────────────
+# Outgoing STATUS register (message type 0x10)
+# These bits are sent FROM the PC TO the STM32
+# ─────────────────────────────────────────────────────────────────────────────
 
 STATUS_ARMED_BIT       = 0
 STATUS_MANUAL_MODE_BIT = 1
-STATUS_IS_FLYING_BIT   = 2
+STATUS_IS_FLYING_BIT   = 20
