@@ -95,17 +95,19 @@ static const button_t buttons[10] = {
 };
 
 static const led_t leds[10] = {
-    { GPIOB, GPIO_PIN_0  },
-    { GPIOB, GPIO_PIN_7  },
-    { GPIOF, GPIO_PIN_13 },
-    { GPIOF, GPIO_PIN_14 },
-    { GPIOF, GPIO_PIN_15 },
-    { GPIOE, GPIO_PIN_9  },
-    { GPIOE, GPIO_PIN_11 },
-    { GPIOE, GPIO_PIN_13 },
-	{ GPIOE, GPIO_PIN_8 },
-    { GPIOG, GPIO_PIN_9  },
-    { GPIOG, GPIO_PIN_14 },
+	{ GPIOF, GPIO_PIN_13 }, // Led0
+	{ GPIOE, GPIO_PIN_9  }, // Led1
+	{ GPIOE, GPIO_PIN_11 }, // Led2
+	{ GPIOF, GPIO_PIN_14 }, // Led3
+	{ GPIOF, GPIO_PIN_15 }, // Led4
+	{ GPIOG, GPIO_PIN_14 }, // Led5
+	{ GPIOG, GPIO_PIN_9  }, // Led6
+	{ GPIOE, GPIO_PIN_8 },  // Led7
+    { GPIOB, GPIO_PIN_0  }, // User Led 1
+    { GPIOB, GPIO_PIN_7  }, // User Led 2
+    { GPIOE, GPIO_PIN_13 }, // User Led 3
+
+
 };
 
 static uint8_t rx_byte;
@@ -385,6 +387,17 @@ void onWideOUT_Button_Press(void)
     else                                    USB_MESSAGE |= (1 << BIT_WIDE_OUT);
 }
 
+/* Menu-status indicator: exactly one LED lit for the active menu
+   (menu_register is one-hot: 0b001 / 0b010 / 0b100).
+   Reuses leds[0], leds[1], leds[3] — call AFTER Test_Loop() so it wins. */
+static void Update_Menu_LEDs(void)
+{
+    HAL_GPIO_WritePin(leds[0].port, leds[0].pin, (menu_register & 0b001) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(leds[1].port, leds[1].pin, (menu_register & 0b010) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(leds[3].port, leds[3].pin, (menu_register & 0b100) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+
 /* polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
 static void poll_button(GPIO_TypeDef *port, uint16_t pin, uint8_t active_low,
                          GPIO_PinState *lastState, uint32_t *lastTime,
@@ -515,7 +528,7 @@ int main(void)
     {
 
 
-
+	    Update_Menu_LEDs();
         pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
         pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
         pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
@@ -533,12 +546,12 @@ int main(void)
         /* MOMENTARY command buttons: bit mirrors the pin, set only while held. */
         /*                  port      pin           active_low  bit */
         if(menu_register& (1<<0)){
-			set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_FOCUS_IN);// YELLOW BTN
-			set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_FOCUS_OUT);// GREEN BTN
-			set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_IN);//RED BTN
-			set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_ZOOM_OUT);//BLUE BTN
-			set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_WIDE_IN);// WHITE BTN
-			set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_WIDE_OUT);// BLACK BTN
+			set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_WIDE_IN);  // BLACK BTN
+			set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_FOCUS_IN); //RED BTN
+			set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_OUT); // YELLOW BTN
+			set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_WIDE_OUT); // WHITE BTN
+			set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_FOCUS_OUT); //BLUE BTN
+			set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_ZOOM_IN);  // GREEN BTN
         }
 
         if(menu_register& (1<<1)){
@@ -547,7 +560,7 @@ int main(void)
         	poll_button(GPIOE, GPIO_PIN_12, 1, &zoomOutLastState,    &lastZoomOutTime,    now, onLASER_Button_Press);// BLUE BTN
 
 			poll_button(GPIOD, GPIO_PIN_12, 1, &wideInLastState,    &lastWideInTime,    now, onLASERCONT_Button_Press);// White BTN
-			poll_button(GPIOE, GPIO_PIN_10, 1, &wideOutLastState,    &lastwideOutTime,    now, onLASERSINGLE_Button_Press);// Black BTN
+			poll_button(GPIOE, GPIO_PIN_10, 1, &wideOutLastState,    &lastWideOutTime,    now, onLASERSINGLE_Button_Press);// Black BTN
 		}
 
         if(menu_register& (1<<2)){

@@ -752,30 +752,34 @@ def _handle_zoomoutFall(sender, cmd):
     sender.state.ZOOMOUT_PRESSED = False
 
 
-# "Wide" is the wire-level/button name for what State and
-# AnalogInputHandler call "Focus" — bridged here rather than renaming the
-# Command classes, so the change stays isolated to this one seam. Level
-# state now (was one-shot GIMBAL_FOCUS incrementing via the old, now
-# unused, payloadFocus() MAVLink-native path); AnalogInputHandler's
-# _EdgeTrigger turns these levels into start/stop calls to
-# focus_plus_start/stop and focus_minus_start/stop.
+# "Wide" was previously bridged to Focus here, based on an assumption
+# made before main.c was available — turns out "Wide" is FOV terminology
+# (the ICD itself names these commands FOV+/FOV-), and real focus now has
+# its own dedicated bits (14/15, FocusPlusCommand/FocusMinusCommand
+# above). Corrected: widein/wideout now drive FOV+/- directly, reusing
+# the existing zoom_out_start/stop and zoom_in_start/stop — FOV+ IS zoom
+# out and FOV- IS zoom in, per the ICD's own naming, not a separate
+# control. FOCUSIN_PRESSED/FOCUSOUT_PRESSED are no longer set by
+# anything as of this change — they're not removed from State, just
+# dormant, since the dedicated Focus bits now drive focus_plus/minus
+# directly rather than through that state-flag+polling path.
 
-@register_handler(WideInCommand)
-def _handle_widein(sender, cmd):
-    logger.info("CameraWideInCommand received")
-    sender.state.FOCUSIN_PRESSED = True
+@register_handler(FOVPlusCommand)
+def _handle_fov_plus(sender, cmd):
+    logger.info("FOVPlusCommand received")
+    sender.zoom_out_start()
 
-@register_handler(WideInFallCommand)
-def _handle_wideinFall(sender, cmd):
-    logger.info("CameraWideInFallCommand received")
-    sender.state.FOCUSIN_PRESSED = False
+@register_handler(FOVPlusFallCommand)
+def _handle_fov_plus_fall(sender, cmd):
+    logger.info("FOVPlusFallCommand received")
+    sender.zoom_out_stop()
 
-@register_handler(WideOutCommand)
-def _handle_wideout(sender, cmd):
-    logger.info("CameraWideOutCommand received")
-    sender.state.FOCUSOUT_PRESSED = True
+@register_handler(FOVMinusCommand)
+def _handle_fov_minus(sender, cmd):
+    logger.info("FOVMinusCommand received")
+    sender.zoom_in_start()
 
-@register_handler(WideOutFallCommand)
-def _handle_wideoutFall(sender, cmd):
-    logger.info("CameraWideOutFallCommand received")
-    sender.state.FOCUSOUT_PRESSED = False
+@register_handler(FOVMinusFallCommand)
+def _handle_fov_minus_fall(sender, cmd):
+    logger.info("FOVMinusFallCommand received")
+    sender.zoom_in_stop()
