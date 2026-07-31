@@ -437,6 +437,7 @@ class UAVCommandSender(MavlinkWorker):
 
     def tracking_start(self):
         if self.Payload:
+            self.enqueue(self.Payload.initiate_TrackingSetTemplateSize_Raw,128)
             self.enqueue(self.Payload.initiate_TrackingTurnOn_Raw)
         if self.state:
             self.state.TRACKING_ENGAGED = True
@@ -491,6 +492,24 @@ class UAVCommandSender(MavlinkWorker):
         self._video_source_index = (self._video_source_index + 1) % len(self._video_source_cycle)
         source = self._video_source_cycle[self._video_source_index]
         self.enqueue(self.Payload.initiate_SwitchVideoSource_Raw, source)
+
+    # ── IR polarity toggle (BIT_IR_POLARITY, "WHITE BTN") ───────────────────
+    # White-hot <-> black-hot toggle, same lazy-cycle pattern as
+    # video_source_toggle above.
+
+    _ir_polarity_cycle = None
+
+    def ir_polarity_toggle(self):
+        if not self.Payload:
+            return
+        if self._ir_polarity_cycle is None:
+            self._ir_polarity_cycle = [
+                self.Payload.initiate_IRPolarityWhiteHot_Raw,
+                self.Payload.initiate_IRPolarityBlackHot_Raw,
+            ]
+            self._ir_polarity_index = 0
+        self._ir_polarity_index = (self._ir_polarity_index + 1) % len(self._ir_polarity_cycle)
+        self.enqueue(self._ir_polarity_cycle[self._ir_polarity_index])
 
     # ── Laser: continuous mode (BIT_LASER_CONT_MODE) and single-shot trigger
     # (BIT_LASER_SINGLE_MODE) — separate from laser power (BIT_LASER_ON_OFF,
@@ -670,6 +689,28 @@ def _handle_focus_minus_fall(sender, cmd):
 @register_handler(VideoSourceToggleCommand)
 def _handle_video_source_toggle(sender, cmd):
     logger.debug("VideoSourceToggleCommand received")
+    sender.video_source_toggle()
+
+
+@register_handler(IRPolarityToggleCommand)
+def _handle_ir_polarity_toggle(sender, cmd):
+    logger.debug("IRPolarityToggleCommand received")
+    sender.ir_polarity_toggle()
+
+
+# "Image Sensor Change" (GREEN BTN, bit 7) reuses the same
+# video_source_toggle() as VIDEO_IP (bit 21) — "image sensor change" is
+# a strong naming match for switching between EO/IR sensors, which is
+# exactly what video_source_toggle() does, and it's plausible this is
+# actually THE real video-source button while VIDEO_IP(21) is something
+# else not yet correctly identified. Flagging this rather than silently
+# guessing — if VIDEO_IP turns out to mean something different (PIP?
+# network target?), this wiring should stay; if it turns out
+# VIDEO_IP was already correct and this is a distinct third thing,
+# this handler will need to change to call something else instead.
+@register_handler(ImageSensorChangeCommand)
+def _handle_image_sensor_change(sender, cmd):
+    logger.debug("ImageSensorChangeCommand received")
     sender.video_source_toggle()
 
 

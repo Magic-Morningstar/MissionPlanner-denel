@@ -39,6 +39,8 @@ EDGE_TABLE = [
     ("laser_single_mode",LaserSingleTriggerCommand, None),
     ("ai_tracking",      AITrackingOnCommand,       AITrackingOffCommand),
     ("joystick_track",   JoystickTrackModeOnCommand,JoystickTrackModeOffCommand),
+    ("ir_polarity",         IRPolarityToggleCommand,   None),
+    ("image_sensor_change", ImageSensorChangeCommand,  None),
 ]
 
 
@@ -55,6 +57,7 @@ class InputTranslator:
             focus_in = False, focus_out = False, video_ip = False,
             laser_on_off = False, laser_cont_mode = False, laser_single_mode = False,
             ai_tracking = False, joystick_track = False,
+            ir_polarity = False, image_sensor_change = False,
         )
 
     def handle(self, obj):

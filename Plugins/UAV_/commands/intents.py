@@ -177,6 +177,14 @@ class JoystickTrackModeOnCommand(Command):
 class JoystickTrackModeOffCommand(Command):
     pass
 
+@dataclass
+class IRPolarityToggleCommand(Command):
+    pass
+
+@dataclass
+class ImageSensorChangeCommand(Command):
+    pass
+
 # Reserved for when it's wired up — config.py already defines the bit,
 # it's just not acted on yet:
 #

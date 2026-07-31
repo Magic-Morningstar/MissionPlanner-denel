@@ -16,8 +16,27 @@ AUTO_STATUS_BIT         = 3
 MANUAL_BIT              = 4
 MANUAL_STATUS_BIT       = 5
 
-AUTO_LAND_BIT           = 6  
-AUTO_LAND_STATUS_BIT    = 7
+# FIXED: these were previously (wrongly) AUTO_LAND_BIT/AUTO_LAND_STATUS_BIT
+# for the INCOMING register. main.c confirms bits 6/7 are actually
+# BIT_IR_POLARITY ("WHITE BTN") and BIT_IMAGE_SENSOR_CHANGE ("GREEN
+# BTN") — completely unrelated to autoland. With the old assumption,
+# pressing the White (IR polarity) button would ALSO have fired
+# LandCommand, since `autoland` decoded from this same bit. There is no
+# dedicated autoland bit anywhere in the current main.c incoming bit
+# list — see messages.py for how `autoland` is now handled (hardcoded
+# False, not read from a bit that belongs to something else).
+IR_POLARITY_BIT          = 6   # "WHITE BTN"
+IMAGE_SENSOR_CHANGE_BIT   = 7   # "GREEN BTN"
+
+# NOTE: AUTO_LAND_STATUS_BIT below is for the OUTGOING status register
+# (PC -> STM32, message type 0x10) — a completely separate 32-bit value
+# from the incoming BUTTON_STATE register above. It coincidentally also
+# equals 7, but that's unrelated to IMAGE_SENSOR_CHANGE_BIT; kept as-is
+# so StatusUpdateDecoder (further down / in messages.py) keeps working
+# unchanged. Not touching the outgoing side's bit-numbering confusion
+# (it separately also has STATUS_ARMED_BIT etc. that aren't consistently
+# used) since that's a different, unrequested problem.
+AUTO_LAND_STATUS_BIT     = 7
 
 SPEED_UP_BIT            = 8
 SPEED_DOWN_BIT          = 9

@@ -37,8 +37,8 @@
 #define BIT_AUTO_STATUS         3
 #define BIT_MANUAL              4
 #define BIT_MANUAL_STATUS       5
-#define BIT_AUTO_LAND           6
-#define BIT_AUTO_LAND_STATUS    7
+#define BIT_IR_POLARITY         6
+#define BIT_IMAGE_SENSOR_CHANGE 7
 #define BIT_SPEED_UP            8
 #define BIT_SPEED_DOWN          9
 #define BIT_ZOOM_IN             10
@@ -110,6 +110,35 @@ static const led_t leds[10] = {
 
 };
 
+/* Debounce state, one struct per physical pin — indexed to match buttons[].
+   raw_last/change_time track raw bounce; stable is only updated once a
+   reading has held steady for DEBOUNCE_MS. edge_last is separate so
+   Poll_Debounced() can detect a fresh idle->pressed transition regardless
+   of how many different menus bind that same physical pin to a handler. */
+typedef struct {
+    GPIO_PinState raw_last;
+    GPIO_PinState stable;
+    GPIO_PinState edge_last;
+    uint32_t      change_time;
+} debounce_state_t;
+
+/* Initial value must match each pin's electrical idle level
+   (active_low -> idle reads SET, active_high -> idle reads RESET),
+   or the first loop iteration could see a phantom press. */
+static debounce_state_t btn_db[10] = {
+    { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 0: PF12 active_low  */
+    { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 1: PD14 active_low  */
+    { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 2: PD15 active_low  */
+    { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 3: PC7  active_low  */
+    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 4: PE10 active_high */
+    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 5: PE12 active_high */
+    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 6: PE14 active_high */
+    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 7: PD11 active_high */
+    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 8: PD12 active_high */
+    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 9: PD13 active_high */
+};
+static debounce_state_t menuBtnDb = { GPIO_PIN_SET, GPIO_PIN_SET, GPIO_PIN_SET, 0 }; /* PA6, pull-up */
+
 static uint8_t rx_byte;
 #define TLV_SYNC 0xAA
 #define TLV_END  0x55
@@ -118,16 +147,6 @@ static uint8_t rx_byte;
 #define TLV_TYPE_BUTTON_STATE 0x01
 #define TLV_TYPE_JOYSTICK     0x02
 #define TLV_TYPE_JOYSTICK2    0x03
-static uint32_t lastArmTime      = 0;
-static uint32_t lastManualTime   = 0;
-static uint32_t lastAutoTime     = 0;
-static uint32_t lastAutoLandTime = 0;
-static uint32_t lastSpeedUpTime  = 0;
-static uint32_t lastSpeedDownTime= 0;
-static uint32_t lastZoomInTime   = 0;
-static uint32_t lastZoomOutTime  = 0;
-static uint32_t lastWideInTime   = 0;
-static uint32_t lastWideOutTime  = 0;
 uint32_t USB_MESSAGE = 0x00;
 uint8_t menu_register = 0b001;
 /* USER CODE END PV */
@@ -221,21 +240,42 @@ uint16_t ADC_Read_Channel(uint32_t channel)
 }
 
 
-static inline void set_bit_from_pin(GPIO_TypeDef *port, uint16_t pin,
-                                     uint8_t active_low, uint32_t bit)
+/* Samples one physical pin's raw state and updates its debounced "stable"
+   value once the raw reading has held steady for DEBOUNCE_MS. Call for
+   every pin, every loop iteration, regardless of which menu is active —
+   that's what keeps debounce state from going stale across menu switches. */
+static void Debounce_Update(GPIO_TypeDef *port, uint16_t pin, debounce_state_t *db, uint32_t now)
 {
-    GPIO_PinState state = HAL_GPIO_ReadPin(port, pin);
-    uint8_t pressed = active_low ? (state == GPIO_PIN_RESET) : (state == GPIO_PIN_SET);
-
-    if (pressed) USB_MESSAGE |= (1UL << bit);
-    else         USB_MESSAGE &= ~(1UL << bit);
+    GPIO_PinState raw = HAL_GPIO_ReadPin(port, pin);
+    if (raw != db->raw_last) {
+        db->raw_last = raw;
+        db->change_time = now;
+    } else if ((now - db->change_time) >= DEBOUNCE_MS) {
+        db->stable = raw;
+    }
 }
 
-static inline uint8_t debounce_check(uint32_t *last_time, uint32_t now)
+/* Runs Debounce_Update for every physical button pin plus the menu-select
+   button. Call this once, at the very top of the main loop. */
+static void Debounce_Sample_All(uint32_t now)
 {
-    if (now - *last_time < DEBOUNCE_MS) return 0;
-    *last_time = now;
-    return 1;
+    Debounce_Update(MASTER_BTN_PORT, MASTER_BTN_PIN, &menuBtnDb, now);
+    for (int i = 0; i < 10; i++) {
+        Debounce_Update(buttons[i].port, buttons[i].pin, &btn_db[i], now);
+    }
+}
+
+static inline uint8_t Debounced_Is_Pressed(const debounce_state_t *db, uint8_t active_low)
+{
+    return active_low ? (db->stable == GPIO_PIN_RESET) : (db->stable == GPIO_PIN_SET);
+}
+
+/* Replaces set_bit_from_pin(): mirrors the debounced (not raw) level into
+   USB_MESSAGE, so momentary/held buttons no longer flicker on bounce. */
+static inline void Set_Bit_From_Debounced(debounce_state_t *db, uint8_t active_low, uint32_t bit)
+{
+    if (Debounced_Is_Pressed(db, active_low)) USB_MESSAGE |= (1UL << bit);
+    else                                       USB_MESSAGE &= ~(1UL << bit);
 }
 
 void onARM_Button_Press(void)
@@ -265,11 +305,7 @@ void onAuto_Button_Press(void)
     else                                USB_MESSAGE |= (1 << BIT_AUTO);
 }
 
-void onAutoLand_Button_Press(void)
-{
-    if (USB_MESSAGE & (1 << BIT_AUTO_LAND)) USB_MESSAGE &= ~(1 << BIT_AUTO_LAND);
-    else                                     USB_MESSAGE |= (1 << BIT_AUTO_LAND);
-}
+
 /*
 void onSpeedUp_Button_Press(void)
 {
@@ -288,14 +324,9 @@ void onSpeedDown_Button_Press(void)
 
 
 
-
-
-
-
-
-
 void onAI_JOYSTICK_TRACK_Button_Press(void)
 {
+	if (USB_MESSAGE & (1 << BIT_AI_TRACKING_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_AI_TRACKING_ON_OFF);
     if (USB_MESSAGE & (1 << BIT_JOYSTICK_TRACK)) USB_MESSAGE &= ~(1 << BIT_JOYSTICK_TRACK);
     else                                    USB_MESSAGE |= (1 << BIT_JOYSTICK_TRACK);
 }
@@ -303,6 +334,7 @@ void onAI_JOYSTICK_TRACK_Button_Press(void)
 
 void onAI_TRACKING_Button_Press(void)
 {
+	if (USB_MESSAGE & (1 << BIT_JOYSTICK_TRACK)) USB_MESSAGE &= ~(1 << BIT_JOYSTICK_TRACK);
     if (USB_MESSAGE & (1 << BIT_AI_TRACKING_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_AI_TRACKING_ON_OFF);
     else                                    USB_MESSAGE |= (1 << BIT_AI_TRACKING_ON_OFF);
 }
@@ -320,6 +352,7 @@ void onTRACKING_START_STOP_Button_Press(void)
 
 void onLASERSINGLE_Button_Press(void)
 {
+	if (USB_MESSAGE & (1 << BIT_LASER_CONT_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_CONT_MODE);
     if (USB_MESSAGE & (1 << BIT_LASER_SINGLE_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_SINGLE_MODE);
     else                                    USB_MESSAGE |= (1 << BIT_LASER_SINGLE_MODE);
 }
@@ -328,6 +361,7 @@ void onLASERSINGLE_Button_Press(void)
 
 void onLASERCONT_Button_Press(void)
 {
+	if (USB_MESSAGE & (1 << BIT_LASER_SINGLE_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_SINGLE_MODE);
     if (USB_MESSAGE & (1 << BIT_LASER_CONT_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_CONT_MODE);
     else                                    USB_MESSAGE |= (1 << BIT_LASER_CONT_MODE);
 }
@@ -398,20 +432,22 @@ static void Update_Menu_LEDs(void)
 }
 
 
-/* polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
-static void poll_button(GPIO_TypeDef *port, uint16_t pin, uint8_t active_low,
-                         GPIO_PinState *lastState, uint32_t *lastTime,
-                         uint32_t now, void (*onPress)(void))
+/* Replaces poll_button(): fires onPress exactly once on the debounced
+   idle->pressed transition. edge_last is tracked per physical pin (not
+   per menu binding), so switching menus mid-press can't ghost-fire a
+   different menu's handler, and multiple menus sharing one pin never
+   fight over separate lastState variables the way the old code did.
+   polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
+static void Poll_Debounced(debounce_state_t *db, uint8_t active_low, void (*onPress)(void))
 {
-    GPIO_PinState nowState     = HAL_GPIO_ReadPin(port, pin);
     GPIO_PinState pressedState = active_low ? GPIO_PIN_RESET : GPIO_PIN_SET;
     GPIO_PinState idleState    = active_low ? GPIO_PIN_SET   : GPIO_PIN_RESET;
 
-    if (nowState == pressedState && *lastState == idleState)
+    if (db->stable == pressedState && db->edge_last == idleState)
     {
-        if (debounce_check(lastTime, now)) onPress();
+        onPress();
     }
-    *lastState = nowState;
+    db->edge_last = db->stable;
 }
 
 static inline void Set_LED_From_Bit(uint8_t led_idx, uint32_t bit)
@@ -426,38 +462,37 @@ static inline void Set_LED_Off(uint8_t led_idx)
 }
 
 /* Shows what each button currently DOES in USB_MESSAGE, per the active menu.
-   leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] (Auto-Land)
-   is menu-independent since that poll_button() runs every iteration regardless. */
+   leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] is currently
+   unused (Auto-Land was removed) and free for whatever goes there next. */
 static void Update_Button_LEDs(void)
 {
-    Set_LED_From_Bit(2, BIT_AUTO_LAND);
-
+    /* fixed pin->LED pairing across menus: E10=4  E12=5  E14=6  D11=7  D12=8  D13=9 */
     if (menu_register & (1 << 0))
     {
-        Set_LED_From_Bit(7, BIT_FOCUS_IN);     /* GPIOD11 - YELLOW BTN */
-        Set_LED_From_Bit(9, BIT_FOCUS_OUT);    /* GPIOD13 - GREEN BTN  */
-        Set_LED_From_Bit(6, BIT_ZOOM_IN);      /* GPIOE14 - RED BTN    */
-        Set_LED_From_Bit(5, BIT_ZOOM_OUT);     /* GPIOE12 - BLUE BTN   */
-        Set_LED_From_Bit(8, BIT_WIDE_IN);      /* GPIOD12 - WHITE BTN  */
-        Set_LED_From_Bit(4, BIT_WIDE_OUT);     /* GPIOE10 - BLACK BTN  */
+        Set_LED_From_Bit(7, BIT_WIDE_IN);      /* GPIOD11 - BLACK BTN */
+        Set_LED_From_Bit(9, BIT_FOCUS_IN);     /* GPIOD13 - RED BTN   */
+        Set_LED_From_Bit(6, BIT_ZOOM_OUT);     /* GPIOE14 - YELLOW BTN*/
+        Set_LED_From_Bit(5, BIT_WIDE_OUT);     /* GPIOE12 - WHITE BTN */
+        Set_LED_From_Bit(8, BIT_FOCUS_OUT);    /* GPIOD12 - BLUE BTN  */
+        Set_LED_From_Bit(4, BIT_ZOOM_IN);      /* GPIOE10 - GREEN BTN */
     }
     else if (menu_register & (1 << 1))
     {
-        Set_LED_From_Bit(6, BIT_VIDEO_IP);
-        Set_LED_From_Bit(5, BIT_LASER_ON_OFF);
-        Set_LED_From_Bit(8, BIT_LASER_CONT_MODE);
-        Set_LED_From_Bit(4, BIT_LASER_SINGLE_MODE);
-        Set_LED_Off(7);   /* not used in this menu */
+        Set_LED_From_Bit(6, BIT_VIDEO_IP);             /* GPIOE14 - Yellow BTN */
+        Set_LED_From_Bit(4, BIT_IMAGE_SENSOR_CHANGE);  /* GPIOE10 - GREEN BTN  */
+        Set_LED_From_Bit(5, BIT_IR_POLARITY);          /* GPIOE12 - WHITE BTN  */
+        Set_LED_Off(7);
+        Set_LED_Off(8);
         Set_LED_Off(9);
     }
     else if (menu_register & (1 << 2))
     {
-        Set_LED_From_Bit(6, BIT_TRCKING_START_STOP);
-        Set_LED_From_Bit(5, BIT_JOYSTICK_TRACK);
-        Set_LED_Off(4);  /* not used in this menu */
-        Set_LED_Off(7);
-        Set_LED_Off(8);
-        Set_LED_Off(9);
+        Set_LED_From_Bit(6, BIT_TRCKING_START_STOP);   /* GPIOE14 - YELLOW BTN */
+        Set_LED_From_Bit(5, BIT_JOYSTICK_TRACK);       /* GPIOE12 - WHITE BTN  */
+        Set_LED_From_Bit(8, BIT_AI_TRACKING_ON_OFF);   /* GPIOD12 - BLUE BTN   */
+        Set_LED_From_Bit(4, BIT_LASER_ON_OFF);         /* GPIOE10 - GREEN BTN  */
+        Set_LED_From_Bit(7, BIT_LASER_CONT_MODE);      /* GPIOD11 - BLACK BTN  */
+        Set_LED_From_Bit(9, BIT_LASER_SINGLE_MODE);    /* GPIOD13 - BLUE BTN   */
     }
 }
 
@@ -503,16 +538,6 @@ int main(void)
   uint16_t pot1 = 0, pot2 = 0, pot3 = 0, pot4 = 0;
 
 
-  static GPIO_PinState armLastState       = GPIO_PIN_SET;    /* PA6  pull-up   */
-  static GPIO_PinState manualLastState    = GPIO_PIN_RESET;  /* PF12 pull-down */
-  static GPIO_PinState autoLastState      = GPIO_PIN_SET;    /* PD14 pull-up   */
-  static GPIO_PinState autoLandLastState  = GPIO_PIN_SET;    /* PD15 pull-up   */
-  static GPIO_PinState speedUpLastState   = GPIO_PIN_RESET;  /* PE10 pull-down */
-  static GPIO_PinState speedDownLastState = GPIO_PIN_RESET;  /* PE12 pull-down */
-  static GPIO_PinState zoomInLastState    = GPIO_PIN_RESET;  /* PE14 pull-down */
-  static GPIO_PinState zoomOutLastState   = GPIO_PIN_RESET;  /* PD11 pull-down */
-  static GPIO_PinState wideInLastState    = GPIO_PIN_RESET;  /* PD12 pull-down */
-  static GPIO_PinState wideOutLastState   = GPIO_PIN_RESET;  /* PD13 pull-down */
   static uint32_t last_usb_send = 0;
   static uint16_t avg1 = 0;
   static uint16_t avg2 = 0;
@@ -528,51 +553,60 @@ int main(void)
     {
 
 
-	    Update_Menu_LEDs();
+	    uint32_t now = HAL_GetTick();
+        Debounce_Sample_All(now);   /* samples every physical pin, every iteration, no matter the menu */
+
+        Update_Menu_LEDs();
         pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
         pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
         pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
         pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
 
-        uint32_t now = HAL_GetTick();
-
         /* Persistent MODE buttons: toggle/latch on press, stay set until pressed again. */
-        /*                port      pin           active_low  lastState            lastTime            now  handler */
-        poll_button(GPIOA, GPIO_PIN_6,  1, &armLastState,       &lastArmTime,       now, onMenuSelect_Button_Press);
-        //poll_button(GPIOC, GPIO_PIN_7, 1, &manualLastState,    &lastManualTime,    now, onManual_Button_Press);
-        //poll_button(GPIOD, GPIO_PIN_14, 1, &autoLastState,      &lastAutoTime,      now, onFocusIn_Button_Press);
-        poll_button(GPIOD, GPIO_PIN_15, 1, &autoLandLastState,  &lastAutoLandTime,  now, onAutoLand_Button_Press);
+        Poll_Debounced(&menuBtnDb, 1, onMenuSelect_Button_Press);   /* PA6, pull-up, active-low */
 
-        /* MOMENTARY command buttons: bit mirrors the pin, set only while held. */
-        /*                  port      pin           active_low  bit */
+        /* MOMENTARY command buttons: bit mirrors the debounced pin level, set only while held. */
+        /*                       btn_db[i]     active_low             bit */
         if(menu_register& (1<<0)){
-			set_bit_from_pin(GPIOD, GPIO_PIN_11, 0, BIT_WIDE_IN);  // BLACK BTN
-			set_bit_from_pin(GPIOD, GPIO_PIN_13, 0, BIT_FOCUS_IN); //RED BTN
-			set_bit_from_pin(GPIOE, GPIO_PIN_14, 0, BIT_ZOOM_OUT); // YELLOW BTN
-			set_bit_from_pin(GPIOE, GPIO_PIN_12, 0, BIT_WIDE_OUT); // WHITE BTN
-			set_bit_from_pin(GPIOD, GPIO_PIN_12, 0, BIT_FOCUS_OUT); //BLUE BTN
-			set_bit_from_pin(GPIOE, GPIO_PIN_10, 0, BIT_ZOOM_IN);  // GREEN BTN
+        	/*Zoom*/
+        	Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, BIT_ZOOM_IN);   // GPIOE10 - GREEN BTN
+        	Set_Bit_From_Debounced(&btn_db[6], buttons[6].active_low, BIT_ZOOM_OUT);  // GPIOE14 - YELLOW BTN
+
+
+        	/*FOV*/
+			Set_Bit_From_Debounced(&btn_db[7], buttons[7].active_low, BIT_WIDE_IN);   // GPIOD11 - BLACK BTN
+			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, BIT_WIDE_OUT);  // GPIOE12 - WHITE BTN
+
+			/*FOCUS*/
+			Set_Bit_From_Debounced(&btn_db[9], buttons[9].active_low, BIT_FOCUS_IN);  // GPIOD13 - RED BTN
+			Set_Bit_From_Debounced(&btn_db[8], buttons[8].active_low, BIT_FOCUS_OUT); // GPIOD12 - BLUE BTN
+
         }
 
         if(menu_register& (1<<1)){
-
-        	poll_button(GPIOE, GPIO_PIN_14, 1, &zoomInLastState,    &lastZoomInTime,    now, onVIDEOIP_Button_Press);// RED BTN
-        	poll_button(GPIOE, GPIO_PIN_12, 1, &zoomOutLastState,    &lastZoomOutTime,    now, onLASER_Button_Press);// BLUE BTN
-
-			poll_button(GPIOD, GPIO_PIN_12, 1, &wideInLastState,    &lastWideInTime,    now, onLASERCONT_Button_Press);// White BTN
-			poll_button(GPIOE, GPIO_PIN_10, 1, &wideOutLastState,    &lastWideOutTime,    now, onLASERSINGLE_Button_Press);// Black BTN
+        	/*Video*/
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onVIDEOIP_Button_Press);          // GPIOE14 - Yellow BTN
+			Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, BIT_IMAGE_SENSOR_CHANGE); // GPIOE10 - GREEN BTN
+			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, BIT_IR_POLARITY);         // GPIOE12 - WHITE BTN
 		}
 
         if(menu_register& (1<<2)){
-        	poll_button(GPIOE, GPIO_PIN_14, 1, &zoomInLastState,    &lastZoomInTime,    now, onTRACKING_START_STOP_Button_Press);// RED BTN
-        	poll_button(GPIOE, GPIO_PIN_12, 1, &zoomOutLastState,    &lastZoomOutTime,    now, onAI_JOYSTICK_TRACK_Button_Press);// BLUE BTN
+        	/*Tracking*/
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onTRACKING_START_STOP_Button_Press); // GPIOE14 - YELLOW BTN
+        	Poll_Debounced(&btn_db[5], buttons[5].active_low, onAI_JOYSTICK_TRACK_Button_Press);    // GPIOE12 - WHITE BTN
+        	Poll_Debounced(&btn_db[8], buttons[8].active_low, onAI_TRACKING_Button_Press);          // GPIOD12 - BLUE BTN
+
+        	/*Laser*/
+        	Poll_Debounced(&btn_db[4], buttons[4].active_low, onLASER_Button_Press);                // GPIOE10 - GREEN BTN
+			Poll_Debounced(&btn_db[7], buttons[7].active_low, onLASERCONT_Button_Press);            // GPIOD11 - BLACK BTN
+			Poll_Debounced(&btn_db[9], buttons[9].active_low, onLASERSINGLE_Button_Press);          // GPIOD13 - BLUE BTN
 		}
-        Update_Button_LEDs();   /* <-- add this line here */
+        Update_Button_LEDs();
 
 
         counter++;
 
-        if (counter >= 16)
+        if (counter >= 17)
         {
             avg1 = pot1 / 16;
             avg2 = pot2 / 16;

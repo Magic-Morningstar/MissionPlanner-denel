@@ -63,6 +63,8 @@ class ButtonState:
     laser_single_mode: bool
     ai_tracking: bool
     joystick_track: bool
+    ir_polarity: bool
+    image_sensor_change: bool
 
 
 
@@ -76,7 +78,12 @@ class ButtonStateDecoder(Decoder):
             manual       = bool((value >> MANUAL_BIT) & 1),
             takeoff      = bool((value >> 25) & 1),
             auto         = bool((value >> AUTO_BIT) & 1),
-            autoland     = bool((value >> AUTO_LAND_BIT) & 1),
+            # FIXED: previously read from AUTO_LAND_BIT, which was
+            # actually IR_POLARITY (bit 6) in real firmware — meaning
+            # pressing the White button also fired LandCommand. There's
+            # no dedicated autoland bit in the current main.c list, so
+            # this is hardcoded False until one is actually assigned.
+            autoland     = False,
             emergency    =  bool((value >> 25) & 1), 
             speedup      = bool((value >> SPEED_UP_BIT) & 1),
             speeddown    = bool((value >> SPEED_DOWN_BIT) & 1),
@@ -94,6 +101,8 @@ class ButtonStateDecoder(Decoder):
             laser_single_mode= bool((value >> LASER_SINGLE_MODE_BIT) & 1),
             ai_tracking      = bool((value >> AI_TRACKING_ON_OFF_BIT) & 1),
             joystick_track   = bool((value >> JOYSTICK_TRACK_BIT) & 1),
+            ir_polarity          = bool((value >> IR_POLARITY_BIT) & 1),
+            image_sensor_change  = bool((value >> IMAGE_SENSOR_CHANGE_BIT) & 1),
 
         )
 
