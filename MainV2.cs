@@ -1087,7 +1087,18 @@ namespace MissionPlanner
 
             if (Program.IconFile != null)
             {
-                this.Icon = Icon.FromHandle(((Bitmap) Program.IconFile).GetHicon());
+                // GetHicon() returns a handle this process owns — Icon.FromHandle() doesn't
+                // take ownership of it, so without Clone()+DestroyIcon() the handle can be
+                // finalized/invalidated later and the taskbar icon goes blank.
+                IntPtr hIcon = ((Bitmap) Program.IconFile).GetHicon();
+                try
+                {
+                    this.Icon = (Icon) Icon.FromHandle(hIcon).Clone();
+                }
+                finally
+                {
+                    NativeMethods.DestroyIcon(hIcon);
+                }
             }
 
             int darkMode = 1;

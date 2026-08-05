@@ -215,8 +215,9 @@ A custom STM32 hardware controller communicates with the drone via a Python scri
 
 **Current connection chain (UAV_ scripts):**
 ```
-STM32 → COM7 (binary serial packets) → main.py → tcp:127.0.0.1:5763 → ArduPilot
+STM32 → COM7 (binary serial packets) → main.py → udpin:0.0.0.0:14551 (state + command) → ArduPilot
 ```
+As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `config.py` both point at the same shared UDP endpoint (`udpin:0.0.0.0:14551`) instead of the previous two separate TCP ports (`5762`/`5763`) — an intentional architecture change (enables Herelink digital-link compatibility). `SERIAL_PORT` (STM32 COM port) also now lives in `config.py` rather than being set elsewhere.
 
 **Startup ordering / connection resilience:** `DenelPythonLauncher.cs` auto-starts `main.py` as soon as the GCS plugin loads — this is typically *before* the operator has manually connected MissionPlanner to the vehicle, so nothing may be listening on `MAVLINK_CONNECTION` yet. `Mavlink_controller.initiate_Connection()` (`plugins/UAV_/mavlink/mavlink_contoller.py`) wraps `mavutil.mavlink_connection()` in a `try`/`except` retry loop (1s interval, `system_Print`-logged) instead of letting a refused connection raise uncaught — matching the existing STM32 serial-retry pattern in `main.py`'s read loop. There is no process-level watchdog (`DenelPythonLauncher.cs` does not restart `main.py` if it exits), so this in-script retry is the only thing standing between a cold-boot race and a permanently-dead bridge for the rest of the GCS session — do not remove it without adding an equivalent safeguard.
 
@@ -226,7 +227,7 @@ STM32 → COM7 (binary serial packets) → main.py → tcp:127.0.0.1:5763 → Ar
 |---|---|
 | `plugins/DenelPythonLauncher.cs` | C# plugin — auto-starts `plugins/UAV_/main.py` on GCS startup, kills it on exit, logs to `denel_python.log` |
 | `plugins/UAV_/main.py` | Entry point — modular Controller class; connects MAVLink + STM32 serial |
-| `plugins/UAV_/config.py` | Central config — `MAVLINK_CONNECTION`, `SERIAL_PORT`, bitmask bits, timeouts, debug flags |
+| `plugins/UAV_/config.py` | Central config — `MAVLINK_STATE_PORT`, `MAVLINK_COMMAND_PORT`, `SERIAL_PORT`, bitmask bits, timeouts, debug flags |
 | `plugins/UAV_/mavlink/` | Flight controllers: arms, RTL, auto-takeoff, manual, speed control (`mavlink/Services/Pre_Flight_Checks/` holds battery/flight/GPS pre-flight checks) |
 | `plugins/UAV_/serial_controller/` | Binary packet protocol: `serial_handler.py`, `packet_Parser.py`, `packet_builder.py` |
 | `plugins/UAV_/serial_controller/protocol/bit_definitions.py` | Centralised bitmask definitions |
@@ -252,11 +253,7 @@ STM32 → COM7 (binary serial packets) → main.py → tcp:127.0.0.1:5763 → Ar
 | 15 | Is flying (state read-back) |
 
 **MAVLink connection for SITL testing:**
-The script connects to `tcp:127.0.0.1:5763`. For ArduPilot SITL (sim_vehicle.py), change `config.py` line:
-```python
-MAVLINK_CONNECTION = 'tcp:127.0.0.1:5762'
-```
-Port 5762 is SITL's built-in secondary TCP port — no MAVProxy change needed.
+The script connects via `udpin:0.0.0.0:14551` (both `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `config.py`). For ArduPilot SITL (sim_vehicle.py), add a matching output so SITL forwards MAVLink to that port, e.g. `--out udp:127.0.0.1:14551`, or add `output add 127.0.0.1:14551` in the MAVProxy console.
 
 **Python requirement:** `DenelPythonLauncher.cs` resolves the interpreter via `ResolvePythonExe()`: it reads `plugins\UAV_\python_path.txt` — a file the installer writes at install time with the exact resolved path to the Python it just provisioned (e.g. `C:\Program Files\Python313\python.exe`) — and uses that directly. It only falls back to a bare `"python.exe"` PATH lookup if that file is absent, which covers a source/dev checkout not using the installer. This deliberately does **not** trust ambient PATH order: on a machine with more than one Python installed, PATH order is unpredictable, and (see "Installer (Inno Setup)" below) the offline wheels are pinned to one specific Python version, so using the wrong one on PATH silently breaks the offline `pip install`. If Python is still missing/unusable at launch, `IsPythonAvailable()` shows a warning dialog instead of failing silently.
 
@@ -348,7 +345,9 @@ Both were validated by deliberately reproducing a clean-ish state on this dev ma
 
 A hardware buzzer attached to the STM32 is controlled by the Python script. When a flight condition is detected, the Python script sends an alert to the GCS; the GCS shows a dismissible dialog; after the operator dismisses it, the Python script stops the buzzer.
 
-**Communication channel:** TCP socket on `127.0.0.1:5764` (separate from MAVLink on 5763).
+**Communication channel:** TCP socket on `127.0.0.1:5764` (separate from the MAVLink connection).
+
+**Currently dormant:** as of the `hardware` branch merge, `GCS_NOTIFICATION_PORT` was removed from `config.py` and nothing in `Plugins/UAV_` currently imports `notifications.py` — the buzzer alert path below is unused at runtime even though the C# server side (`DenelPythonLauncher.cs`) still listens on 5764. If re-wiring this, re-add `GCS_NOTIFICATION_PORT = 5764` to `config.py` first or `notifications.py`'s `from config import GCS_NOTIFICATION_PORT` will raise `ImportError`.
 
 **Protocol (simple text lines):**
 
@@ -488,7 +487,7 @@ e.g. `BUZZER_ALERT:10:Airspeed critical — 125 km/h\n`
 | Setting | File | What to change |
 |---|---|---|
 | `SERIAL_PORT` | `config.py` | `COM7` → actual STM32 COM port |
-| `MAVLINK_CONNECTION` | `config.py` | Keep `tcp:127.0.0.1:5763` for hardware; use `5762` for SITL only |
+| `MAVLINK_STATE_PORT` / `MAVLINK_COMMAND_PORT` | `config.py` | Keep `udpin:0.0.0.0:14551` for hardware; point ArduPilot/SITL's MAVLink output at the same port for testing |
 | `BUZZER_BIT` | `bit_definitions.py` | New — confirm bit number with STM32 firmware developer |
 
 #### Potential issues to watch for

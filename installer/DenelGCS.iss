@@ -9,7 +9,7 @@
 ;   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\DenelGCS.iss
 
 #define MyAppName "Denel GCS"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Denel Aeronautics"
 #define MyAppExeName "MissionPlanner.exe"
 #define PythonVersion "3.13.14"
