@@ -96,7 +96,7 @@ class ButtonStateDecoder(Decoder):
             focus_in         = bool((value >> FOCUS_IN_BIT) & 1),
             focus_out        = bool((value >> FOCUS_OUT_BIT) & 1),
             video_ip         = bool((value >> VIDEO_IP_BIT) & 1),
-            laser_on_off     = bool((value >> LASER_ON_OFF_BIT) & 1),
+
             laser_cont_mode  = bool((value >> LASER_CONT_MODE_BIT) & 1),
             laser_single_mode= bool((value >> LASER_SINGLE_MODE_BIT) & 1),
             ai_tracking      = bool((value >> AI_TRACKING_ON_OFF_BIT) & 1),
@@ -244,7 +244,6 @@ class PayloadCommandDecoder(Decoder):
             wideout                     = bool((value >> PAYLOAD_FOV_MINUS_BIT) & 1),
             focus_in                    = bool((value >> PAYLOAD_FOCUS_IN_BIT) & 1),
             focus_out                   = bool((value >> PAYLOAD_FOCUS_OUT_BIT) & 1),
-            laser_on_off                = bool((value >> PAYLOAD_LASER_ON_OFF_BIT) & 1),
             laser_cont_mode             = bool((value >> PAYLOAD_LASER_CONT_MODE_BIT) & 1),
             laser_single_mode           = bool((value >> PAYLOAD_LASER_SINGLE_MODE_BIT) & 1),
             laser_zoom_in               = bool((value >> PAYLOAD_LASER_ZOOM_IN_BIT) & 1),
