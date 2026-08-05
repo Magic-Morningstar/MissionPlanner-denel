@@ -105,20 +105,20 @@ class UAVCommandSender(MavlinkWorker):
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_once(self):
-        # 1. Drain discrete commands from the bus
         self.drain_input_commands()
-
-        # 2. Process continuous analog inputs
         if self._analog:
             self._analog.process()
 
-        # 3. Execute one MAVLink command from the queue
-        try:
-            cmd, args, kwargs = self.command_queue.get(timeout=self.interval)
+        # Execute everything currently queued, not just one item —
+        # otherwise producers (discrete commands + gimbal rate) can
+        # outpace a single-item drain and the queue backs up under load.
+        while True:
+            try:
+                cmd, args, kwargs = self.command_queue.get_nowait()
+            except queue.Empty:
+                break
             cmd(*args, **kwargs)
             self.command_queue.task_done()
-        except queue.Empty:
-            pass
 
     def enqueue(self, cmd, *args, **kwargs):
         self.command_queue.put((cmd, args, kwargs))

@@ -27,7 +27,8 @@ GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S = 2.0
 # otherwise), so a single dropped command on a lossy link would otherwise
 # leave the gimbal spinning indefinitely at a stale rate.
 GIMBAL_RATE_KEEPALIVE_SEC = 0.3
-
+GIMBAL_RATE_KEEPALIVE_ACTIVE_SEC = 0.3
+GIMBAL_RATE_KEEPALIVE_IDLE_SEC   = 2.0
 # Small deadzone around center — any deflection producing a percent in
 # this range is treated as exactly 0%, so tiny stick noise near center
 # doesn't produce drift on any axis using _percent_from_joystick.
@@ -151,12 +152,11 @@ class AnalogInputHandler:
         self._handle_zoom_focus()
 
     # ── Joystick2 X/Y → gimbal yaw/pitch (Manual Speed Mode, send-on-change) ─
-
     def _handle_joystick2_gimbal(self):
         if getattr(self.state, 'TRACKING_ENGAGED', False) or getattr(self.state, 'AI_TRACKING_ENGAGED', False):
             # Tracking (or AI tracking) owns the gimbal now. The keepalive
             # below sends A1=SERVO_MANUAL_SPEED roughly every
-            # GIMBAL_RATE_KEEPALIVE_SEC regardless of stick position —
+            # GIMBAL_RATE_KEEPALIVE_ACTIVE_SEC regardless of stick position —
             # including at zero velocity — which is a genuine servo-mode
             # change away from SERVO_TRACKING_MODE, not a no-op. Left
             # running, it forces the gimbal back out of tracking-follow
@@ -184,10 +184,25 @@ class AnalogInputHandler:
         now = time.monotonic()
         yaw_changed = abs(yaw_vel - self._last_sent_yaw_vel) >= GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S
         pitch_changed = abs(pitch_vel - self._last_sent_pitch_vel) >= GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S
+
+        # Keepalive cadence depends on whether the gimbal is currently
+        # moving or at rest. While actively commanding a non-zero rate, keep
+        # the fast keepalive — that's what protects against a dropped
+        # in-motion command leaving the gimbal spinning at a stale rate.
+        # Once the last command sent was a stop (rate = 0 on both axes),
+        # back off to a much slower keepalive: a dropped "still at zero"
+        # message costs nothing, since there's no motion to correct if it's
+        # lost. This is what stops idle stick position from generating
+        # constant zero-rate traffic into command_queue.
+        at_rest = (self._last_sent_yaw_vel == 0.0 and self._last_sent_pitch_vel == 0.0)
+        keepalive_interval = (
+            GIMBAL_RATE_KEEPALIVE_IDLE_SEC if at_rest else GIMBAL_RATE_KEEPALIVE_ACTIVE_SEC
+        )
         keepalive_due = (
             self._last_gimbal_send_time is None
-            or (now - self._last_gimbal_send_time) >= GIMBAL_RATE_KEEPALIVE_SEC
+            or (now - self._last_gimbal_send_time) >= keepalive_interval
         )
+
         # Returning to a full stop should feel immediate, not wait on the
         # change threshold or the next keepalive tick.
         just_stopped = (

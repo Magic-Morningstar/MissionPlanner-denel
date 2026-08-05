@@ -26,7 +26,6 @@ class Controller:
         # they're drained (backpressure, not currently hit in practice
         # but cheap insurance).
         self.command_bus = queue.Queue(maxsize=256)
-
         self.translator = InputTranslator(self.command_bus, self.state)
         self.Mavlink_controller = Mavlink_controller(self.state, self.command_bus, self.watchdog)
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
@@ -42,7 +41,6 @@ class Controller:
         logger.info("Controller started.")
 
         while not self._shutdown.is_set():
-
             time.sleep(2)
 
         logger.info("Shutting down.")
