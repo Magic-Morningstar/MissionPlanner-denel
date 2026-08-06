@@ -10,6 +10,12 @@ logger = logging.getLogger(__name__)
 
 class MavlinkWorker(ConnectionManager):
 
+    # How often we announce our own presence via HEARTBEAT — both while
+    # waiting to connect (see _connect_and_wait_for_heartbeat) and for
+    # the life of the connection (see _loop). 1Hz matches the MAVLink
+    # spec's expectation for a GCS-role participant.
+    HEARTBEAT_SEND_INTERVAL_SEC = 1.0
+
     def __init__(self, connection_string, state, watchdog=None, interval=1.0):
         super().__init__()
         self.connection_string = connection_string
@@ -18,6 +24,14 @@ class MavlinkWorker(ConnectionManager):
         self.interval = interval
         self._stop_event = threading.Event()
         self._loop_thread = None
+
+        # Subclasses should set this to their live connection object in
+        # _do_connect() (in addition to whatever their own named
+        # attribute is, e.g. command_drone / state_drone) — this is what
+        # lets _loop() send periodic heartbeats generically, without
+        # needing to know each subclass's attribute name.
+        self._mav_connection = None
+        self._last_heartbeat_sent = 0.0
 
     def _connect_with_retry(self, label, retry_delay=2):
         PORT_MIN = 14550
@@ -54,18 +68,39 @@ class MavlinkWorker(ConnectionManager):
 
         raise InterruptedError("Connection cancelled.")
 
+    def _send_heartbeat(self, connection):
+        """
+        Sends our own HEARTBEAT, announcing this side as a GCS. Nothing
+        in this class used to call this at all — wait_heartbeat() only
+        ever receives. See _connect_and_wait_for_heartbeat's docstring
+        for why sending one is what actually fixes needing to open
+        QGroundControl/Mission Planner first after a UAV restart.
+        """
+        try:
+            connection.mav.heartbeat_send(
+                mavutil.mavlink.MAV_TYPE_GCS,
+                mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+                0, 0, 0,
+            )
+        except Exception as e:
+            logger.debug(f"{self.__class__.__name__}: heartbeat send failed: {e}")
+
     def _heartbeat(self, connection, timeout=10):
         """
-        timeout added — this used to block forever with no bound at all.
-        A TCP connect() can succeed against a port that never actually
-        sends MAVLink data (stale socket, wrong port from a hop, etc),
-        and without a timeout that's a silent, permanent hang: the
-        connection thread never reaches _start_loop(), so nothing ever
-        runs, but nothing ever errors either — indistinguishable from
-        "working" until you notice the loop just never logs anything.
+        FIXED: previously called connection.wait_heartbeat() with no
+        arguments at all, silently ignoring the `timeout` parameter —
+        meaning this blocked forever instead of ever timing out, and the
+        `if msg is None` branch below could never actually run. Now
+        timeout is genuinely enforced.
+
+        Prefer _connect_and_wait_for_heartbeat() over calling this
+        directly — this method only WAITS, it doesn't send our own
+        heartbeat while waiting, so it's still exposed to the same
+        mutual-deadlock risk described there. Kept as a standalone
+        method for anything that specifically wants a plain wait.
         """
         logger.info(f"{self.__class__.__name__} waiting for heartbeat...")
-        msg = connection.wait_heartbeat()
+        msg = connection.wait_heartbeat(timeout=timeout)
         if msg is None:
             logger.warning(f"{self.__class__.__name__}: no heartbeat within {timeout}s — closing and retrying.")
             connection.close()   # free the port rather than leave a dead socket holding it
@@ -75,6 +110,73 @@ class MavlinkWorker(ConnectionManager):
             f"system {msg.get_srcSystem()} component {msg.get_srcComponent()}"
         )
         return msg
+
+    def _connect_and_wait_for_heartbeat(self, label, heartbeat_timeout=10):
+        """
+        Combines _connect_with_retry() + a heartbeat wait into one
+        self-healing loop — this is the fix for "needs QGroundControl/
+        Mission Planner opened first after a UAV restart":
+
+        1. While waiting for the FC/Herelink's heartbeat, this now
+           actively SENDS our own heartbeat every HEARTBEAT_SEND_INTERVAL_SEC
+           on a background thread. Previously this class only ever
+           listened and never announced itself — if whatever's routing
+           telemetry on the other end (Herelink's internal router, in
+           particular) gates forwarding on having seen a GCS heartbeat
+           first, both sides can end up waiting to hear from the other,
+           forever. QGC/Mission Planner "fixed" it by accident, since
+           both send a heartbeat the instant they connect. This makes
+           the script do that itself, every time, without needing
+           another app's help.
+
+        2. If the heartbeat wait genuinely times out anyway, this closes
+           the socket and retries the whole connection from scratch,
+           instead of letting a TimeoutError propagate up uncaught.
+           Previously that's exactly what happened: ConnectionManager's
+           _run() has no except clause around _do_connect(), so a timed-
+           out _heartbeat() call (once its timeout bug was fixed) would
+           have silently killed the connect thread with no retry at all
+           — worse than the original infinite-hang behavior, not better.
+        """
+        while not self.is_cancelled():
+            conn = self._connect_with_retry(label=label)
+            if conn is None:
+                return None
+
+            stop_announcing = threading.Event()
+
+            def _announce():
+                while not stop_announcing.is_set():
+                    self._send_heartbeat(conn)
+                    stop_announcing.wait(self.HEARTBEAT_SEND_INTERVAL_SEC)
+
+            announcer = threading.Thread(
+                target=_announce, daemon=True, name=f"{label}-HeartbeatAnnounce"
+            )
+            announcer.start()
+
+            try:
+                msg = conn.wait_heartbeat(timeout=heartbeat_timeout)
+            finally:
+                stop_announcing.set()
+
+            if msg is not None:
+                logger.info(
+                    f"{self.__class__.__name__} heartbeat received — "
+                    f"system {msg.get_srcSystem()} component {msg.get_srcComponent()}"
+                )
+                return conn
+
+            logger.warning(
+                f"{self.__class__.__name__}: no heartbeat within {heartbeat_timeout}s "
+                f"on {label} — retrying connection."
+            )
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        return None
 
     def send_ping(self, connection, target_system=1, target_component=1):
         """
@@ -130,6 +232,17 @@ class MavlinkWorker(ConnectionManager):
         while not self._stop_event.is_set():
             try:
                 self._pet_watchdog()
+
+                # Keep announcing ourselves for the life of the
+                # connection, not just while first connecting — the FC/
+                # Herelink side can still time out our presence and stop
+                # forwarding if it stops seeing heartbeats from us, per
+                # the MAVLink spec's ~1Hz expectation.
+                now = time.time()
+                if self._mav_connection is not None and (now - self._last_heartbeat_sent) >= self.HEARTBEAT_SEND_INTERVAL_SEC:
+                    self._send_heartbeat(self._mav_connection)
+                    self._last_heartbeat_sent = now
+
                 self._run_once()
             except Exception as e:
                 logger.error(f"{self.__class__.__name__} error: {e}")

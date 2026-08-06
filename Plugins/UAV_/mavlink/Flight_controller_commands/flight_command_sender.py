@@ -50,14 +50,22 @@ class FlightCommandSender(MavlinkWorker):
     # ── Connection ────────────────────────────────────────────────────────────
 
     def _do_connect(self):
-        self.command_drone = self._connect_with_retry(label="flight-command-sender")
+        # FIXED: previously _connect_with_retry() + a plain _heartbeat()
+        # call — see MavlinkWorker._connect_and_wait_for_heartbeat's
+        # docstring for why that combination could hang forever after a
+        # UAV restart until something else (QGroundControl/Mission
+        # Planner) sent a heartbeat first. This both sends our own
+        # heartbeat while waiting AND actually retries if the wait
+        # genuinely times out, instead of dying silently.
+        self.command_drone = self._connect_and_wait_for_heartbeat(label="flight-command-sender")
 
-        if self.is_cancelled():
-            self.command_drone.close()
+        if self.command_drone is None or self.is_cancelled():
+            if self.command_drone:
+                self.command_drone.close()
             self.command_drone = None
             return False
 
-        self._heartbeat(self.command_drone)
+        self._mav_connection = self.command_drone  # lets _loop() send periodic heartbeats generically
 
         self.Manual     = ModeCommander(self.command_drone, self.state, self._mav_lock)
         self.Director   = DirectionCommander(self.command_drone, self.state, self._mav_lock)
@@ -101,6 +109,7 @@ class FlightCommandSender(MavlinkWorker):
             except Exception:
                 pass
             self.command_drone = None
+        self._mav_connection = None
         self.Manual   = None
         self.Director = None
         self._analog  = None
@@ -247,6 +256,7 @@ class FlightCommandSender(MavlinkWorker):
         else:
             logger.critical("EMERGENCY: vehicle on ground — disarming")
             self.disarm()
+
 
 # ── Registered handlers ───────────────────────────────────────────────────────
 

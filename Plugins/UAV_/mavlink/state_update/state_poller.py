@@ -21,7 +21,12 @@ class UAVStatePoller(MavlinkWorker):
     # ── Connection ────────────────────────────────────────────────────────────
 
     def _do_connect(self):
-        self.state_drone = self._connect_with_retry(label="state-poll")
+        # FIXED: see FlightCommandSender's _do_connect / MavlinkWorker.
+        # _connect_and_wait_for_heartbeat's docstring — this both sends
+        # our own heartbeat while waiting for the FC/Herelink's, and
+        # actually retries on a genuine timeout instead of dying
+        # silently.
+        self.state_drone = self._connect_and_wait_for_heartbeat(label="state-poll")
 
         if self.state_drone is None:
             logger.warning("UAVStatePoller: connection cancelled or failed.")
@@ -32,8 +37,8 @@ class UAVStatePoller(MavlinkWorker):
             self.state_drone = None
             return False
 
-        msg = self._heartbeat(self.state_drone)
-        self.state.UAV_HEARTBEAT = msg
+        self._mav_connection = self.state_drone  # lets _loop() send periodic heartbeats generically
+        self.state.UAV_HEARTBEAT = self.state_drone.messages.get('HEARTBEAT')
 
         self._request_message_interval(
             self.state_drone,
@@ -53,6 +58,7 @@ class UAVStatePoller(MavlinkWorker):
             except Exception:
                 pass
             self.state_drone = None
+        self._mav_connection = None
         self.state.update_UAV_State_Connection(False, None)
         logger.info("UAVStatePoller disconnected.")
 
