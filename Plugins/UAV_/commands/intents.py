@@ -71,19 +71,19 @@ class ZoomOutFallCommand(Command):
     pass
 
 @dataclass
-class WideInCommand(Command):
+class FOVPlusCommand(Command):
     pass
 
 @dataclass
-class WideOutCommand(Command):
+class FOVMinusCommand(Command):
     pass
 
 @dataclass
-class WideInFallCommand(Command):
+class FOVPlusFallCommand(Command):
     pass
 
 @dataclass
-class WideOutFallCommand(Command):
+class FOVMinusFallCommand(Command):
     pass
 
 @dataclass
@@ -175,6 +175,14 @@ class JoystickTrackModeOnCommand(Command):
 
 @dataclass
 class JoystickTrackModeOffCommand(Command):
+    pass
+
+@dataclass
+class IRPolarityToggleCommand(Command):
+    pass
+
+@dataclass
+class ImageSensorChangeCommand(Command):
     pass
 
 # Reserved for when it's wired up — config.py already defines the bit,
