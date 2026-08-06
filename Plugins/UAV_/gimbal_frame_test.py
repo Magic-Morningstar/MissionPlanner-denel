@@ -25,7 +25,7 @@ Usage:
 import sys
 import argparse
 
-from mavlink.uav_commads.commands.payload_commands import GimbalFrameBuilder
+from mavlink.payload_commands.payload_commands import GimbalFrameBuilder
 
 
 def hex_bytes(frame: bytes) -> str:

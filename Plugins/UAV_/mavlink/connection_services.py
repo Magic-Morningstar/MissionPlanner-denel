@@ -1,10 +1,10 @@
-
-
 import threading
 import time
 from pymavlink import mavutil
 from connection_manager import ConnectionManager
 from utils.helper import *
+import logging
+logger = logging.getLogger(__name__)
 
 
 def _scan_and_connect(self, label, max_attempts=5):
@@ -31,18 +31,18 @@ def _scan_and_connect(self, label, max_attempts=5):
 
         port = PORT_MIN + ((start_port - PORT_MIN + i) % PORT_RANGE)
         conn_str = f"{prefix}:{port}"
-        system_Print(f"  [{label}] trying {conn_str}...")
+        logger.info(f"  [{label}] trying {conn_str}...")
 
         try:
             conn = mavutil.mavlink_connection(conn_str, wait_ready=True)
-            system_Print(f"  [{label}] connected on {conn_str}.")
+            logger.info(f"  [{label}] connected on {conn_str}.")
             return conn
         except ConnectionRefusedError as e:
-            system_Print(f"  [{label}] port {port} refused — trying next...")
+            logger.info(f"  [{label}] port {port} refused — trying next...")
             last_error = e
             time.sleep(0.3)
         except Exception as e:
-            system_Print(f"  [{label}] port {port} error: {e} — trying next...")
+            logger.info(f"  [{label}] port {port} error: {e} — trying next...")
             last_error = e
             time.sleep(0.3)
 

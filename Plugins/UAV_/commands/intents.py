@@ -101,16 +101,33 @@ class EmergencyCommand(Command):
 
 @dataclass
 class LaserStartCommand(Command):
+    """
+    DEPRECATED / orphaned: this used to be fired (incorrectly) by the
+    "manual" ButtonState field via translator.py's old EDGE_TABLE — a
+    flight-mode button triggering a payload/laser command. Fixed:
+    "manual" now correctly fires ManualModeCommand. Nothing fires this
+    anymore; LaserPowerOnCommand (fired by the real laser_on_off field)
+    is the intended equivalent. Left defined rather than deleted in case
+    something outside this codebase still references it.
+    """
     pass
 
 @dataclass
 class LaserStopCommand(Command):
+    """See LaserStartCommand — same deprecation, paired with LaserPowerOffCommand."""
     pass
 
 class ContiousLaserStopCommand(Command):
+    """
+    DEPRECATED / orphaned: used to be fired (incorrectly) by the "auto"
+    ButtonState field — same class of bug as LaserStartCommand above.
+    "auto" now correctly fires AutoModeCommand. LaserContModeStopCommand
+    (fired by the real laser_cont_mode field) is the intended equivalent.
+    """
     pass
 
 class ContiousLaserStartCommand(Command):
+    """See ContiousLaserStopCommand — same deprecation, paired with LaserContModeStartCommand."""
     pass
 
 @dataclass
@@ -183,6 +200,70 @@ class IRPolarityToggleCommand(Command):
 
 @dataclass
 class ImageSensorChangeCommand(Command):
+    pass
+
+# ── Added for PAYLOAD_COMMAND (TLV 0x04) fields with no ButtonState-era
+# equivalent — see commands/translator.py's PAYLOAD_EDGE_TABLE for the
+# field -> Command mapping.
+
+@dataclass
+class LaserZoomInCommand(Command):
+    pass
+
+@dataclass
+class LaserZoomOutCommand(Command):
+    pass
+
+@dataclass
+class TrackingTemplateToggleCommand(Command):
+    pass
+
+@dataclass
+class TrackingSourceToggleCommand(Command):
+    pass
+
+@dataclass
+class TakePictureCommand(Command):
+    pass
+
+@dataclass
+class StartRecordCommand(Command):
+    pass
+
+@dataclass
+class StopRecordCommand(Command):
+    pass
+
+@dataclass
+class PictureRecordModeToggleCommand(Command):
+    pass
+
+@dataclass
+class MotorToggleCommand(Command):
+    pass
+
+@dataclass
+class NearInfraredToggleCommand(Command):
+    pass
+
+@dataclass
+class EODzoomToggleCommand(Command):
+    pass
+
+@dataclass
+class IRCameraDzoomPlusCommand(Command):
+    pass
+
+@dataclass
+class IRCameraDzoomMinusCommand(Command):
+    pass
+
+@dataclass
+class IRRainbowCommand(Command):
+    pass
+
+@dataclass
+class EOImageToggleCommand(Command):
     pass
 
 # Reserved for when it's wired up — config.py already defines the bit,

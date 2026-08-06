@@ -604,6 +604,17 @@ class GimbalFrameBuilder:
         param_word = (laser_bits & 0x03) << 14
         return self.build_C2(self.C2_CMD_POWER_CONTROL, param_word)
 
+    def build_C2_eo1_power(self, on: bool) -> bytes:
+        """
+        EO 1 sensor power, via the same Power Control command (0x75) as
+        build_C2_laser_power, but bits 0-1 (ICD 3.8.1.4's power-control
+        bit table) instead of 14-15. Same 0=no change/1=ON/2=OFF
+        encoding, IR/EO2/laser bits left at 0 (no change).
+        """
+        eo1_bits = 0b01 if on else 0b10
+        param_word = eo1_bits & 0x03
+        return self.build_C2(self.C2_CMD_POWER_CONTROL, param_word)
+
     def build_C2_eo_dzoom_on(self) -> bytes:
         """
         Enable EO digital zoom. Per ICD 3.7's note on C1 op 0x08/0x09

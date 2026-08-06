@@ -1,8 +1,8 @@
 # mavlink/uav_commads/commands/payload_commands.py
 
 from pymavlink import mavutil
-from mavlink.uav_commads.commands.base_command import BaseCommand
-from mavlink.uav_commads.commands.payload_services import GimbalFrameBuilder
+from mavlink.base_command import BaseCommand
+from mavlink.payload_commands.payload_services import GimbalFrameBuilder
 import logging
 logger = logging.getLogger(__name__)
 
@@ -531,6 +531,16 @@ class Payload(BaseCommand):
     def initiate_LaserPowerOff_Alt_Raw(self, expect_response=False):
         """Alternate laser power-off via the Power Control command (0x75)."""
         frame = self._gimbal_frames.build_C2_laser_power(False)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_EOImagePowerOn_Raw(self, expect_response=False):
+        """EO 1 sensor power on (ICD 3.8.1.4 Power Control, bits 0-1)."""
+        frame = self._gimbal_frames.build_C2_eo1_power(True)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_EOImagePowerOff_Raw(self, expect_response=False):
+        """EO 1 sensor power off (ICD 3.8.1.4 Power Control, bits 0-1)."""
+        frame = self._gimbal_frames.build_C2_eo1_power(False)
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
     def initiate_EODzoomOn_Raw(self, expect_response=False):

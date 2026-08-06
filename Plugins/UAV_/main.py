@@ -21,14 +21,21 @@ class Controller:
         self.state = SystemState()
         self.watchdog = Watchdog(state=self.state)
 
-        # The boundary itself — the only thing that crosses between
-        # serial and mavlink. Bounded so a stalled mavlink side can't
-        # let this grow unbounded if button presses come in faster than
-        # they're drained (backpressure, not currently hit in practice
-        # but cheap insurance).
-        self.command_bus = queue.Queue(maxsize=256)
-        self.translator = InputTranslator(self.command_bus, self.state)
-        self.Mavlink_controller = Mavlink_controller(self.state, self.command_bus, self.watchdog)
+        # Two buses now, not one — the boundary between serial and
+        # mavlink split along the same line as BUTTON_STATE/PAYLOAD_COMMAND
+        # on the wire and FlightCommandSender/PayloadCommandSender on the
+        # dispatch side. InputTranslator routes ButtonState-derived edges
+        # onto flight_command_bus and PayloadCommand-derived edges onto
+        # payload_command_bus — see commands/translator.py's two
+        # EDGE_TABLEs. Both bounded for the same reason the single bus
+        # was: cheap backpressure insurance if a stalled mavlink side
+        # can't keep up with incoming button presses.
+        self.flight_command_bus = queue.Queue(maxsize=256)
+        self.payload_command_bus = queue.Queue(maxsize=256)
+        self.translator = InputTranslator(self.flight_command_bus, self.payload_command_bus, self.state)
+        self.Mavlink_controller = Mavlink_controller(
+            self.state, self.flight_command_bus, self.payload_command_bus, self.watchdog
+        )
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
         self._shutdown = threading.Event()
 

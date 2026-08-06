@@ -3,6 +3,8 @@
 from pymavlink import mavutil
 from mavlink.mavlink_worker import MavlinkWorker
 from utils.helper import *
+import logging
+logger = logging.getLogger(__name__)
 
 
 class UAVStatePoller(MavlinkWorker):
@@ -22,7 +24,7 @@ class UAVStatePoller(MavlinkWorker):
         self.state_drone = self._connect_with_retry(label="state-poll")
 
         if self.state_drone is None:
-            system_Print("UAVStatePoller: connection cancelled or failed.")
+            logger.warning("UAVStatePoller: connection cancelled or failed.")
             return False
 
         if self.is_cancelled():
@@ -40,7 +42,7 @@ class UAVStatePoller(MavlinkWorker):
         )
 
         self.state.update_UAV_State_Connection(True, self.state_drone)
-        system_Print("UAVStatePoller connected.")
+        logger.info("UAVStatePoller connected.")
         self._start_loop()
         return True
 
@@ -52,7 +54,7 @@ class UAVStatePoller(MavlinkWorker):
                 pass
             self.state_drone = None
         self.state.update_UAV_State_Connection(False, None)
-        system_Print("UAVStatePoller disconnected.")
+        logger.info("UAVStatePoller disconnected.")
 
     # ── Watchdog ──────────────────────────────────────────────────────────────
 
@@ -65,7 +67,7 @@ class UAVStatePoller(MavlinkWorker):
             self.watchdog.watchStateUpdateThread()
 
     def _on_error(self, e):
-        system_Print(f"UAVStatePoller error: {e}")
+        logger.error(f"UAVStatePoller error: {e}")
         self.state.update_UAV_State_Connection(False, None)
 
     # ── Poll loop ─────────────────────────────────────────────────────────────
@@ -79,7 +81,7 @@ class UAVStatePoller(MavlinkWorker):
         vfr_hud         = self.state_drone.messages.get('VFR_HUD')
 
         if heartbeat is None:
-            system_Print("UAVStatePoller: no HEARTBEAT in cache yet — waiting...")
+            logger.debug("UAVStatePoller: no HEARTBEAT in cache yet — waiting...")
             return
 
         changed = False
@@ -87,7 +89,7 @@ class UAVStatePoller(MavlinkWorker):
         # ── Armed status ──────────────────────────────────────────────────────
         armed = bool(heartbeat.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
         if armed != self.state.is_UAV_Armed:
-            system_Print(
+            logger.info(
                 f"[STATE] Armed: {self.state.is_UAV_Armed} -> {armed}"
             )
             self.state.update_UAV_Armed_Status(armed)
@@ -99,7 +101,7 @@ class UAVStatePoller(MavlinkWorker):
             id_to_name = {v: k for k, v in mode_mapping.items()}
             mode = id_to_name.get(heartbeat.custom_mode)
             if mode != self.state.get_UAV_Current_Mode:
-                system_Print(
+                logger.info(
                     f"[STATE] Mode: {self.state.get_UAV_Current_Mode} -> {mode}"
                 )
                 self.state.update_UAV_Current_Mode(mode)
@@ -109,42 +111,42 @@ class UAVStatePoller(MavlinkWorker):
         if position is not None:
             altitude = position.relative_alt / 1000.0
             if altitude != self.state.get_UAV_Current_Altitude:
-                system_Print(
+                logger.info(
                     f"[STATE] Altitude: "
                     f"{self.state.get_UAV_Current_Altitude}m -> {altitude:.2f}m"
                 )
                 self.state.update_UAV_Altitude(altitude)
                 changed = True
         else:
-            system_Print("Cant update ALTITUDE position is None")
+            logger.debug("Cant update ALTITUDE position is None")
 
         # ── Current mission item ──────────────────────────────────────────────
         if current_mission is not None:
             if current_mission.seq != self.state._UAV_CURRENT_ITEM:
-                system_Print(
+                logger.info(
                     f"[STATE] Mission item: "
                     f"{self.state._UAV_CURRENT_ITEM} -> {current_mission.seq}"
                 )
                 self.state.update_UAV_Current_Item(current_mission.seq)
                 changed = True
         else:
-            system_Print("Cant update Mission item, current_mission is None")
+            logger.debug("Cant update Mission item, current_mission is None")
 
         # ── Ground speed ──────────────────────────────────────────────────────
         if vfr_hud is not None:
             if vfr_hud.groundspeed != self.state.get_UAV_Current_Ground_Speed:
-                system_Print(
+                logger.info(
                     f"[STATE] Ground speed: "
                     f"{self.state.get_UAV_Current_Ground_Speed} -> "
                     f"{vfr_hud.groundspeed:.2f} m/s"
                 )
                 self.state.update_UAV_Ground_Speed(vfr_hud.groundspeed)
                 changed = True
-        
+
 
             # ── Air speed ─────────────────────────────────────────────────────
             if vfr_hud.airspeed != self.state.get_UAV_Current_Air_Speed:
-                system_Print(
+                logger.info(
                     f"[STATE] Air speed: "
                     f"{self.state.get_UAV_Current_Air_Speed} -> "
                     f"{vfr_hud.airspeed:.2f} m/s"
@@ -152,7 +154,7 @@ class UAVStatePoller(MavlinkWorker):
                 self.state.update_UAV_Air_Speed(vfr_hud.airspeed)
                 changed = True
         else:
-            system_Print("Cant update Ground speed and AIR SPEED, vfr_hud is None")
+            logger.debug("Cant update Ground speed and AIR SPEED, vfr_hud is None")
 
         if changed:
             self.state.set_UAV_State_Changed()

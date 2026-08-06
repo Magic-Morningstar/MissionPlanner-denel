@@ -76,7 +76,7 @@ class MavlinkWorker(ConnectionManager):
         )
         return msg
 
-    def send_ping(connection, target_system=1, target_component=1):
+    def send_ping(self, connection, target_system=1, target_component=1):
         """
         Sends a MAVLink PING request to a target system (e.g., Herelink/Autopilot).
         """
