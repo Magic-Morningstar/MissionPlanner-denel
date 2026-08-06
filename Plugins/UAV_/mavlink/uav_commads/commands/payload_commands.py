@@ -417,6 +417,21 @@ class Payload(BaseCommand):
         frame = self._gimbal_frames.build_C1_polarity_black_hot()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
+    def initiate_IRRainbow_Raw(self, expect_response=False):
+        """Set IR palette to rainbow (false-color)."""
+        frame = self._gimbal_frames.build_C1_ir_rainbow()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_IRCameraDzoomPlus_Raw(self, expect_response=False):
+        """IR camera digital zoom in."""
+        frame = self._gimbal_frames.build_C1_ir_dzoom_plus()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_IRCameraDzoomMinus_Raw(self, expect_response=False):
+        """IR camera digital zoom out."""
+        frame = self._gimbal_frames.build_C1_ir_dzoom_minus()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
     def initiate_LaserRangeSingle_Raw(self, expect_response=False):
         """Trigger a single laser rangefinder measurement. Use get_laser_range() instead if you want the distance back directly."""
         frame = self._gimbal_frames.build_C1_laser_single_range()
@@ -516,6 +531,30 @@ class Payload(BaseCommand):
     def initiate_LaserPowerOff_Alt_Raw(self, expect_response=False):
         """Alternate laser power-off via the Power Control command (0x75)."""
         frame = self._gimbal_frames.build_C2_laser_power(False)
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_EODzoomOn_Raw(self, expect_response=False):
+        """
+        Enable EO digital zoom — see GimbalFrameBuilder.build_C2_eo_dzoom_on's
+        docstring for why this matters: without it, zoom_in/zoom_out
+        only ever reach the optical zoom limit.
+        """
+        frame = self._gimbal_frames.build_C2_eo_dzoom_on()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_EODzoomOff_Raw(self, expect_response=False):
+        """Disable EO digital zoom."""
+        frame = self._gimbal_frames.build_C2_eo_dzoom_off()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_NearInfraredOn_Raw(self, expect_response=False):
+        """Enable near-infrared mode (ICD 3.8 C2 command table, 0x4A)."""
+        frame = self._gimbal_frames.build_C2_near_ir_on()
+        return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
+
+    def initiate_NearInfraredOff_Raw(self, expect_response=False):
+        """Disable near-infrared mode (ICD 3.8 C2 command table, 0x4B)."""
+        frame = self._gimbal_frames.build_C2_near_ir_off()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
     def initiate_LaserZoomIn_Raw(self, expect_response=False):

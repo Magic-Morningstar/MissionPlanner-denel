@@ -29,6 +29,12 @@ class Watchdog:
         self.watchStateUpdate = False
         self.watchCommands = False
 
+        # Optional hook, set via register_serial_timeout_callback(). Lets
+        # SerialHandler own its own reconnect policy (backoff, retries,
+        # re-handshake) while Watchdog keeps doing only what it's always
+        # done: deciding when a thread looks frozen.
+        self._serial_timeout_callback = None
+
     # ── Activation ────────────────────────────────────────────────────────────
 
     def watchSerialThread(self):
@@ -39,6 +45,13 @@ class Watchdog:
 
     def watchCommandsThread(self):
         self.watchCommands = True
+
+    def register_serial_timeout_callback(self, callback):
+        """callback is invoked (with no args) from on_serial_timeout(),
+        i.e. from the Watchdog's own monitor thread — callback should not
+        block for long, and if it needs to do real work (like a reconnect
+        loop) it should hand off to its own thread."""
+        self._serial_timeout_callback = callback
 
     # ── Serial thread ─────────────────────────────────────────────────────────
 
@@ -99,6 +112,11 @@ class Watchdog:
         self.state.update_Serial_connection()
         self.serial_pet()
         self.watchSerial = False
+        if self._serial_timeout_callback:
+            try:
+                self._serial_timeout_callback()
+            except Exception:
+                logger.exception("Watchdog: serial timeout callback raised")
 
     def on_uavState_timeout(self):
         self.state.update_UAV_State_Connection()

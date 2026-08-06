@@ -42,6 +42,9 @@ class UAVCommandSender(MavlinkWorker):
         self.ManualCtrl          = None
         self._ato                = None
         self._analog             = None   # AnalogInputHandler — set after connection
+        self._motor_on           = False  # local toggle state for motor_toggle() — see that method's docstring
+        self._near_infrared_on   = False  # local toggle state for near_infrared_toggle()
+        self._eo_dzoom_on        = False  # local toggle state for eo_dzoom_toggle() (standalone; zoom_in/out_start enable EO Dzoom unconditionally on their own, independent of this flag)
 
     # ── Connection ────────────────────────────────────────────────────────────
 
@@ -105,20 +108,20 @@ class UAVCommandSender(MavlinkWorker):
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_once(self):
-        # 1. Drain discrete commands from the bus
         self.drain_input_commands()
-
-        # 2. Process continuous analog inputs
         if self._analog:
             self._analog.process()
 
-        # 3. Execute one MAVLink command from the queue
-        try:
-            cmd, args, kwargs = self.command_queue.get(timeout=self.interval)
+        # Execute everything currently queued, not just one item —
+        # otherwise producers (discrete commands + gimbal rate) can
+        # outpace a single-item drain and the queue backs up under load.
+        while True:
+            try:
+                cmd, args, kwargs = self.command_queue.get_nowait()
+            except queue.Empty:
+                break
             cmd(*args, **kwargs)
             self.command_queue.task_done()
-        except queue.Empty:
-            pass
 
     def enqueue(self, cmd, *args, **kwargs):
         self.command_queue.put((cmd, args, kwargs))
@@ -180,10 +183,133 @@ class UAVCommandSender(MavlinkWorker):
             self.enqueue(self.Manual.initiate_Guided_Mode)
 
     def payloadZoomIn(self):
+        self.enqueue(self.Payload.initiate_EODzoomOn_Raw)
         self.enqueue(self.Payload.initiate_ZoomIn_Raw)
 
     def payloadZoomOut(self):
+        self.enqueue(self.Payload.initiate_EODzoomOn_Raw)
         self.enqueue(self.Payload.initiate_ZoomOut_Raw)
+
+    # ── New PAYLOAD_COMMAND fields (TLV type 0x04) ───────────────────────────
+    # Added to accommodate the fields PayloadCommand (messages.py) now
+    # decodes that BUTTON_STATE-era code never had a sender method for.
+    # NOT yet wired via @register_handler — that needs the actual intent
+    # class names from commands/intents.py, which wasn't available when
+    # these were added. Call these directly, or add the @register_handler
+    # decorators once those class names are confirmed.
+    #
+    # near_infrared_toggle and eo_dzoom_toggle are deliberately NOT here:
+    # neither has a matching opcode anywhere in payload_services.py's C1
+    # command table (checked against the full OP_* list) — the ICD this
+    # was built against just doesn't document a command for either one
+    # yet. Sending something invented for these would be silent garbage
+    # on the wire, not a real command; get the actual opcodes before
+    # wiring them.
+
+    def laser_zoom_in(self):
+        """Laser's own zoom in (beam divergence) — separate from EO/IR optical zoom."""
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_LaserZoomIn_Raw)
+
+    def laser_zoom_out(self):
+        """Laser's own zoom out (beam divergence) — separate from EO/IR optical zoom."""
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_LaserZoomOut_Raw)
+
+    def take_picture(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_TakePhoto_Raw)
+
+    def start_record(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_StartRecording_Raw)
+
+    def stop_record(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_StopRecording_Raw)
+
+    def picture_record_mode_toggle(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_PicRecordSwitch_Raw)
+
+    def motor_toggle(self):
+        """
+        Toggle the gimbal servo motor on/off. initiate_MotorPower_Raw
+        needs an explicit bool (on/off), not a toggle, and nothing here
+        tracks the payload's actual motor state — so this flips a local
+        `_motor_on` flag and sends that. If the PC and gimbal ever
+        disagree (e.g. state reset without a matching physical motor
+        change), this flag can drift from the real motor state; there's
+        no query for actual motor status in payload_commands.py to
+        reconcile against.
+        """
+        if not self.Payload:
+            return
+        self._motor_on = not self._motor_on
+        self.enqueue(self.Payload.initiate_MotorPower_Raw, self._motor_on)
+
+    def _ensure_motor_on(self):
+        """
+        Turns the motor on if `_motor_on` says it isn't already — used
+        by features (tracking-follow, AI tracking) that need the servo
+        powered on to have any physical effect, so the caller doesn't
+        have to separately call motor_toggle() first. Shares `_motor_on`
+        with motor_toggle() above, so a manual toggle and an automatic
+        ensure-on stay consistent with each other. Same drift caveat as
+        motor_toggle(): this is a locally-tracked assumption, not a
+        query of the gimbal's actual state.
+        """
+        if not self.Payload:
+            return
+        if not self._motor_on:
+            self._motor_on = True
+            self.enqueue(self.Payload.initiate_MotorPower_Raw, True)
+
+    def ir_camera_dzoom_plus(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_IRCameraDzoomPlus_Raw)
+
+    def ir_camera_dzoom_minus(self):
+        if self.Payload:
+            self.enqueue(self.Payload.initiate_IRCameraDzoomMinus_Raw)
+
+    def near_infrared_toggle(self):
+        """
+        Toggle near-infrared mode on/off (ICD 3.8 C2 command table,
+        0x4A/0x4B). Correction from an earlier pass in this codebase's
+        history: this was reported as having no matching protocol
+        opcode — that was true of the OP_* constants already defined in
+        payload_services.py, but the actual Viewpro ICD does document
+        it, just under C2's single-byte Command 1 (same field EO Dzoom
+        ON/OFF uses), not the 7-bit C1 op table the OP_* constants are
+        named after. Tracks state locally like motor_toggle(), same
+        drift caveat: no query exists to reconcile against the payload's
+        actual state.
+        """
+        if not self.Payload:
+            return
+        self._near_infrared_on = not self._near_infrared_on
+        if self._near_infrared_on:
+            self.enqueue(self.Payload.initiate_NearInfraredOn_Raw)
+        else:
+            self.enqueue(self.Payload.initiate_NearInfraredOff_Raw)
+
+    def eo_dzoom_toggle(self):
+        """
+        Toggle EO digital zoom on/off directly (ICD 3.8 C2 0x06/0x07).
+        Note zoom_in_start()/zoom_out_start()/payloadZoomIn()/payloadZoomOut()
+        already enable EO Dzoom unconditionally before every zoom action
+        (see those methods) — this is for a dedicated toggle button
+        independent of an actual zoom press, and tracks its own state
+        rather than sharing zoom's unconditional-enable behavior.
+        """
+        if not self.Payload:
+            return
+        self._eo_dzoom_on = not self._eo_dzoom_on
+        if self._eo_dzoom_on:
+            self.enqueue(self.Payload.initiate_EODzoomOn_Raw)
+        else:
+            self.enqueue(self.Payload.initiate_EODzoomOff_Raw)
 
 
 
@@ -397,6 +523,7 @@ class UAVCommandSender(MavlinkWorker):
 
     def zoom_in_start(self, speed=4):
         if self.Payload:
+            self.enqueue(self.Payload.initiate_EODzoomOn_Raw)
             self.enqueue(self.Payload.initiate_ZoomIn_Raw, speed)
 
     def zoom_in_stop(self):
@@ -405,6 +532,7 @@ class UAVCommandSender(MavlinkWorker):
 
     def zoom_out_start(self, speed=4):
         if self.Payload:
+            self.enqueue(self.Payload.initiate_EODzoomOn_Raw)
             self.enqueue(self.Payload.initiate_ZoomOut_Raw, speed)
 
     def zoom_out_stop(self):
@@ -430,13 +558,22 @@ class UAVCommandSender(MavlinkWorker):
     # ── Object tracking ───────────────────────────────────────────────────
     # tracking_start locks the tracker onto whatever's currently under the
     # search cross — pair with a search/nudge step (not wired up here yet)
-    # if you need to move the cross onto a target first. Note this only
-    # engages the image tracker; the gimbal won't physically follow unless
-    # A1 servo mode is also put into tracking mode (build_A1_tracking /
-    # SERVO_TRACKING_MODE) — not wired here either, ask if you want it.
+    # if you need to move the cross onto a target first.
+    #
+    # A1 servo mode IS engaged here: initiate_TrackingTurnOn_Raw()'s
+    # default (engage_servo_tracking=True) already puts A1 into
+    # SERVO_TRACKING_MODE in the same frame as the E1 lock-on — see
+    # that method's own docstring. What was still missing is Motor
+    # ON/OFF: per the ICD, that's a separate A1 servo_mode value (0x00),
+    # not something bundled into mode-select — the servo needs to have
+    # been powered on at some point, or entering tracking mode has
+    # nothing to move. _ensure_motor_on() below covers that so tracking
+    # works standalone, without a separate manual "motor on" press first.
 
     def tracking_start(self):
         if self.Payload:
+            self._ensure_motor_on()
+            self.enqueue(self.Payload.initiate_TrackingSetTemplateSize_Raw,128)
             self.enqueue(self.Payload.initiate_TrackingTurnOn_Raw)
         if self.state:
             self.state.TRACKING_ENGAGED = True
@@ -454,6 +591,7 @@ class UAVCommandSender(MavlinkWorker):
 
     def ai_tracking_on(self):
         if self.Payload:
+            self._ensure_motor_on()
             self.enqueue(self.Payload.initiate_TrackingAIOn_Raw)
         if self.state:
             self.state.AI_TRACKING_ENGAGED = True
@@ -492,6 +630,28 @@ class UAVCommandSender(MavlinkWorker):
         source = self._video_source_cycle[self._video_source_index]
         self.enqueue(self.Payload.initiate_SwitchVideoSource_Raw, source)
 
+    # ── IR polarity/palette toggle (BIT_IR_POLARITY, "WHITE BTN") ───────────
+    # White-hot <-> black-hot <-> rainbow cycle, same lazy-cycle pattern as
+    # video_source_toggle above. Rainbow added alongside white/black-hot
+    # since OP_IR_RAINBOW (0x12) sits in the same C1 palette-opcode family
+    # as OP_POLARITY_WHITE_HOT/BLACK_HOT (0x0E/0x0F) — it's the same kind
+    # of control, not a separate feature.
+
+    _ir_polarity_cycle = None
+
+    def ir_polarity_toggle(self):
+        if not self.Payload:
+            return
+        if self._ir_polarity_cycle is None:
+            self._ir_polarity_cycle = [
+                self.Payload.initiate_IRPolarityWhiteHot_Raw,
+                self.Payload.initiate_IRPolarityBlackHot_Raw,
+                self.Payload.initiate_IRRainbow_Raw,
+            ]
+            self._ir_polarity_index = 0
+        self._ir_polarity_index = (self._ir_polarity_index + 1) % len(self._ir_polarity_cycle)
+        self.enqueue(self._ir_polarity_cycle[self._ir_polarity_index])
+
     # ── Laser: continuous mode (BIT_LASER_CONT_MODE) and single-shot trigger
     # (BIT_LASER_SINGLE_MODE) — separate from laser power (BIT_LASER_ON_OFF,
     # via laser_start/laser_stop above). Continuous mode reuses
@@ -512,6 +672,17 @@ class UAVCommandSender(MavlinkWorker):
         ).start()
 
     def _single_laser_range_thread(self, response_timeout):
+        # Laser module must be powered on before a ranging trigger does
+        # anything (ICD 3.8.1.3, C2 command 0x74) — previously this
+        # required a separate laser_start() call first (a manual "turn
+        # the laser on" press). Sent directly here, not via enqueue(),
+        # because this runs on its own thread: enqueuing would only
+        # guarantee it lands in command_queue, not that _run_once()
+        # drains and sends it before the ranging trigger below — two
+        # different execution contexts racing on the same gimbal link.
+        # A direct call here and the ranging trigger next are both on
+        # this one thread, so ordering is guaranteed.
+        self.Payload.initiate_LaserPowerOn_Raw()
         result = self.Payload.get_laser_range(response_timeout=response_timeout)
         distance = result.get('laser_range_m')
         if distance is not None:
@@ -673,6 +844,28 @@ def _handle_video_source_toggle(sender, cmd):
     sender.video_source_toggle()
 
 
+@register_handler(IRPolarityToggleCommand)
+def _handle_ir_polarity_toggle(sender, cmd):
+    logger.debug("IRPolarityToggleCommand received")
+    sender.ir_polarity_toggle()
+
+
+# "Image Sensor Change" (GREEN BTN, bit 7) reuses the same
+# video_source_toggle() as VIDEO_IP (bit 21) — "image sensor change" is
+# a strong naming match for switching between EO/IR sensors, which is
+# exactly what video_source_toggle() does, and it's plausible this is
+# actually THE real video-source button while VIDEO_IP(21) is something
+# else not yet correctly identified. Flagging this rather than silently
+# guessing — if VIDEO_IP turns out to mean something different (PIP?
+# network target?), this wiring should stay; if it turns out
+# VIDEO_IP was already correct and this is a distinct third thing,
+# this handler will need to change to call something else instead.
+@register_handler(ImageSensorChangeCommand)
+def _handle_image_sensor_change(sender, cmd):
+    logger.debug("ImageSensorChangeCommand received")
+    sender.video_source_toggle()
+
+
 @register_handler(LaserPowerOnCommand)
 def _handle_laser_power_on(sender, cmd):
     logger.debug("LaserPowerOnCommand received")
@@ -752,30 +945,34 @@ def _handle_zoomoutFall(sender, cmd):
     sender.state.ZOOMOUT_PRESSED = False
 
 
-# "Wide" is the wire-level/button name for what State and
-# AnalogInputHandler call "Focus" — bridged here rather than renaming the
-# Command classes, so the change stays isolated to this one seam. Level
-# state now (was one-shot GIMBAL_FOCUS incrementing via the old, now
-# unused, payloadFocus() MAVLink-native path); AnalogInputHandler's
-# _EdgeTrigger turns these levels into start/stop calls to
-# focus_plus_start/stop and focus_minus_start/stop.
+# "Wide" was previously bridged to Focus here, based on an assumption
+# made before main.c was available — turns out "Wide" is FOV terminology
+# (the ICD itself names these commands FOV+/FOV-), and real focus now has
+# its own dedicated bits (14/15, FocusPlusCommand/FocusMinusCommand
+# above). Corrected: widein/wideout now drive FOV+/- directly, reusing
+# the existing zoom_out_start/stop and zoom_in_start/stop — FOV+ IS zoom
+# out and FOV- IS zoom in, per the ICD's own naming, not a separate
+# control. FOCUSIN_PRESSED/FOCUSOUT_PRESSED are no longer set by
+# anything as of this change — they're not removed from State, just
+# dormant, since the dedicated Focus bits now drive focus_plus/minus
+# directly rather than through that state-flag+polling path.
 
-@register_handler(WideInCommand)
-def _handle_widein(sender, cmd):
-    logger.info("CameraWideInCommand received")
-    sender.state.FOCUSIN_PRESSED = True
+@register_handler(FOVPlusCommand)
+def _handle_fov_plus(sender, cmd):
+    logger.info("FOVPlusCommand received")
+    sender.zoom_out_start()
 
-@register_handler(WideInFallCommand)
-def _handle_wideinFall(sender, cmd):
-    logger.info("CameraWideInFallCommand received")
-    sender.state.FOCUSIN_PRESSED = False
+@register_handler(FOVPlusFallCommand)
+def _handle_fov_plus_fall(sender, cmd):
+    logger.info("FOVPlusFallCommand received")
+    sender.zoom_out_stop()
 
-@register_handler(WideOutCommand)
-def _handle_wideout(sender, cmd):
-    logger.info("CameraWideOutCommand received")
-    sender.state.FOCUSOUT_PRESSED = True
+@register_handler(FOVMinusCommand)
+def _handle_fov_minus(sender, cmd):
+    logger.info("FOVMinusCommand received")
+    sender.zoom_in_start()
 
-@register_handler(WideOutFallCommand)
-def _handle_wideoutFall(sender, cmd):
-    logger.info("CameraWideOutFallCommand received")
-    sender.state.FOCUSOUT_PRESSED = False
+@register_handler(FOVMinusFallCommand)
+def _handle_fov_minus_fall(sender, cmd):
+    logger.info("FOVMinusFallCommand received")
+    sender.zoom_in_stop()
