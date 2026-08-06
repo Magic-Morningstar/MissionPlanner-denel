@@ -1,4 +1,4 @@
-# mavlink/uav_commads/base_command.py
+# mavlink/base_command.py
 
 from pymavlink import mavutil
 import logging
@@ -58,7 +58,9 @@ class BaseCommand:
 
     def _requires_mode(self, mode_name):
         if self.state.get_UAV_Current_Mode != mode_name:
-            system_Print(
+            # FIXED: was system_Print(...), never imported in this file —
+            # a NameError every time this guard actually blocked something.
+            logger.warning(
                 f"{self.__class__.__name__}: blocked — "
                 f"mode is {self.state.get_UAV_Current_Mode}, expected {mode_name}."
             )
@@ -69,7 +71,8 @@ class BaseCommand:
         """Like _requires_mode but for commands valid in more than one
         mode (e.g. speed control, valid in both FBWA and FBWB)."""
         if self.state.get_UAV_Current_Mode not in mode_names:
-            system_Print(
+            # FIXED: same system_Print -> logger fix as _requires_mode above.
+            logger.warning(
                 f"{self.__class__.__name__}: blocked — "
                 f"mode is {self.state.get_UAV_Current_Mode}, expected one of {mode_names}."
             )
@@ -122,7 +125,9 @@ class BaseCommand:
             )
             if msg and msg.command == command:
                 accepted = msg.result == mavutil.mavlink.MAV_RESULT_ACCEPTED
-                system_Print(
+                # FIXED: was system_Print(...), same undefined-name issue
+                # as the two guards above.
+                logger.info(
                     f"{self.__class__.__name__}: ACK "
                     f"{'ACCEPTED' if accepted else 'REJECTED'}"
                 )
