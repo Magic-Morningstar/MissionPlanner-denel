@@ -113,7 +113,7 @@ PAYLOAD_FOV_MINUS_BIT                = 3   # a.k.a. "wide out"
 PAYLOAD_FOCUS_IN_BIT                 = 4
 PAYLOAD_FOCUS_OUT_BIT                = 5
 
-
+PAYLOAD_LASER_ON_OFF_BIT             = 6   # matches main.c's BIT_LASER_ON_OFF
 PAYLOAD_LASER_CONT_MODE_BIT          = 7
 PAYLOAD_LASER_SINGLE_MODE_BIT        = 8
 PAYLOAD_LASER_ZOOM_IN_BIT            = 9
@@ -141,4 +141,3 @@ PAYLOAD_VIDEO_IP_BIT                 = 27  # not in original list — appended
 PAYLOAD_EO_DZOOM_TOGGLE_BIT          = 28  # merged; not in original list — appended
 PAYLOAD_IR_RAINBOW_BIT               = 29  # not in original list — appended
 # 30, 31 reserved / spare
-

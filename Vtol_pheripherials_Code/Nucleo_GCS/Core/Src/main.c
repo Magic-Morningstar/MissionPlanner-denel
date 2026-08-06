@@ -343,10 +343,19 @@ static inline uint8_t Debounced_Is_Pressed(const debounce_state_t *db, uint8_t a
 
 /* Replaces set_bit_from_pin(): mirrors the debounced (not raw) level into
    USB_MESSAGE, so momentary/held buttons no longer flicker on bounce. */
+/* FIXED: this used to write into USB_MESSAGE (the BUTTON_STATE/flight
+   register) unconditionally. Every call site now passes it PAYLOAD_
+   register bit numbers (BIT_ZOOM_IN, BIT_FOCUS_IN, BIT_IR_POLARITY,
+   etc.) which restart from 0 — meaning e.g. holding zoom-in was
+   mirroring onto bit 0 of USB_MESSAGE, which is BIT_ARM, and
+   focus-in onto bit 4, BIT_MANUAL. Retargeted to PAYLOAD_MESSAGE,
+   matching what every current call site actually intends; no call
+   site needed to change since they already pass PAYLOAD_MESSAGE's
+   bit numbering. */
 static inline void Set_Bit_From_Debounced(debounce_state_t *db, uint8_t active_low, uint32_t bit)
 {
-    if (Debounced_Is_Pressed(db, active_low)) USB_MESSAGE |= (1UL << bit);
-    else                                       USB_MESSAGE &= ~(1UL << bit);
+    if (Debounced_Is_Pressed(db, active_low)) PAYLOAD_MESSAGE |= (1UL << bit);
+    else                                       PAYLOAD_MESSAGE &= ~(1UL << bit);
 }
 
 void onARM_Button_Press(void)
@@ -672,6 +681,19 @@ static inline void Set_LED_From_Bit(uint8_t led_idx, uint32_t bit)
                        (USB_MESSAGE & (1UL << bit)) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+/* FIXED: Update_Button_LEDs() below calls this exclusively with
+   PAYLOAD_MESSAGE-numbered bits (BIT_ZOOM_IN, BIT_IR_POLARITY, etc.),
+   but the original Set_LED_From_Bit only ever reads USB_MESSAGE — same
+   root cause as the Set_Bit_From_Debounced fix above. Added as a
+   separate function rather than retargeting Set_LED_From_Bit itself,
+   since Hello_mode_On()/Hello_mode_off() still legitimately read
+   USB_MESSAGE bits 0/1 through the original one. */
+static inline void Set_LED_From_Payload_Bit(uint8_t led_idx, uint32_t bit)
+{
+    HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin,
+                       (PAYLOAD_MESSAGE & (1UL << bit)) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
 static void Hello_mode_On(){
 	Set_LED_From_Bit(0,1);
 	Set_LED_From_Bit(1,1);
@@ -703,37 +725,38 @@ static inline void Set_LED_Off(uint8_t led_idx)
     HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin, GPIO_PIN_RESET);
 }
 
-/* Shows what each button currently DOES in USB_MESSAGE, per the active menu.
-   leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] is currently
-   unused (Auto-Land was removed) and free for whatever goes there next. */
+/* Shows what each button currently DOES in PAYLOAD_MESSAGE, per the active
+   menu. leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] is
+   currently unused (Auto-Land was removed) and free for whatever goes
+   there next. */
 static void Update_Button_LEDs(void)
 {
     /* fixed pin->LED pairing across menus: E10=4  E12=5  E14=6  D11=7  D12=8  D13=9 */
     if (menu_register & (1 << 0))
     {
-        Set_LED_From_Bit(7, BIT_FOV_IN);      /* GPIOD11 - BLACK BTN */
-        Set_LED_From_Bit(9, BIT_FOCUS_IN);     /* GPIOD13 - RED BTN   */
-        Set_LED_From_Bit(6, BIT_ZOOM_OUT);     /* GPIOE14 - YELLOW BTN*/
-        Set_LED_From_Bit(5, BIT_FOV_OUT);     /* GPIOE12 - WHITE BTN */
-        Set_LED_From_Bit(8, BIT_FOCUS_OUT);    /* GPIOD12 - BLUE BTN  */
-        Set_LED_From_Bit(4, BIT_ZOOM_IN);      /* GPIOE10 - GREEN BTN */
+        Set_LED_From_Payload_Bit(7, BIT_FOV_IN);      /* GPIOD11 - BLACK BTN */
+        Set_LED_From_Payload_Bit(9, BIT_FOCUS_IN);     /* GPIOD13 - RED BTN   */
+        Set_LED_From_Payload_Bit(6, BIT_ZOOM_OUT);     /* GPIOE14 - YELLOW BTN*/
+        Set_LED_From_Payload_Bit(5, BIT_FOV_OUT);     /* GPIOE12 - WHITE BTN */
+        Set_LED_From_Payload_Bit(8, BIT_FOCUS_OUT);    /* GPIOD12 - BLUE BTN  */
+        Set_LED_From_Payload_Bit(4, BIT_ZOOM_IN);      /* GPIOE10 - GREEN BTN */
     }
     else if (menu_register & (1 << 1))
     {
 
-        Set_LED_From_Bit(4, BIT_IMAGE_SENSOR_CHANGE);  /* GPIOE10 - GREEN BTN  */
-        Set_LED_From_Bit(5, BIT_IR_POLARITY);          /* GPIOE12 - WHITE BTN  */
+        Set_LED_From_Payload_Bit(4, BIT_IMAGE_SENSOR_CHANGE);  /* GPIOE10 - GREEN BTN  */
+        Set_LED_From_Payload_Bit(5, BIT_IR_POLARITY);          /* GPIOE12 - WHITE BTN  */
 
 
     }
     else if (menu_register & (1 << 2))
     {
 
-        Set_LED_From_Bit(5, BIT_JOYSTICK_TRACK);       /* GPIOE12 - WHITE BTN  */
-        Set_LED_From_Bit(8, BIT_AI_TRACKING_ON_OFF);   /* GPIOD12 - BLUE BTN   */
-        Set_LED_From_Bit(4, BIT_LASER_ON_OFF);         /* GPIOE10 - GREEN BTN  */
-        Set_LED_From_Bit(7, BIT_LASER_CONT_MODE);      /* GPIOD11 - BLACK BTN  */
-        Set_LED_From_Bit(9, BIT_LASER_SINGLE_MODE);    /* GPIOD13 - BLUE BTN   */
+        Set_LED_From_Payload_Bit(5, BIT_JOYSTICK_TRACK);       /* GPIOE12 - WHITE BTN  */
+        Set_LED_From_Payload_Bit(8, BIT_AI_TRACKING_ON_OFF);   /* GPIOD12 - BLUE BTN   */
+        Set_LED_From_Payload_Bit(4, BIT_LASER_ON_OFF);         /* GPIOE10 - GREEN BTN  */
+        Set_LED_From_Payload_Bit(7, BIT_LASER_CONT_MODE);      /* GPIOD11 - BLACK BTN  */
+        Set_LED_From_Payload_Bit(9, BIT_LASER_SINGLE_MODE);    /* GPIOD13 - BLUE BTN   */
     }
 }
 
