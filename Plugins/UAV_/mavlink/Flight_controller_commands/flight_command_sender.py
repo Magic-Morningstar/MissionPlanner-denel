@@ -248,7 +248,6 @@ class FlightCommandSender(MavlinkWorker):
             logger.critical("EMERGENCY: vehicle on ground — disarming")
             self.disarm()
 
-
 # ── Registered handlers ───────────────────────────────────────────────────────
 
 @register_handler(ArmCommand)
