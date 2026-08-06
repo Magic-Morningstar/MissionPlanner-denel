@@ -11,6 +11,7 @@ from serial_controller.serial_handler import SerialHandler
 from mavlink.mavlink_handler import Mavlink_controller
 from commands.translator import InputTranslator
 from logging_config import setup_logging
+from status_reporter import StatusReporter
 import logging
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class Controller:
             self.state, self.flight_command_bus, self.payload_command_bus, self.watchdog
         )
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
+        self.status_reporter = StatusReporter(self.state)
         self._shutdown = threading.Event()
 
     def start(self):
@@ -46,6 +48,7 @@ class Controller:
         self.SerialHandler.connect()
         self.Mavlink_controller.connect()
         self.watchdog.start()
+        self.status_reporter.start()
         logger.info("Controller started.")
 
         while not self._shutdown.is_set():
@@ -57,6 +60,7 @@ class Controller:
         logger.info("Shutdown signal received.")
         self.SerialHandler.disconnect()
         self.Mavlink_controller.disconnect()
+        self.status_reporter.stop()
         self._shutdown.set()
 
 
