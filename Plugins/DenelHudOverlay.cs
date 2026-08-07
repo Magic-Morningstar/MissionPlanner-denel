@@ -94,7 +94,19 @@ namespace MissionPlanner.Plugin
                     return;
                 }
 
-                string json = File.ReadAllText(StatusFilePath);
+                // Explicit FileShare.ReadWrite | Delete — File.ReadAllText's
+                // default share mode doesn't include Delete, which can make
+                // status_reporter.py's os.replace() (on the Python side)
+                // transiently fail with "access denied" if this read is
+                // in-flight at the same instant. Both loops run at ~1Hz
+                // independently, so that race is otherwise easy to hit.
+                string json;
+                using (var stream = new FileStream(StatusFilePath, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete))
+                using (var reader = new StreamReader(stream))
+                {
+                    json = reader.ReadToEnd();
+                }
                 var status = JsonConvert.DeserializeObject<BridgeStatus>(json);
                 if (status == null)
                 {

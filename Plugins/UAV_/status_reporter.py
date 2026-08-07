@@ -52,10 +52,26 @@ class StatusReporter:
         }
 
         # Write-then-rename so the C# side never reads a half-written file.
+        # On Windows, os.replace() can transiently fail with WinError 5
+        # (access denied) if the C# side's File.ReadAllText() happens to
+        # have the destination open at that exact instant — .NET's default
+        # share mode doesn't include FILE_SHARE_DELETE. A short retry
+        # absorbs that race without needing to coordinate the two 1Hz
+        # loops explicitly.
         tmp_path = STATUS_FILE + ".tmp"
         try:
             with open(tmp_path, "w") as f:
                 json.dump(payload, f)
-            os.replace(tmp_path, STATUS_FILE)
         except OSError as e:
-            logger.warning(f"StatusReporter: failed to write status file: {e}")
+            logger.warning(f"StatusReporter: failed to write temp file: {e}")
+            return
+
+        for attempt in range(5):
+            try:
+                os.replace(tmp_path, STATUS_FILE)
+                return
+            except OSError as e:
+                if attempt == 4:
+                    logger.warning(f"StatusReporter: failed to replace status file: {e}")
+                else:
+                    time.sleep(0.05)
