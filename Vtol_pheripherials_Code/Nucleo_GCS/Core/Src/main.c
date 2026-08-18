@@ -81,6 +81,17 @@
 #define TLV_TYPE_HELLO        0x20
 #define HELLO_SOURCE_STM32    0
 
+#define WS2812_BIT0   0x80U
+#define WS2812_BIT1   0xFCU
+#define WS2812_RESET_BYTES   50U
+
+#define WS2812_NUM_LEDS            6
+#define WS2812_ENCODED_BYTES_PER_LED  24U   /* 8 green + 8 red + 8 blue encoded bytes, MSB first */
+
+#define WS2812_COLOR_BYTES   (WS2812_NUM_LEDS * WS2812_ENCODED_BYTES_PER_LED)
+#define WS2812_BUFFER_LEN    (WS2812_COLOR_BYTES + WS2812_RESET_BYTES)
+
+static uint8_t s_buffer[WS2812_BUFFER_LEN];
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -90,6 +101,9 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc3;
+
+SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_tx;
 
 UART_HandleTypeDef huart2;
 
@@ -175,7 +189,7 @@ static uint8_t rx_byte;
 #define TLV_TYPE_STATUS       0x10  /* PC -> STM32, matches MessageType.STATUS in registry.py */
 #define TLV_TYPE_PAYLOAD_COMMAND 0x04
 #define SYNC_SENTINEL         0xFFFFFFFFUL
-uint32_t USB_MESSAGE = 0xFFFFFFFF;
+uint32_t USB_MESSAGE = 0x00;
 uint32_t PAYLOAD_MESSAGE = 0x00;
 uint8_t menu_register = 0b001;
 
@@ -226,14 +240,86 @@ static uint32_t pending_status_value = 0;
 void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void WS2812_EncodeByte(uint8_t *dst, uint8_t value)
+{
+    for (uint8_t bit = 0; bit < 8; bit++)
+    {
+        dst[bit] = (value & 0x80) ? WS2812_BIT1 : WS2812_BIT0;
+        value <<= 1;
+    }
+}
+
+void WS2812_SetPixel(uint16_t index, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (index >= WS2812_NUM_LEDS) return;
+
+    uint8_t *p = &s_buffer[index * WS2812_ENCODED_BYTES_PER_LED];
+    WS2812_EncodeByte(p + 0,  g);
+    WS2812_EncodeByte(p + 8,  r);
+    WS2812_EncodeByte(p + 16, b);
+}
+
+static SPI_HandleTypeDef *s_hspi = NULL;
+void WS2812_SetAll(uint8_t r, uint8_t g, uint8_t b)
+{
+    for (uint16_t i = 0; i < WS2812_NUM_LEDS; i++)
+    {
+        WS2812_SetPixel(i, r, g, b);
+    }
+}
+
+void WS2812_Clear(void)
+{
+    WS2812_SetAll(0, 0, 0);
+}
+void WS2812_Init(SPI_HandleTypeDef *hspi)
+{
+    s_hspi = hspi;
+    memset(s_buffer, 0x00, sizeof(s_buffer));  /* reset-padding region wants raw 0x00 — correct as-is */
+    WS2812_Clear();                            /* color region gets properly re-encoded next line */
+}
+
+
+
+static volatile uint8_t s_busy = 0;
+
+uint8_t WS2812_Show(void)
+{
+    if (s_busy || s_hspi == NULL) return 0;
+
+    s_busy = 1;
+    if (HAL_SPI_Transmit_DMA(s_hspi, s_buffer, WS2812_BUFFER_LEN) != HAL_OK)
+    {
+        s_busy = 0;
+        return 0;
+    }
+    return 1;
+}
+
+uint8_t WS2812_IsBusy(void)
+{
+    return s_busy;
+}
+
+/* HAL calls this automatically the instant the DMA transfer finishes —
+ * must exist somewhere in the project exactly once. */
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == s_hspi->Instance)
+    {
+        s_busy = 0;
+    }
+}
 static uint8_t tlv_crc8(const uint8_t *data, uint8_t len)
 {
     uint8_t crc = 0;
@@ -295,13 +381,34 @@ uint16_t ADC_Read_Channel(uint32_t channel)
 
     HAL_ADC_ConfigChannel(&hadc3, &sConfig);
 
+    /* Dummy/settling conversion — discarded. Lets the sample-and-hold
+       capacitor settle to this channel's voltage after switching from
+       whichever channel the previous call used. */
     HAL_ADC_Start(&hadc3);
-	HAL_ADC_PollForConversion(&hadc3, 10);
-	(void)HAL_ADC_GetValue(&hadc3);
+    HAL_ADC_PollForConversion(&hadc3, 10);
+    (void)HAL_ADC_GetValue(&hadc3);
+    /* FIXED: was missing — without this, the second HAL_ADC_Start()
+       below didn't cleanly reset the peripheral, and the second
+       HAL_ADC_PollForConversion() could see a leftover "conversion
+       complete" flag from the dummy read above and return immediately,
+       meaning the "real" reading right after it wasn't reliably fresh. */
+    HAL_ADC_Stop(&hadc3);
 
+    /* Real conversion. */
     HAL_ADC_Start(&hadc3);
-
-    HAL_ADC_PollForConversion(&hadc3, HAL_MAX_DELAY);
+    /* FIXED: was HAL_MAX_DELAY — this function runs synchronously in the
+       main loop, 4 times per iteration. An unbounded wait here means any
+       failure to complete (electrical glitch, this exact bug, anything)
+       freezes the ENTIRE firmware forever: buttons, joysticks, LED, all
+       of it, not just this one reading. Bounded to 10ms, matching the
+       dummy read's timeout — on timeout, returns 0 rather than hanging,
+       which is a recoverable "stale/zero for one cycle" rather than a
+       full lockup. */
+    if (HAL_ADC_PollForConversion(&hadc3, 10) != HAL_OK)
+    {
+        HAL_ADC_Stop(&hadc3);
+        return 0;
+    }
 
     uint16_t value = HAL_ADC_GetValue(&hadc3);
 
@@ -341,17 +448,7 @@ static inline uint8_t Debounced_Is_Pressed(const debounce_state_t *db, uint8_t a
     return active_low ? (db->stable == GPIO_PIN_RESET) : (db->stable == GPIO_PIN_SET);
 }
 
-/* Replaces set_bit_from_pin(): mirrors the debounced (not raw) level into
-   USB_MESSAGE, so momentary/held buttons no longer flicker on bounce. */
-/* FIXED: this used to write into USB_MESSAGE (the BUTTON_STATE/flight
-   register) unconditionally. Every call site now passes it PAYLOAD_
-   register bit numbers (BIT_ZOOM_IN, BIT_FOCUS_IN, BIT_IR_POLARITY,
-   etc.) which restart from 0 — meaning e.g. holding zoom-in was
-   mirroring onto bit 0 of USB_MESSAGE, which is BIT_ARM, and
-   focus-in onto bit 4, BIT_MANUAL. Retargeted to PAYLOAD_MESSAGE,
-   matching what every current call site actually intends; no call
-   site needed to change since they already pass PAYLOAD_MESSAGE's
-   bit numbering. */
+
 static inline void Set_Bit_From_Debounced(debounce_state_t *db, uint8_t active_low, uint32_t bit)
 {
     if (Debounced_Is_Pressed(db, active_low)) PAYLOAD_MESSAGE |= (1UL << bit);
@@ -611,19 +708,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     HAL_UART_Receive_IT(&huart2, &rx_byte, 1);  /* re-arm for the next byte */
 }
 
-/* Call once per main-loop iteration, in both the awaiting-sync state
-   and the running state. Two cases:
-     - value == SYNC_SENTINEL: PC is (re)requesting a sync — either it's
-       answering our own boot-time sentinel, or it just restarted and is
-       forcing us back to awaiting-sync. Either way, drop back to the
-       awaiting-sync state so we resume announcing SYNC_SENTINEL via
-       BUTTON_STATE, which is what prompts the PC to send real state.
-     - anything else: real state from the PC. Adopt it, clear
-       awaiting_sync so the normal button-reading branch runs, and reset
-       USB_MESSAGE to 0 (nothing pressed) — 0xFFFFFFFF was only ever a
-       "not synced yet" sentinel, never a real button reading, so it
-       must not leak into live BUTTON_STATE data once we start running
-       for real. */
+
 static void Process_Incoming_Status(void)
 {
     if (!status_frame_ready) return;
@@ -645,9 +730,6 @@ static void Process_Incoming_Status(void)
     }
 }
 
-/* Menu-status indicator: exactly one LED lit for the active menu
-   (menu_register is one-hot: 0b001 / 0b010 / 0b100).
-   Reuses leds[0], leds[1], leds[3] — call AFTER Test_Loop() so it wins. */
 static void Update_Menu_LEDs(void)
 {
     HAL_GPIO_WritePin(leds[0].port, leds[0].pin, (menu_register & 0b0001) ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -657,12 +739,6 @@ static void Update_Menu_LEDs(void)
 }
 
 
-/* Replaces poll_button(): fires onPress exactly once on the debounced
-   idle->pressed transition. edge_last is tracked per physical pin (not
-   per menu binding), so switching menus mid-press can't ghost-fire a
-   different menu's handler, and multiple menus sharing one pin never
-   fight over separate lastState variables the way the old code did.
-   polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
 static void Poll_Debounced(debounce_state_t *db, uint8_t active_low, void (*onPress)(void))
 {
     GPIO_PinState pressedState = active_low ? GPIO_PIN_RESET : GPIO_PIN_SET;
@@ -681,13 +757,7 @@ static inline void Set_LED_From_Bit(uint8_t led_idx, uint32_t bit)
                        (USB_MESSAGE & (1UL << bit)) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-/* FIXED: Update_Button_LEDs() below calls this exclusively with
-   PAYLOAD_MESSAGE-numbered bits (BIT_ZOOM_IN, BIT_IR_POLARITY, etc.),
-   but the original Set_LED_From_Bit only ever reads USB_MESSAGE — same
-   root cause as the Set_Bit_From_Debounced fix above. Added as a
-   separate function rather than retargeting Set_LED_From_Bit itself,
-   since Hello_mode_On()/Hello_mode_off() still legitimately read
-   USB_MESSAGE bits 0/1 through the original one. */
+
 static inline void Set_LED_From_Payload_Bit(uint8_t led_idx, uint32_t bit)
 {
     HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin,
@@ -725,10 +795,7 @@ static inline void Set_LED_Off(uint8_t led_idx)
     HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin, GPIO_PIN_RESET);
 }
 
-/* Shows what each button currently DOES in PAYLOAD_MESSAGE, per the active
-   menu. leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] is
-   currently unused (Auto-Land was removed) and free for whatever goes
-   there next. */
+
 static void Update_Button_LEDs(void)
 {
     /* fixed pin->LED pairing across menus: E10=4  E12=5  E14=6  D11=7  D12=8  D13=9 */
@@ -794,19 +861,19 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC3_Init();
   MX_USART2_UART_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   Send_Hello();
-  /* Belt-and-suspenders: HAL_UART_Transmit (used by TLV_Send) is a
-     blocking/polling call and never needed USART2_IRQn enabled, so its
-     working the whole time proved nothing about NVIC RX interrupt
-     config. Enabling it explicitly here means RX doesn't silently
-     depend on HAL_UART_MspInit() having done it — safe to call even if
-     it's already enabled elsewhere. */
+
   HAL_NVIC_SetPriority(USART2_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(USART2_IRQn);
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+
+  WS2812_Init(&hspi1);
+
   uint16_t pot1 = 0, pot2 = 0, pot3 = 0, pot4 = 0;
 
 
@@ -816,12 +883,19 @@ int main(void)
   static uint16_t avg3 = 0;
   static uint16_t avg4 = 0;
   static uint8_t counter = 0;
+  awaiting_sync = 0;
+  WS2812_SetPixel(3,10,10,10);
+  WS2812_Show();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-    {
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
 	  	Process_Incoming_Status();   /* adopt any STATUS frame the PC sent, every iteration, in either state */
 
 	  	if (awaiting_sync == 0){
@@ -830,8 +904,8 @@ int main(void)
 			Debounce_Sample_All(now);   /* samples every physical pin, every iteration, no matter the menu */
 
 			Update_Menu_LEDs();
-			pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
-			pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
+			//pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
+			//pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
 			pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
 			pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
 
@@ -892,7 +966,7 @@ int main(void)
 			Update_Button_LEDs();
 			counter++;
 
-			if (counter >= 17)
+			if (counter >= 16)
 			{
 				avg1 = pot1 / 16;
 				avg2 = pot2 / 16;
@@ -952,9 +1026,7 @@ int main(void)
 	  	}
 
 
-
-    }
-
+  }
   /* USER CODE END 3 */
 }
 
@@ -1012,6 +1084,7 @@ void SystemClock_Config(void)
   }
 }
 
+/**
 /**
   * @brief ADC3 Initialization Function
   * @param None
@@ -1092,6 +1165,63 @@ static void MX_ADC3_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 7;
+  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+
+  hdma_spi1_tx.Instance                 = DMA2_Stream3;
+  hdma_spi1_tx.Init.Channel             = DMA_CHANNEL_3;
+  hdma_spi1_tx.Init.Direction           = DMA_MEMORY_TO_PERIPH;
+  hdma_spi1_tx.Init.PeriphInc           = DMA_PINC_DISABLE;
+  hdma_spi1_tx.Init.MemInc              = DMA_MINC_ENABLE;
+  hdma_spi1_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  hdma_spi1_tx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  hdma_spi1_tx.Init.Mode                = DMA_NORMAL;
+  hdma_spi1_tx.Init.Priority            = DMA_PRIORITY_LOW;
+  hdma_spi1_tx.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
+  if (HAL_DMA_Init(&hdma_spi1_tx) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  __HAL_LINKDMA(&hspi1, hdmatx, hdma_spi1_tx);
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -1127,6 +1257,22 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -1154,7 +1300,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOF, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13 |GPIO_PIN_8, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOG, GPIO_PIN_9|GPIO_PIN_14, GPIO_PIN_RESET);
@@ -1175,7 +1321,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PF12 */
   GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PF13 PF14 PF15 */
@@ -1186,7 +1332,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE9 PE11 PE13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13|GPIO_PIN_8;
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
