@@ -63,7 +63,7 @@ class Mavlink_controller:
         emergency_stop() now fails safe to RTL on unknown state — but the
         other two are still degraded, so don't.
         """
-        self.state_poller.connect()
+        #self.state_poller.connect()
         self.flight_sender.connect()
 
     def disconnect(self):

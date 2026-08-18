@@ -40,6 +40,12 @@ class MavlinkWorker(ConnectionManager):
     # Delay between reconnection attempts.
     RECONNECT_BACKOFF_SEC = 3.0
 
+    # After this many failed strict heartbeat rounds, drop to the relaxed
+    # filter (any heartbeat that isn't ours) and warn loudly. A wrong
+    # filter should degrade to "connected, but tell me about it" — never
+    # to an indefinite silent hang.
+    RELAXED_AFTER_ROUNDS = 3
+
     def __init__(self, connection_string, state, watchdog=None, interval=1.0,
                  source_system=200, source_component=190):
         super().__init__()
@@ -84,6 +90,10 @@ class MavlinkWorker(ConnectionManager):
         self._last_heartbeat_sent = 0.0
         self._ping_seq = 0
 
+        # Nodes whose heartbeats we've rejected, so we log each one once
+        # rather than every second.
+        self._rejected_nodes = set()
+
     # ── Connection ────────────────────────────────────────────────────────────
 
     def _connect(self, label, retry_delay=2):
@@ -116,6 +126,16 @@ class MavlinkWorker(ConnectionManager):
         _connect_and_wait_for_heartbeat() is what actually establishes
         readiness.
         """
+        if self.connection_string.startswith(("udpin:", "udp:")):
+            logger.warning(
+                f"  [{label}] {self.connection_string} is an INPUT (server) socket. "
+                f"pymavlink cannot transmit on it until it has RECEIVED something, "
+                f"and it swallows the send error silently — so our announce "
+                f"heartbeats will not reach the far end. If the router only "
+                f"unicasts to registered clients this WILL hang. Prefer "
+                f"udpout:<host>:<port>."
+            )
+
         while not self.is_cancelled() and not self._stop_event.is_set():
             logger.info(f"  [{label}] connecting to {self.connection_string} "
                         f"as sys={self.source_system} comp={self.source_component}...")
@@ -160,7 +180,7 @@ class MavlinkWorker(ConnectionManager):
         except Exception as e:
             logger.debug(f"{self.__class__.__name__}: heartbeat send failed: {e}")
 
-    def _wait_for_vehicle_heartbeat(self, conn, timeout):
+    def _wait_for_vehicle_heartbeat(self, conn, timeout, strict=True):
         """
         Waits for a heartbeat from an actual autopilot and returns it, or
         None on timeout.
@@ -176,7 +196,17 @@ class MavlinkWorker(ConnectionManager):
 
         A real autopilot advertises a concrete autopilot type; GCS-role
         participants send MAV_AUTOPILOT_INVALID. That, plus excluding
-        MAV_TYPE_GCS, is the filter.
+        MAV_TYPE_GCS, is the strict filter.
+
+        strict=False relaxes it to "any heartbeat that isn't ours", which
+        is roughly what wait_heartbeat() did. _connect_and_wait_for_
+        heartbeat() falls back to this after RELAXED_AFTER_ROUNDS failed
+        strict rounds, so that a filter that's wrong for your topology
+        degrades into a warning rather than an indefinite hang.
+
+        Every rejected node is logged once, at WARNING, with the exact
+        fields that caused the rejection — if this is hanging, that log
+        tells you why.
         """
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -189,20 +219,27 @@ class MavlinkWorker(ConnectionManager):
             if msg is None:
                 continue
 
-            if msg.type == mavutil.mavlink.MAV_TYPE_GCS:
-                logger.debug(
-                    f"{self.__class__.__name__}: ignoring GCS heartbeat from "
-                    f"system {msg.get_srcSystem()}"
-                )
-                continue
-            if msg.autopilot == mavutil.mavlink.MAV_AUTOPILOT_INVALID:
-                logger.debug(
-                    f"{self.__class__.__name__}: ignoring non-autopilot heartbeat "
-                    f"from system {msg.get_srcSystem()} comp {msg.get_srcComponent()}"
-                )
-                continue
-            if msg.get_srcSystem() == self.source_system:
-                continue
+            node = (msg.get_srcSystem(), msg.get_srcComponent())
+
+            if node[0] == self.source_system and node[1] == self.source_component:
+                continue    # our own traffic reflected back
+
+            if strict:
+                reason = None
+                if msg.type == mavutil.mavlink.MAV_TYPE_GCS:
+                    reason = "MAV_TYPE_GCS"
+                elif msg.autopilot == mavutil.mavlink.MAV_AUTOPILOT_INVALID:
+                    reason = "MAV_AUTOPILOT_INVALID"
+                if reason:
+                    if node not in self._rejected_nodes:
+                        self._rejected_nodes.add(node)
+                        logger.warning(
+                            f"{self.__class__.__name__}: ignoring heartbeat from "
+                            f"sys={node[0]} comp={node[1]} "
+                            f"(type={msg.type} autopilot={msg.autopilot}) — {reason}. "
+                            f"Not treating this as the vehicle."
+                        )
+                    continue
 
             # Pin the routing target explicitly rather than relying on
             # mavutil's own inference, which we've just bypassed by not
@@ -257,7 +294,19 @@ class MavlinkWorker(ConnectionManager):
         which has no except clause around _do_connect() and would just
         lose the thread with no retry.
         """
+        round_num = 0
         while not self.is_cancelled() and not self._stop_event.is_set():
+            round_num += 1
+            strict = round_num <= self.RELAXED_AFTER_ROUNDS
+            if not strict and round_num == self.RELAXED_AFTER_ROUNDS + 1:
+                logger.warning(
+                    f"[{label}] {self.RELAXED_AFTER_ROUNDS} rounds with no autopilot "
+                    f"heartbeat — relaxing the filter to accept ANY non-self "
+                    f"heartbeat. If this now connects, target_system may point at a "
+                    f"GCS rather than the vehicle and commands will go nowhere. "
+                    f"Check the rejection warnings above."
+                )
+
             conn = self._connect(label=label)
             if conn is None:
                 return None
@@ -275,7 +324,9 @@ class MavlinkWorker(ConnectionManager):
             announcer.start()
 
             try:
-                msg = self._wait_for_vehicle_heartbeat(conn, heartbeat_timeout)
+                msg = self._wait_for_vehicle_heartbeat(
+                    conn, heartbeat_timeout, strict=strict
+                )
             finally:
                 stop_announcing.set()
                 announcer.join(timeout=2)
@@ -291,7 +342,11 @@ class MavlinkWorker(ConnectionManager):
 
             logger.warning(
                 f"{self.__class__.__name__}: no vehicle heartbeat within "
-                f"{heartbeat_timeout}s on {label} — retrying connection."
+                f"{heartbeat_timeout}s on {label} (round {round_num}, "
+                f"strict={strict}, endpoint={self.connection_string}). "
+                f"Nodes rejected so far: "
+                f"{sorted(self._rejected_nodes) or 'none — nothing arriving at all'}. "
+                f"Retrying."
             )
             try:
                 conn.close()
