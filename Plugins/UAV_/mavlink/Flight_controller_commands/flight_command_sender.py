@@ -18,25 +18,41 @@ logger = logging.getLogger(__name__)
 class FlightCommandSender(MavlinkWorker):
     """
     Arm/disarm, flight mode, speed, heading, manual-control streaming,
-    autotakeoff. Owns the MAVLink connection (command_drone + _mav_lock)
-    and hands both to `payload_sender` right after connecting — see
-    PayloadCommandSender.attach(). This is the only one of the two
+    autotakeoff. Owns the MAVLink connection (command_drone) and hands it
+    plus the shared _mav_lock to `payload_sender` right after connecting —
+    see PayloadCommandSender.attach(). This is the only one of the two
     dispatchers that actually opens a socket; PayloadCommandSender has no
     connection lifecycle of its own.
 
     payload_sender's queues are drained from THIS class's _run_once(),
     same background loop/interval as this class's own — one shared
     connection, one shared loop, two logical dispatchers.
+
+    Runs as MAVLink component 200/191, distinct from UAVStatePoller's
+    200/190. _mav_lock now lives on MavlinkWorker rather than here, so
+    that the base class's periodic heartbeats are serialised against this
+    class's command traffic — previously _loop() called heartbeat_send()
+    with no lock at all while commands went out under one, which is a
+    concurrent write to pymavlink's shared sequence counter and buffer.
     """
+
+    SOURCE_SYSTEM = 200
+    SOURCE_COMPONENT = 191
 
     def __init__(self, connection_string, state, flight_command_bus, watchdog=None,
                  interval=0.05, payload_sender=None):
-        super().__init__(connection_string, state, watchdog, interval)
+        super().__init__(
+            connection_string, state, watchdog, interval,
+            source_system=self.SOURCE_SYSTEM,
+            source_component=self.SOURCE_COMPONENT,
+        )
         self.command_drone       = None
         self.command_queue       = queue.Queue()
         self.command_bus         = flight_command_bus
         self.takeoff_in_progress = False
-        self._mav_lock           = threading.Lock()
+        # NOTE: self._mav_lock is inherited from MavlinkWorker — do not
+        # create a second one here, or the base class's heartbeats and
+        # this class's commands will be guarded by different locks.
 
         self.Manual     = None
         self.Director   = None
@@ -49,23 +65,27 @@ class FlightCommandSender(MavlinkWorker):
 
     # ── Connection ────────────────────────────────────────────────────────────
 
-    def _do_connect(self):
-        # FIXED: previously _connect_with_retry() + a plain _heartbeat()
-        # call — see MavlinkWorker._connect_and_wait_for_heartbeat's
-        # docstring for why that combination could hang forever after a
-        # UAV restart until something else (QGroundControl/Mission
-        # Planner) sent a heartbeat first. This both sends our own
-        # heartbeat while waiting AND actually retries if the wait
-        # genuinely times out, instead of dying silently.
-        self.command_drone = self._connect_and_wait_for_heartbeat(label="flight-command-sender")
+    def _open_connection(self):
+        """
+        Opens the link, builds the command helpers, attaches the payload
+        sender. Called on initial connect (via MavlinkWorker._do_connect)
+        and on every reconnect (via MavlinkWorker._loop) — so it must be
+        idempotent and must not start a loop thread itself.
+        """
+        self.command_drone = self._connect_and_wait_for_heartbeat(
+            label="flight-command-sender"
+        )
 
         if self.command_drone is None or self.is_cancelled():
             if self.command_drone:
-                self.command_drone.close()
+                try:
+                    self.command_drone.close()
+                except Exception:
+                    pass
             self.command_drone = None
             return False
 
-        self._mav_connection = self.command_drone  # lets _loop() send periodic heartbeats generically
+        self._mav_connection = self.command_drone  # lets _loop() heartbeat generically
 
         self.Manual     = ModeCommander(self.command_drone, self.state, self._mav_lock)
         self.Director   = DirectionCommander(self.command_drone, self.state, self._mav_lock)
@@ -77,10 +97,9 @@ class FlightCommandSender(MavlinkWorker):
 
         # Wired here rather than in __init__: needs a live ManualCtrl
         # (flight side) to exist first, which only happens post-connect.
-        # AnalogInputHandler is now flight-only (joystick -> FBWA/FBWB
-        # streaming) — no longer takes `sender` at all, since it never
-        # actually used it for anything payload-related; the payload half
-        # moved to PayloadAnalogInputHandler, driven off payload_sender.
+        # AnalogInputHandler is flight-only (joystick -> FBWA/FBWB
+        # streaming); the payload half lives in PayloadAnalogInputHandler,
+        # driven off payload_sender.
         from mavlink.Flight_controller_commands.analog_input_handler import AnalogInputHandler
         from mavlink.payload_commands.payload_analog_input_handler import PayloadAnalogInputHandler
         self._analog = AnalogInputHandler(self.state, self.ManualCtrl)
@@ -91,18 +110,27 @@ class FlightCommandSender(MavlinkWorker):
 
         self.state.update_UAV_Command_Connection(True, self.command_drone)
         logger.info("FlightCommandSender connected.")
-        self._start_loop()
         return True
 
     def _do_disconnect(self):
         if self.ManualCtrl:
-            self.ManualCtrl.stop_streaming()
+            try:
+                self.ManualCtrl.stop_streaming()
+            except Exception:
+                pass
             self.ManualCtrl = None
         if self._ato:
-            self._ato.cancel()
+            try:
+                self._ato.cancel()
+            except Exception:
+                pass
             self._ato = None
+        self.takeoff_in_progress = False
         if self.payload_sender:
-            self.payload_sender.detach()
+            try:
+                self.payload_sender.detach()
+            except Exception:
+                pass
         if self.command_drone:
             try:
                 self.command_drone.close()
@@ -132,6 +160,11 @@ class FlightCommandSender(MavlinkWorker):
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_once(self):
+        # Guard: _loop() can call us in the window where a teardown has
+        # nulled the connection but the reconnect hasn't completed.
+        if self.command_drone is None:
+            return
+
         self.drain_input_commands()
         if self.payload_sender:
             self.payload_sender.drain_input_commands()
@@ -146,8 +179,15 @@ class FlightCommandSender(MavlinkWorker):
                 cmd, args, kwargs = self.command_queue.get_nowait()
             except queue.Empty:
                 break
-            cmd(*args, **kwargs)
-            self.command_queue.task_done()
+            try:
+                cmd(*args, **kwargs)
+            except Exception as e:
+                # One bad command must not abort the rest of the drain,
+                # and must not count toward the loop's consecutive-error
+                # budget — that budget is for link failures.
+                logger.error(f"FlightCommandSender: command {cmd} failed: {e}")
+            finally:
+                self.command_queue.task_done()
 
     def enqueue(self, cmd, *args, **kwargs):
         self.command_queue.put((cmd, args, kwargs))
@@ -167,15 +207,26 @@ class FlightCommandSender(MavlinkWorker):
             self._ato.cancel()
         self.takeoff_in_progress = False
 
+    def _require_link(self, what):
+        """True if we have a live connection; logs and returns False if not."""
+        if self.command_drone is None:
+            logger.warning(f"{what}: no MAVLink connection — ignoring.")
+            return False
+        return True
+
     # ── Public command API ────────────────────────────────────────────────────
 
     def arm(self):
+        if not self._require_link("arm"):
+            return
         if not self.state.is_UAV_Armed:
             self.enqueue(Arms(self.command_drone, self.state, self._mav_lock).initiate_Arm)
         else:
             logger.info("Already armed — skipping")
 
     def disarm(self):
+        if not self._require_link("disarm"):
+            return
         self.enqueue(Arms(self.command_drone, self.state, self._mav_lock).initiate_Disarming)
 
     def set_fbwa(self):
@@ -187,6 +238,8 @@ class FlightCommandSender(MavlinkWorker):
             self.enqueue(self._switch_to_fbwb)
 
     def _switch_to_fbwb(self):
+        if not self._require_link("set_fbwb"):
+            return
         mode_mapping = self.command_drone.mode_mapping()
         if mode_mapping and "FBWB" in mode_mapping:
             with self._mav_lock:
@@ -200,7 +253,8 @@ class FlightCommandSender(MavlinkWorker):
                 self.ManualCtrl.start_streaming()
         else:
             logger.warning("FBWB not available — falling back to FBWA.")
-            self.Manual.initiate_FBWA_Mode()
+            if self.Manual:
+                self.Manual.initiate_FBWA_Mode()
             if self.ManualCtrl:
                 self.ManualCtrl.start_streaming()
 
@@ -215,8 +269,12 @@ class FlightCommandSender(MavlinkWorker):
     def set_rtl(self):
         if self.Manual:
             self.enqueue(self.Manual.initiate_RTL)
+        else:
+            logger.error("set_rtl: no ModeCommander — RTL could not be sent.")
 
     def set_airspeed(self, speed_ms):
+        if not self._require_link("set_airspeed"):
+            return
         self.enqueue(
             Speed_Controller(self.command_drone, self.state, self._mav_lock).set_airspeed,
             speed_ms
@@ -238,6 +296,9 @@ class FlightCommandSender(MavlinkWorker):
         if self.takeoff_in_progress:
             logger.info("Takeoff already in progress — ignoring duplicate request.")
             return
+        if not self._ato:
+            logger.warning("start_takeoff: no AutoTakeOff — not connected.")
+            return
         self.takeoff_in_progress = True
         threading.Thread(
             target=self._run_takeoff, daemon=True, name="TakeoffSequence"
@@ -250,11 +311,34 @@ class FlightCommandSender(MavlinkWorker):
             self.takeoff_in_progress = False
 
     def emergency_stop(self):
-        if self.state.is_flying:
+        """
+        Fails safe when vehicle state is unknown.
+
+        The old version was `if self.state.is_flying: RTL else: disarm`.
+        is_flying is only ever written by UAVStatePoller, so with the
+        poller not running it stayed False and this branch disarmed —
+        including in flight. Even with the poller running, the state
+        connection can be down at the exact moment this is called, which
+        is precisely when an emergency is likely.
+
+        Disarming an airborne aircraft is unrecoverable; a spurious RTL
+        on the ground is not. So unknown state resolves to RTL.
+        """
+        state_available = getattr(
+            self.state, "is_UAV_State_Connection_Available", False
+        )
+
+        if not state_available:
+            logger.critical(
+                "EMERGENCY: vehicle state unavailable — defaulting to RTL "
+                "(will not disarm on unknown state)"
+            )
+            self.set_rtl()
+        elif self.state.is_flying:
             logger.critical("EMERGENCY: vehicle is flying — triggering RTL")
             self.set_rtl()
         else:
-            logger.critical("EMERGENCY: vehicle on ground — disarming")
+            logger.critical("EMERGENCY: vehicle confirmed on ground — disarming")
             self.disarm()
 
 

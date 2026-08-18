@@ -189,7 +189,7 @@ static uint8_t rx_byte;
 #define TLV_TYPE_STATUS       0x10  /* PC -> STM32, matches MessageType.STATUS in registry.py */
 #define TLV_TYPE_PAYLOAD_COMMAND 0x04
 #define SYNC_SENTINEL         0xFFFFFFFFUL
-uint32_t USB_MESSAGE = 0x00;
+uint32_t USB_MESSAGE = 0xFFFFFFFF;
 uint32_t PAYLOAD_MESSAGE = 0x00;
 uint8_t menu_register = 0b001;
 
@@ -883,7 +883,7 @@ int main(void)
   static uint16_t avg3 = 0;
   static uint16_t avg4 = 0;
   static uint8_t counter = 0;
-  awaiting_sync = 0;
+
   WS2812_SetPixel(3,10,10,10);
   WS2812_Show();
 

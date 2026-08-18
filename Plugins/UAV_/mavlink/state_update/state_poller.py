@@ -9,23 +9,39 @@ logger = logging.getLogger(__name__)
 
 class UAVStatePoller(MavlinkWorker):
     """
-    Owns its own MAVLink state-poll connection.
-    Connects itself via _do_connect, then polls the
-    message cache every interval — no blocking recv_match anywhere.
+    Owns its own MAVLink state-poll connection. Connects itself via
+    _open_connection(), then polls the message cache every interval — no
+    blocking recv_match anywhere.
+
+    Runs as a distinct MAVLink component (200/190) from
+    FlightCommandSender (200/191). Both used to default to 255/0, which
+    made them indistinguishable to the autopilot and the Herelink router:
+    targeted replies went to whichever had transmitted most recently. In
+    practice FlightCommandSender won, because it heartbeats at 1Hz and
+    polls at 20Hz, so this poller quietly lost any ACK or PARAM_VALUE it
+    ever asked for.
     """
 
+    SOURCE_SYSTEM = 200
+    SOURCE_COMPONENT = 190
+
     def __init__(self, connection_string, state, watchdog=None, interval=1.0):
-        super().__init__(connection_string, state, watchdog, interval)
+        super().__init__(
+            connection_string, state, watchdog, interval,
+            source_system=self.SOURCE_SYSTEM,
+            source_component=self.SOURCE_COMPONENT,
+        )
         self.state_drone = None
 
     # ── Connection ────────────────────────────────────────────────────────────
 
-    def _do_connect(self):
-        # FIXED: see FlightCommandSender's _do_connect / MavlinkWorker.
-        # _connect_and_wait_for_heartbeat's docstring — this both sends
-        # our own heartbeat while waiting for the FC/Herelink's, and
-        # actually retries on a genuine timeout instead of dying
-        # silently.
+    def _open_connection(self):
+        """
+        Opens the link and publishes it to shared state. Called both on
+        initial connect (via MavlinkWorker._do_connect) and on every
+        reconnect (via MavlinkWorker._loop) — so it must be safe to run
+        more than once, and must not start a loop thread itself.
+        """
         self.state_drone = self._connect_and_wait_for_heartbeat(label="state-poll")
 
         if self.state_drone is None:
@@ -33,22 +49,41 @@ class UAVStatePoller(MavlinkWorker):
             return False
 
         if self.is_cancelled():
-            self.state_drone.close()
+            try:
+                self.state_drone.close()
+            except Exception:
+                pass
             self.state_drone = None
             return False
 
-        self._mav_connection = self.state_drone  # lets _loop() send periodic heartbeats generically
+        self._mav_connection = self.state_drone  # lets _loop() heartbeat generically
         self.state.UAV_HEARTBEAT = self.state_drone.messages.get('HEARTBEAT')
 
+        # This worker is the only one that requests stream rates. Rates
+        # are link-wide, not per-client, so if FlightCommandSender also
+        # requested any of these the two would overwrite each other.
         self._request_message_interval(
             self.state_drone,
             mavutil.mavlink.MAVLINK_MSG_ID_GLOBAL_POSITION_INT,
-            interval_us=100000
+            interval_us=100000,     # 10 Hz
+        )
+        # VFR_HUD and MISSION_CURRENT are read below in _run_once but were
+        # never requested — they were arriving only because ArduPilot's
+        # default stream rates happened to include them. Ask explicitly
+        # so the poller doesn't depend on the autopilot's SRx_ params.
+        self._request_message_interval(
+            self.state_drone,
+            mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD,
+            interval_us=200000,     # 5 Hz
+        )
+        self._request_message_interval(
+            self.state_drone,
+            mavutil.mavlink.MAVLINK_MSG_ID_MISSION_CURRENT,
+            interval_us=1000000,    # 1 Hz
         )
 
         self.state.update_UAV_State_Connection(True, self.state_drone)
         logger.info("UAVStatePoller connected.")
-        self._start_loop()
         return True
 
     def _do_disconnect(self):
@@ -79,8 +114,14 @@ class UAVStatePoller(MavlinkWorker):
     # ── Poll loop ─────────────────────────────────────────────────────────────
 
     def _run_once(self):
+        # Guard: _loop() can call us in the window where a teardown has
+        # nulled the connection but the reconnect hasn't completed.
+        if self.state_drone is None:
+            return
+
         while self.state_drone.recv_match(blocking=False) is not None:
             pass
+
         heartbeat       = self.state_drone.messages.get('HEARTBEAT')
         position        = self.state_drone.messages.get('GLOBAL_POSITION_INT')
         current_mission = self.state_drone.messages.get('MISSION_CURRENT')
@@ -148,7 +189,6 @@ class UAVStatePoller(MavlinkWorker):
                 )
                 self.state.update_UAV_Ground_Speed(vfr_hud.groundspeed)
                 changed = True
-
 
             # ── Air speed ─────────────────────────────────────────────────────
             if vfr_hud.airspeed != self.state.get_UAV_Current_Air_Speed:
