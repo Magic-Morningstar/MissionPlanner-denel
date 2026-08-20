@@ -75,20 +75,17 @@ class ButtonStateDecoder(Decoder):
         return ButtonState(
             arm          = bool((value >> ARM_BIT) & 1),
             manual       = bool((value >> MANUAL_BIT) & 1),
-            takeoff      = bool((value >> 25) & 1),
+ 
+            takeoff      = False,
             auto         = bool((value >> AUTO_BIT) & 1),
-            # FIXED: previously read from AUTO_LAND_BIT, which was
-            # actually IR_POLARITY (bit 6) in real firmware — meaning
-            # pressing the White button also fired LandCommand. There's
-            # no dedicated autoland bit in the current main.c list, so
-            # this is hardcoded False until one is actually assigned.
+ 
             autoland     = False,
-            emergency    =  bool((value >> 25) & 1), 
+            emergency    = False,   # see takeoff's comment above — same bit-25 collision
             speedup      = bool((value >> SPEED_UP_BIT) & 1),
             speeddown    = bool((value >> SPEED_DOWN_BIT) & 1),
             zoomin       = bool((value >> ZOOM_IN_BIT) & 1),
             zoomout      = bool((value >> ZOOM_OUT_BIT) & 1),
-            rtl          = bool((value >> 25) & 1),
+            rtl          = False,   # see takeoff's comment above — same bit-25 collision
             widein       = bool((value >> WIDE_IN_BIT) & 1),
             wideout      = bool((value >> WIDE_OUT_BIT) & 1),
             tracking     = bool((value >> TRACKING_BIT) & 1),
@@ -136,13 +133,7 @@ register(JoystickDecoder())
 
 @dataclass
 class StatusUpdate:
-    """
-    What the STM32 needs to know about current UAV state, e.g. to drive
-    LEDs. Built from SystemState facts (is_UAV_Armed, current mode,
-    is_flying) — see serial_controller/status_builder.py. Deliberately a
-    SEPARATE type from ButtonState: this is PC-owned data, not a reflection
-    of the incoming register, so the two can evolve independently.
-    """
+
     armed: bool
     manual_mode: bool
     auto_mode: bool
@@ -178,27 +169,7 @@ register(StatusUpdateDecoder())
 
 @dataclass
 class PayloadCommand:
-    """
-    Payload/gimbal/camera button state, split out of ButtonState so it
-    has its own 32-bit register instead of sharing (and colliding
-    within) BUTTON_STATE's bits — see TLV_PROTOCOL.md's "Known issues"
-    for the bit-25 collision this was partly meant to resolve.
 
-    30 fields, bits 0-29 of a uint32 (bits 30/31 spare) — see
-    bit_definitions.py's PAYLOAD_COMMAND section for the exact numbering
-    and the reasoning behind it. Three pairs of what were originally
-    separate on/off fields (near-IR, EO digital-zoom, and picture/record
-    mode switching) are represented here as a single toggle bit each,
-    to fit within 32 bits; STM32 firmware should send one momentary
-    pulse per toggle press, same edge-triggered pattern as the existing
-    onXxx_Button_Press() handlers use for BUTTON_STATE today.
-
-    Two fields from the original draft are intentionally NOT here:
-    `laser_zoom_manual_control_mode` and `laser_zoom_autosync_eo_mode`
-    were marked "not in the message" when this was scoped, and `tracking`
-    (as a standalone level) was likewise excluded in favor of the more
-    specific tracking_* fields below.
-    """
     zoomin: bool
     zoomout: bool
     widein: bool                    # a.k.a. "FOV Plus"

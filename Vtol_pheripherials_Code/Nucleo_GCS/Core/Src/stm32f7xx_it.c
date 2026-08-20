@@ -24,7 +24,6 @@
 /* USER CODE BEGIN Includes */
 
 extern ADC_HandleTypeDef hadc3;
-extern UART_HandleTypeDef huart2;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -230,14 +229,7 @@ void EXTI15_10_IRQHandler(void)
     HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_15);
 }
 
-/* Was missing entirely — this is the actual root cause of the STM32 never
-   receiving the PC's STATUS frames. HAL_UART_Receive_IT() arms the
-   peripheral, but without this handler routed through the vector table,
-   the USART2 RX-not-empty interrupt has nowhere to go: HAL_UART_IRQHandler()
-   (which is what calls HAL_UART_RxCpltCallback in main.c) never runs. */
-void USART2_IRQHandler(void)
-{
-    HAL_UART_IRQHandler(&huart2);
-}
+
+
 
 /* USER CODE END 1 */
