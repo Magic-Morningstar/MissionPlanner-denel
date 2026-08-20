@@ -16,25 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class FlightCommandSender(MavlinkWorker):
-    """
-    Arm/disarm, flight mode, speed, heading, manual-control streaming,
-    autotakeoff. Owns the MAVLink connection (command_drone) and hands it
-    plus the shared _mav_lock to `payload_sender` right after connecting —
-    see PayloadCommandSender.attach(). This is the only one of the two
-    dispatchers that actually opens a socket; PayloadCommandSender has no
-    connection lifecycle of its own.
-
-    payload_sender's queues are drained from THIS class's _run_once(),
-    same background loop/interval as this class's own — one shared
-    connection, one shared loop, two logical dispatchers.
-
-    Runs as MAVLink component 200/191, distinct from UAVStatePoller's
-    200/190. _mav_lock now lives on MavlinkWorker rather than here, so
-    that the base class's periodic heartbeats are serialised against this
-    class's command traffic — previously _loop() called heartbeat_send()
-    with no lock at all while commands went out under one, which is a
-    concurrent write to pymavlink's shared sequence counter and buffer.
-    """
 
     SOURCE_SYSTEM = 200
     SOURCE_COMPONENT = 191
@@ -50,9 +31,7 @@ class FlightCommandSender(MavlinkWorker):
         self.command_queue       = queue.Queue()
         self.command_bus         = flight_command_bus
         self.takeoff_in_progress = False
-        # NOTE: self._mav_lock is inherited from MavlinkWorker — do not
-        # create a second one here, or the base class's heartbeats and
-        # this class's commands will be guarded by different locks.
+
 
         self.Manual     = None
         self.Director   = None
@@ -95,11 +74,6 @@ class FlightCommandSender(MavlinkWorker):
         if self.payload_sender:
             self.payload_sender.attach(self.command_drone, self._mav_lock)
 
-        # Wired here rather than in __init__: needs a live ManualCtrl
-        # (flight side) to exist first, which only happens post-connect.
-        # AnalogInputHandler is flight-only (joystick -> FBWA/FBWB
-        # streaming); the payload half lives in PayloadAnalogInputHandler,
-        # driven off payload_sender.
         from mavlink.Flight_controller_commands.analog_input_handler import AnalogInputHandler
         from mavlink.payload_commands.payload_analog_input_handler import PayloadAnalogInputHandler
         self._analog = AnalogInputHandler(self.state, self.ManualCtrl)
@@ -160,8 +134,7 @@ class FlightCommandSender(MavlinkWorker):
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run_once(self):
-        # Guard: _loop() can call us in the window where a teardown has
-        # nulled the connection but the reconnect hasn't completed.
+
         if self.command_drone is None:
             return
 

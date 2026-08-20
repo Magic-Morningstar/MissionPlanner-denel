@@ -145,6 +145,12 @@ class MavlinkWorker(ConnectionManager):
                     source_system=self.source_system,
                     source_component=self.source_component,
                 )
+
+                if hasattr(conn, "port") and self.connection_string.startswith(("udpout:", "udp:")):
+                    try:
+                        conn.port.bind(("", 0))
+                    except OSError:
+                        pass  # already bound somehow — fine, that's the goal either way
                 logger.info(f"  [{label}] socket open on {self.connection_string}.")
                 return conn
             except Exception as e:

@@ -12,20 +12,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────
 
 class Payload(BaseCommand):
-    """
-    MAVLink commands for controlling a gimbal/camera payload (e.g. Viewpro
-    A20KTR) via the Gimbal Protocol v1 (DO_MOUNT_*) and standard camera
-    commands. Angle control uses DO_MOUNT_CONTROL rather than the newer
-    Gimbal Manager v2 messages, since that's what's broadly supported by
-    ArduPilot's mount driver today. Swap in DO_GIMBAL_MANAGER_PITCHYAW if
-    you're targeting a v2-only stack.
 
-    Also supports Viewpro's native raw protocol (see GimbalFrameBuilder,
-    in payload_services.py) for cases where DO_MOUNT_* doesn't cover a
-    feature the payload exposes natively. Raw frames are tunneled to the
-    gimbal's dedicated serial port via MAVLink SERIAL_CONTROL — the FC
-    does not interpret these bytes.
-    """
 
     # Device the gimbal is wired to, per MAVLink's SERIAL_CONTROL_DEV enum.
     # NOTE: this enum is a small FIXED set (TELEM1, TELEM2, GPS1, GPS2, SHELL,
@@ -243,16 +230,11 @@ class Payload(BaseCommand):
             logger.error(f"Raw gimbal frame too long for SERIAL_CONTROL ({len(frame)} bytes, max 70).")
             return False
 
-        flags = mavutil.mavlink.SERIAL_CONTROL_FLAG_EXCLUSIVE
+        flags = 0
         if expect_response:
             flags |= mavutil.mavlink.SERIAL_CONTROL_FLAG_RESPOND
 
-        # Locked: this can now be called from a background polling thread
-        # (see UAVCommandSender.start_laser_polling) concurrently with the
-        # main command-processing thread's own sends on the same
-        # connection — pymavlink connections aren't safe for unsynchronized
-        # concurrent send/recv, and the rest of this codebase already
-        # locks its other MAVLink sends (see _switch_to_fbwb).
+
         lock = getattr(self, 'lock', None)
         if lock:
             with lock:
@@ -332,16 +314,6 @@ class Payload(BaseCommand):
         """Drive the gimbal to its home position, using the native protocol."""
         frame = self._gimbal_frames.build_A1_home()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
-
-    # ── Raw zoom / focus / video source / photo / record / LRF (C1) ────────
-    # NOTE: zoom and focus here are RATE commands (start moving at `speed`,
-    # then call the matching *_Stop_Raw), not absolute levels like the
-    # MAVLink-native initiate_SetZoom/initiate_SetFocus above. Per ICD 2.3(b),
-    # these run on edge-trigger logic — once started they keep going until a
-    # genuinely different enumeration (stop/no-action) arrives. Don't mix
-    # this raw path with the MAVLink-native path for the same axis at the
-    # same time — same shared-control-conflict concern as DO_MOUNT_* vs raw
-    # angle commands.
 
     def initiate_ZoomIn_Raw(self, speed=4, expect_response=False):
         """Start zooming in (telephoto). speed: 1 (slowest) - 7 (fastest)."""
@@ -448,20 +420,7 @@ class Payload(BaseCommand):
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
     def get_laser_range(self, response_timeout=1.0):
-        """
-        Trigger a single laser rangefinder measurement AND read the
-        distance back, in one call. This is the piece that was completely
-        missing before — initiate_LaserRangeSingle_Raw() only ever sent
-        the trigger; nothing captured or parsed a reply.
 
-        Returns a dict from GimbalFrameBuilder.parse_reply_frame(), e.g.
-        {'cmd_id': 0x40, 'checksum_ok': True, 'laser_range_m': 142,
-         'laser_range_new': True}. 'laser_range_m' is None if the reading
-        is invalid (raw value 0) or if the payload replied with something
-        other than the T1+F1+B1+D1 status frame. Returns
-        {'error': ...} if nothing came back — see the error string for
-        why (e.g. 'no reply' vs a parse failure).
-        """
         frame = self._gimbal_frames.build_C1_laser_single_range()
         reply = self._send_raw_gimbal_frame(frame, expect_response=True, response_timeout=response_timeout)
 
@@ -480,16 +439,7 @@ class Payload(BaseCommand):
         return parsed
 
     def poll_status(self, response_timeout=1.0):
-        """
-        Send a no-op combined A1+C1+E1 frame (servo=no-change, no C1/E1
-        action) purely to solicit a T1+F1+B1+D1 status reply — unlike
-        get_laser_range(), this does NOT send a new single-ranging
-        trigger, so it's safe to call repeatedly (e.g. from a polling
-        loop) without repeatedly re-triggering or interrupting an
-        already-active continuous ranging session. Returns the same dict
-        shape as get_laser_range() — check 'laser_range_m' for the
-        latest reading a continuous session has produced.
-        """
+
         frame = self._gimbal_frames.build_combined_A1_C1_E1()  # all defaults = no-op
         reply = self._send_raw_gimbal_frame(frame, expect_response=True, response_timeout=response_timeout)
 
@@ -648,14 +598,6 @@ class Payload(BaseCommand):
         frame = self._gimbal_frames.build_C1_query_sd_free()
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
-    # ── Object tracking (E1 common / E2 infrequent) ─────────────────────────
-    # Two layers: E1 controls the image tracker itself (find/lock/follow a
-    # target in the video); separately, put the gimbal's A1 servo mode into
-    # SERVO_TRACKING_MODE (initiate_MotorPower_Raw doesn't do this —
-    # build_A1_tracking / servo_mode=0x06 does) for the physical gimbal to
-    # actually chase wherever the tracker says the target is. Locking the
-    # tracker on without also engaging servo tracking mode won't move the
-    # gimbal.
 
     def initiate_TrackingStop_Raw(self, expect_response=False):
         """Stop tracking."""
@@ -737,13 +679,4 @@ class Payload(BaseCommand):
         return self._send_raw_gimbal_frame(frame, expect_response=expect_response)
 
     def get_tracking_status(self, response_timeout=1.0):
-        """
-        Poll the gimbal and return the current tracking sensor + state
-        ('stop'/'search'/'tracking'/'lost'), read from the F1 field of
-        the T1+F1+B1+D1 status reply — the same reply the laser distance
-        comes from, so this is the same dict shape as
-        get_laser_range()/poll_status() (which also now includes
-        'tracking_sensor'/'tracking_status' — call whichever you already
-        have a result from rather than polling twice).
-        """
         return self.poll_status(response_timeout=response_timeout)
