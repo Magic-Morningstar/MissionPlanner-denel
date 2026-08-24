@@ -9,7 +9,7 @@ class MessageType:
     BUTTON_STATE     = 0x01
     JOYSTICK         = 0x02   # unchanged — still 4 bytes, x/y, exactly as before
     JOYSTICK2        = 0x03   # NEW — second stick
-    PAYLOAD_COMMAND  = 0x04   # NEW — payload/gimbal/camera buttons, split out of BUTTON_STATE
+    PAYLOAD_COMMAND  = 0x04   # NEW — payload/gimbal/camera buttons, own 32-bit register
     STATUS           = 0x10
 
 

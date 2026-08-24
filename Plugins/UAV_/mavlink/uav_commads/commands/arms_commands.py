@@ -1,7 +1,7 @@
 # mavlink/uav_commads/arms_commands.py
 
 from pymavlink import mavutil
-from mavlink.base_command import BaseCommand
+from mavlink.uav_commads.commands.base_command import BaseCommand
 import logging
 logger = logging.getLogger(__name__)
 

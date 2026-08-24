@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <string.h>
+#include "fastLed_SPI.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -230,12 +231,19 @@ uint16_t ADC_Read_Channel(uint32_t channel)
     HAL_ADC_ConfigChannel(&hadc3, &sConfig);
 
     HAL_ADC_Start(&hadc3);
-	HAL_ADC_PollForConversion(&hadc3, 10);
-	(void)HAL_ADC_GetValue(&hadc3);
+    HAL_ADC_PollForConversion(&hadc3, 10);
+    (void)HAL_ADC_GetValue(&hadc3);
 
+    HAL_ADC_Stop(&hadc3);
+
+    /* Real conversion. */
     HAL_ADC_Start(&hadc3);
 
-    HAL_ADC_PollForConversion(&hadc3, HAL_MAX_DELAY);
+    if (HAL_ADC_PollForConversion(&hadc3, 10) != HAL_OK)
+    {
+        HAL_ADC_Stop(&hadc3);
+        return 0;
+    }
 
     uint16_t value = HAL_ADC_GetValue(&hadc3);
 
@@ -542,6 +550,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+  ws2812_init();
   uint16_t pot1 = 0, pot2 = 0, pot3 = 0, pot4 = 0;
 
 
@@ -553,15 +562,108 @@ int main(void)
   static uint8_t counter = 0;
   static uint8_t message_counter = 0;
   /* USER CODE END 2 */
+  ws2812_pixel(2,0, 0, 255);
+  ws2812_send_spi();
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
-    /* USER CODE END WHILE */
+    {
 
-    /* USER CODE BEGIN 3 */
-  }
+	    uint32_t now = HAL_GetTick();
+        Debounce_Sample_All(now);   /* samples every physical pin, every iteration, no matter the menu */
+
+        Update_Menu_LEDs();
+
+
+
+        //pot1 += ADC_Read_Channel(ADC_CHANNEL_9);
+        //pot2 += ADC_Read_Channel(ADC_CHANNEL_15);
+        pot3 += ADC_Read_Channel(ADC_CHANNEL_6);
+        pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
+
+        /* Persistent MODE buttons: toggle/latch on press, stay set until pressed again. */
+        Poll_Debounced(&menuBtnDb, 1, onMenuSelect_Button_Press);   /* PA6, pull-up, active-low */
+
+        /* MOMENTARY command buttons: bit mirrors the debounced pin level, set only while held. */
+        /*                       btn_db[i]     active_low             bit */
+        if(menu_register& (1<<0)){
+        	/*Zoom*/
+        	Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, BIT_ZOOM_IN);   // GPIOE10 - GREEN BTN
+        	Set_Bit_From_Debounced(&btn_db[6], buttons[6].active_low, BIT_ZOOM_OUT);  // GPIOE14 - YELLOW BTN
+
+
+        	/*FOV*/
+			Set_Bit_From_Debounced(&btn_db[7], buttons[7].active_low, BIT_WIDE_IN);   // GPIOD11 - BLACK BTN
+			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, BIT_WIDE_OUT);  // GPIOE12 - WHITE BTN
+
+			/*FOCUS*/
+			Set_Bit_From_Debounced(&btn_db[9], buttons[9].active_low, BIT_FOCUS_IN);  // GPIOD13 - RED BTN
+			Set_Bit_From_Debounced(&btn_db[8], buttons[8].active_low, BIT_FOCUS_OUT); // GPIOD12 - BLUE BTN
+
+        }
+
+        if(menu_register& (1<<1)){
+        	/*Video*/
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onVIDEOIP_Button_Press);          // GPIOE14 - Yellow BTN
+			Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, BIT_IMAGE_SENSOR_CHANGE); // GPIOE10 - GREEN BTN
+			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, BIT_IR_POLARITY);         // GPIOE12 - WHITE BTN
+		}
+
+        if(menu_register& (1<<2)){
+        	/*Tracking*/
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onTRACKING_START_STOP_Button_Press); // GPIOE14 - YELLOW BTN
+        	Poll_Debounced(&btn_db[5], buttons[5].active_low, onAI_JOYSTICK_TRACK_Button_Press);    // GPIOE12 - WHITE BTN
+        	Poll_Debounced(&btn_db[8], buttons[8].active_low, onAI_TRACKING_Button_Press);          // GPIOD12 - BLUE BTN
+
+        	/*Laser*/
+        	Poll_Debounced(&btn_db[4], buttons[4].active_low, onLASER_Button_Press);                // GPIOE10 - GREEN BTN
+			Poll_Debounced(&btn_db[7], buttons[7].active_low, onLASERCONT_Button_Press);            // GPIOD11 - BLACK BTN
+			Poll_Debounced(&btn_db[9], buttons[9].active_low, onLASERSINGLE_Button_Press);          // GPIOD13 - BLUE BTN
+		}
+        Update_Button_LEDs();
+
+
+        counter++;
+
+        if (counter >= 16)
+        {
+            avg1 = pot1 / 16;
+            avg2 = pot2 / 16;
+            avg3 = pot3 / 16;
+            avg4 = pot4 / 16;
+
+
+            counter = 0;
+            pot1 = 0;
+            pot2 = 0;
+            pot3 = 0;
+            pot4 = 0;
+        }
+        if ((HAL_GetTick() - last_usb_send) >= 10)
+        {
+            uint8_t btn_payload[4] = {
+                (uint8_t)(USB_MESSAGE & 0xFF), (uint8_t)((USB_MESSAGE >> 8) & 0xFF),
+                (uint8_t)((USB_MESSAGE >> 16) & 0xFF), (uint8_t)((USB_MESSAGE >> 24) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_BUTTON_STATE, btn_payload, sizeof(btn_payload));
+
+            uint8_t joy_payload[4] = {
+                (uint8_t)(avg1 & 0xFF), (uint8_t)((avg1 >> 8) & 0xFF),
+                (uint8_t)(avg2 & 0xFF), (uint8_t)((avg2 >> 8) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_JOYSTICK, joy_payload, sizeof(joy_payload));
+
+            uint8_t joy2_payload[4] = {
+                (uint8_t)(avg3 & 0xFF), (uint8_t)((avg3 >> 8) & 0xFF),
+                (uint8_t)(avg4 & 0xFF), (uint8_t)((avg4 >> 8) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_JOYSTICK2, joy2_payload, sizeof(joy2_payload));
+
+            last_usb_send = HAL_GetTick();
+        }
+    }
+
   /* USER CODE END 3 */
 }
 
@@ -717,7 +819,7 @@ static void MX_SPI1_Init(void)
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;

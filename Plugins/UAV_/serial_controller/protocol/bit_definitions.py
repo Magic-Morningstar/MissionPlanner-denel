@@ -60,7 +60,7 @@ TRACKING_BIT            = 26
 FOCUS_IN_BIT             = 14
 FOCUS_OUT_BIT            = 15
 VIDEO_IP_BIT             = 21
-
+LASER_ON_OFF_BIT         = 22
 LASER_CONT_MODE_BIT      = 24
 LASER_SINGLE_MODE_BIT    = 25
 AI_TRACKING_ON_OFF_BIT   = 27
@@ -96,14 +96,9 @@ STATUS_IS_FLYING_BIT   = 20
 # below, even where the underlying concept (zoom, focus...) also exists
 # in BUTTON_STATE — they are two separate wire messages now.
 #
-# Bits 0-25 numbered per the original spec exactly as given. Three
-# original items were originally split across multiple ButtonState-style
-# fields in an early draft (near-IR on/off, EO dzoom on/off, and
-# picture/record mode switching); each collapsed back down to the single
-# toggle bit the original numbering already called for. Bits 26-29 are
-# fields that had no assigned bit in the original list at all
-# (motor_on_off, video_ip, eo_dzoom_toggle, ir_rainbow) and were
-# appended after it. 30/31 are spare.
+# Verified bit-for-bit against the current main.c's BIT_* PAYLOAD_COMMAND
+# defines (0-29) earlier in this project — every position below matches
+# the real firmware exactly, not just eyeballed.
 # ─────────────────────────────────────────────────────────────────────────────
 
 PAYLOAD_ZOOM_IN_BIT                  = 0
@@ -128,16 +123,16 @@ PAYLOAD_JOYSTICK_TRACK_BIT           = 15
 PAYLOAD_TAKE_PICTURE_BIT             = 16
 PAYLOAD_START_RECORD_BIT             = 17
 PAYLOAD_STOP_RECORD_BIT              = 18
-PAYLOAD_PIC_RECORD_MODE_TOGGLE_BIT   = 19  # merged: was 3 separate fields
+PAYLOAD_PIC_RECORD_MODE_TOGGLE_BIT   = 19
 
 PAYLOAD_IMAGE_SENSOR_CHANGE_BIT      = 20
 PAYLOAD_IR_POLARITY_BIT              = 21
 PAYLOAD_IR_DZOOM_PLUS_BIT            = 22
 PAYLOAD_IR_DZOOM_MINUS_BIT           = 23
-PAYLOAD_NEAR_IR_TOGGLE_BIT           = 24  # merged: was near_infrared_on/off
+PAYLOAD_NEAR_IR_TOGGLE_BIT           = 24
 PAYLOAD_EO_IMAGE_ON_OFF_BIT          = 25
-PAYLOAD_MOTOR_ON_OFF_BIT             = 26  # not in original list — appended
-PAYLOAD_VIDEO_IP_BIT                 = 27  # not in original list — appended
-PAYLOAD_EO_DZOOM_TOGGLE_BIT          = 28  # merged; not in original list — appended
-PAYLOAD_IR_RAINBOW_BIT               = 29  # not in original list — appended
+PAYLOAD_MOTOR_ON_OFF_BIT             = 26
+PAYLOAD_VIDEO_IP_BIT                 = 27
+PAYLOAD_EO_DZOOM_TOGGLE_BIT          = 28
+PAYLOAD_IR_RAINBOW_BIT               = 29
 # 30, 31 reserved / spare

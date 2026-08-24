@@ -420,18 +420,6 @@ class GimbalFrameBuilder:
         """Set IR palette polarity to black-hot."""
         return self.build_combined_A1_C1_E1(c1_op_command=self.OP_POLARITY_BLACK_HOT)
 
-    def build_C1_ir_rainbow(self) -> bytes:
-        """Set IR palette to rainbow (false-color)."""
-        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_IR_RAINBOW)
-
-    def build_C1_ir_dzoom_plus(self) -> bytes:
-        """IR camera digital zoom in."""
-        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_IR_DZOOM_PLUS)
-
-    def build_C1_ir_dzoom_minus(self) -> bytes:
-        """IR camera digital zoom out."""
-        return self.build_combined_A1_C1_E1(c1_op_command=self.OP_IR_DZOOM_MINUS)
-
     def build_C1_laser_single_range(self) -> bytes:
         """Trigger a single laser rangefinder measurement."""
         return self.build_combined_A1_C1_E1(c1_lrf_command=self.LRF_SINGLE_RANGING)
@@ -540,10 +528,6 @@ class GimbalFrameBuilder:
     C2_CMD_LASER_CONTROL = 0x74  # byte1 value selecting laser control
     C2_CMD_POWER_CONTROL = 0x75  # byte1 value selecting the alternate hard-power path
     C2_CMD_SET_EO_ZOOM   = 0x53  # byte1 value selecting "set EO zoom to parameter value" (ICD 3.8.1.2)
-    C2_CMD_EO_DZOOM_ON   = 0x06  # ICD 3.8 C2 command table
-    C2_CMD_EO_DZOOM_OFF  = 0x07
-    C2_CMD_NEAR_IR_ON    = 0x4A  # ICD 3.8 C2 command table
-    C2_CMD_NEAR_IR_OFF   = 0x4B
 
     # Laser control sub-command (bits 0-4 of the 2-byte parameter, when byte1=0x74)
     LASER_CTRL_NO_ACTION            = 0x00
@@ -603,37 +587,6 @@ class GimbalFrameBuilder:
         laser_bits = 0b01 if on else 0b10  # 1=ON, 2=OFF in the 2-bit field
         param_word = (laser_bits & 0x03) << 14
         return self.build_C2(self.C2_CMD_POWER_CONTROL, param_word)
-
-    def build_C2_eo1_power(self, on: bool) -> bytes:
-        """
-        EO 1 sensor power, via the same Power Control command (0x75) as
-        build_C2_laser_power, but bits 0-1 (ICD 3.8.1.4's power-control
-        bit table) instead of 14-15. Same 0=no change/1=ON/2=OFF
-        encoding, IR/EO2/laser bits left at 0 (no change).
-        """
-        eo1_bits = 0b01 if on else 0b10
-        param_word = eo1_bits & 0x03
-        return self.build_C2(self.C2_CMD_POWER_CONTROL, param_word)
-
-    def build_C2_eo_dzoom_on(self) -> bytes:
-        """
-        Enable EO digital zoom. Per ICD 3.7's note on C1 op 0x08/0x09
-        (FOV+/-): "the digital zoom is included when it is enabled" —
-        without this, FOV+/- only reaches the optical zoom limit.
-        """
-        return self.build_C2(self.C2_CMD_EO_DZOOM_ON, 0)
-
-    def build_C2_eo_dzoom_off(self) -> bytes:
-        """Disable EO digital zoom — FOV+/- reverts to optical-only range."""
-        return self.build_C2(self.C2_CMD_EO_DZOOM_OFF, 0)
-
-    def build_C2_near_ir_on(self) -> bytes:
-        """Enable near-infrared mode (ICD 3.8 C2 command table, 0x4A)."""
-        return self.build_C2(self.C2_CMD_NEAR_IR_ON, 0)
-
-    def build_C2_near_ir_off(self) -> bytes:
-        """Disable near-infrared mode (ICD 3.8 C2 command table, 0x4B)."""
-        return self.build_C2(self.C2_CMD_NEAR_IR_OFF, 0)
 
     # ── E1: tracking command, commonly used, 3 bytes ────────────────────────
     # ICD 3.11 — the section heading in the ICD itself says "E2" but the

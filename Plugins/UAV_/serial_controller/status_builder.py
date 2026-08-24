@@ -20,9 +20,9 @@ class StatusBuilder:
     def build(self) -> StatusUpdate:
         status = StatusUpdate(
             armed       = self.state.is_UAV_Armed,
-            manual_mode = False,
-            auto_mode   = False,
-            autoland_mode = False,
+            manual_mode = self.state.get_UAV_Current_Mode in ("FBWA", "FBWB", "MANUAL"),
+            auto_mode   = self.state.get_UAV_Current_Mode in ("AUTO"),
+            autoland_mode = self.state.get_UAV_Current_Mode in ("QLAND"),
             is_flying   = self.state.is_flying,
         )
         logger.info(f"StatusBuilder: {status}")

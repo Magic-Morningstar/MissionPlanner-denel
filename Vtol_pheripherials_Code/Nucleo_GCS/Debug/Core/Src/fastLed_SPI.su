@@ -1,0 +1,4 @@
+../Core/Src/fastLed_SPI.c:11:6:ws2812_init	8	static
+../Core/Src/fastLed_SPI.c:20:6:ws2812_send_spi	8	static
+../Core/Src/fastLed_SPI.c:35:6:ws2812_pixel	24	static
+../Core/Src/fastLed_SPI.c:43:6:ws2812_pixel_all	32	static

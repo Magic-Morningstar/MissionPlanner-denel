@@ -1,16 +1,4 @@
-# mavlink/payload_commands/payload_analog_input_handler.py
-#
-# Payload-only half of what used to be AnalogInputHandler — gimbal rate
-# (Joystick2 -> Manual Speed Mode), tracking-search cross nudging, and
-# zoom/focus edge-triggered start/stop. Deliberately takes only (state,
-# sender) — no manual_ctrl, since flight-mode joystick streaming isn't
-# this class's concern. See analog_input_handler.py for the flight-only
-# counterpart (joystick -> FBWA/FBWB manual-control streaming).
-#
-# `sender` here is a PayloadCommandSender — every method call on it in
-# this file is a payload action (set_gimbal_rate, tracking_search,
-# zoom_in_start, etc.), same as it always was; the only thing that
-# changed is which class answers to "sender".
+# mavlink/uav_commads/analog_input_handler.py
 
 import logging
 import time
@@ -28,18 +16,18 @@ ADC_MID = ADC_MAX / 2.0   # 2047.5
 GIMBAL_YAW_DEG_PER_SEC   = 45.0   # azimuth
 GIMBAL_PITCH_DEG_PER_SEC = 45.0   # tilt
 
-# Gimbal rate is sent via Manual Speed Mode (set_gimbal_rate), not
-# repeated relative-angle deltas — see PayloadAnalogInputHandler's
-# docstring. A new command only goes out when the desired rate changes
-# by at least this much...
+# Gimbal rate is now sent via Manual Speed Mode (set_gimbal_rate), not
+# repeated relative-angle deltas — see AnalogInputHandler's docstring.
+# A new command only goes out when the desired rate changes by at least
+# this much...
 GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S = 2.0
 # ...or when this much time has passed since the last send, whichever
 # comes first. The keepalive exists purely as a safety net: Manual Speed
 # Mode is "fire and forget" (the gimbal keeps moving until told
 # otherwise), so a single dropped command on a lossy link would otherwise
 # leave the gimbal spinning indefinitely at a stale rate.
-GIMBAL_RATE_KEEPALIVE_ACTIVE_SEC = 0.3
-GIMBAL_RATE_KEEPALIVE_IDLE_SEC   = 2.0
+GIMBAL_RATE_KEEPALIVE_SEC = 0.3
+
 # Small deadzone around center — any deflection producing a percent in
 # this range is treated as exactly 0%, so tiny stick noise near center
 # doesn't produce drift on any axis using _percent_from_joystick.
@@ -85,11 +73,11 @@ class _EdgeTrigger:
         return None
 
 
-class PayloadAnalogInputHandler:
+class AnalogInputHandler:
     """
     Completely stateless with respect to MAVLink — it calls methods on
-    PayloadCommandSender (set_gimbal_rate, tracking_search, zoom_in_start,
-    etc.) and never touches the drone connection directly.
+    UAVCommandSender (set_airspeed, turn_left, set_gimbal_rate,
+    zoom_in_start, etc.) and never touches the drone connection directly.
 
     Gimbal control (Joystick2 X/Y) — pure RATE control via Manual Speed
     Mode, sent on change + keepalive:
@@ -97,10 +85,20 @@ class PayloadAnalogInputHandler:
       dead zone around center) maps directly to a deg/sec rate per axis.
       A new set_gimbal_rate() call only goes out when the desired rate
       changes by more than GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S, or when
-      the keepalive interval has elapsed since the last send (whichever
+      GIMBAL_RATE_KEEPALIVE_SEC has elapsed since the last send (whichever
       comes first) — plus immediately, unconditionally, the moment both
       axes return to zero, so releasing the stick stops promptly rather
       than waiting on the change threshold.
+
+      This replaced an earlier approach that integrated rate into a
+      position delta every tick and sent a relative-angle command
+      whenever the accumulated delta crossed a threshold — at max rate
+      and a 20Hz loop that meant a new command nearly every tick even
+      while the stick was held perfectly steady. Manual Speed Mode (ICD
+      3.3.1.2) is a genuine velocity command: send once, the gimbal keeps
+      moving on its own, no per-tick re-sending needed. There's no local
+      "current angle" tracking here and no clamping — azimuth and tilt
+      are both continuous 360° on this gimbal.
 
     Zoom / focus — level-triggered via _EdgeTrigger, NOT proportional to
     deflection:
@@ -108,11 +106,21 @@ class PayloadAnalogInputHandler:
       "start" fires once (rising edge) and the gimbal keeps zooming/
       focusing on its own, per the ICD's "rising edge is valid" behavior;
       a single "stop" fires once the flag goes False (falling edge).
+      Both zoom axes go through the same _EdgeTrigger instance pattern
+      deliberately — hand-writing the same start/stop state machine
+      separately per button is exactly what previously let one axis's
+      logic get inverted (zoom-out's stop condition was never reachable)
+      while the other axis, written correctly, worked fine. One shared,
+      tested primitive can't drift out of sync with itself.
     """
 
-    def __init__(self, state, sender):
-        self.state  = state
-        self.sender = sender   # PayloadCommandSender for command dispatch
+    def __init__(self, state, manual_ctrl, sender):
+        self.state       = state
+        self.manual_ctrl = manual_ctrl   # ManualController instance
+        self.sender      = sender        # UAVCommandSender for command dispatch
+
+        self._last_turn_degrees   = 0.0
+        self._last_altitude_delta = 0.0
 
         # Last rate actually sent via set_gimbal_rate, and when — used to
         # decide whether a new send is warranted (change or keepalive).
@@ -135,23 +143,29 @@ class PayloadAnalogInputHandler:
         self._last_search_tilt    = 0
 
     def process(self):
+        current_mode = self.state.get_UAV_Current_Mode
+
         # Gimbal pointing is independent of flight mode — always active.
         self._handle_joystick2_gimbal()
+        self._handle_joystick(current_mode)
         self._handle_zoom_focus()
 
     # ── Joystick2 X/Y → gimbal yaw/pitch (Manual Speed Mode, send-on-change) ─
+
     def _handle_joystick2_gimbal(self):
         if getattr(self.state, 'TRACKING_ENGAGED', False) or getattr(self.state, 'AI_TRACKING_ENGAGED', False):
             # Tracking (or AI tracking) owns the gimbal now. The keepalive
             # below sends A1=SERVO_MANUAL_SPEED roughly every
-            # GIMBAL_RATE_KEEPALIVE_ACTIVE_SEC regardless of stick position —
+            # GIMBAL_RATE_KEEPALIVE_SEC regardless of stick position —
             # including at zero velocity — which is a genuine servo-mode
             # change away from SERVO_TRACKING_MODE, not a no-op. Left
             # running, it forces the gimbal back out of tracking-follow
-            # on the very next keepalive tick. Suppressing entirely here —
-            # including search-cross nudging, since nudging a cross
-            # you're already locked onto doesn't do anything useful —
-            # until tracking_stop()/ai_tracking_off() clears these flags.
+            # on the very next keepalive tick, which is almost certainly
+            # why tracking previously appeared to "work for a second and
+            # let go." Suppressing entirely here — including search-cross
+            # nudging, since nudging a cross you're already locked onto
+            # doesn't do anything useful — until tracking_stop()/
+            # ai_tracking_off() clears these flags.
             return
 
         if getattr(self.state, 'JOYSTICK_TRACK_MODE', False):
@@ -170,25 +184,10 @@ class PayloadAnalogInputHandler:
         now = time.monotonic()
         yaw_changed = abs(yaw_vel - self._last_sent_yaw_vel) >= GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S
         pitch_changed = abs(pitch_vel - self._last_sent_pitch_vel) >= GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S
-
-        # Keepalive cadence depends on whether the gimbal is currently
-        # moving or at rest. While actively commanding a non-zero rate, keep
-        # the fast keepalive — that's what protects against a dropped
-        # in-motion command leaving the gimbal spinning at a stale rate.
-        # Once the last command sent was a stop (rate = 0 on both axes),
-        # back off to a much slower keepalive: a dropped "still at zero"
-        # message costs nothing, since there's no motion to correct if it's
-        # lost. This is what stops idle stick position from generating
-        # constant zero-rate traffic into command_queue.
-        at_rest = (self._last_sent_yaw_vel == 0.0 and self._last_sent_pitch_vel == 0.0)
-        keepalive_interval = (
-            GIMBAL_RATE_KEEPALIVE_IDLE_SEC if at_rest else GIMBAL_RATE_KEEPALIVE_ACTIVE_SEC
-        )
         keepalive_due = (
             self._last_gimbal_send_time is None
-            or (now - self._last_gimbal_send_time) >= keepalive_interval
+            or (now - self._last_gimbal_send_time) >= GIMBAL_RATE_KEEPALIVE_SEC
         )
-
         # Returning to a full stop should feel immediate, not wait on the
         # change threshold or the next keepalive tick.
         just_stopped = (
@@ -234,6 +233,18 @@ class PayloadAnalogInputHandler:
         logger.info(f"Tracking search nudge: azimuth={azimuth_nudge:+d}, tilt={tilt_nudge:+d}")
         self.sender.tracking_search(azimuth_nudge, tilt_nudge)
 
+    # ── Joystick X/Y → mode-dependent control ────────────────────────────────
+
+    def _handle_joystick(self, mode):
+        joystick_x = self.state.get_Joystick_X
+        joystick_y = self.state.get_Joystick_Y
+
+        if mode in ("FBWA", "FBWB"):
+            # Start streaming if not already — ManualController reads
+            # state directly at 10Hz so no values need passing here
+            if self.manual_ctrl and not self.manual_ctrl._streaming:
+                self.manual_ctrl.start_streaming()
+
     # ── Zoom / focus — level-triggered start/stop, via _EdgeTrigger ─────────
 
     def _handle_zoom_focus(self):
@@ -260,3 +271,15 @@ class PayloadAnalogInputHandler:
             self.sender.focus_minus_start()
         elif focus_minus_edge == "stop":
             self.sender.focus_minus_stop()
+
+    # ── Mapping helpers — heading / altitude, unrelated to the gimbal ────────
+
+    def _joystick_to_degrees(self, joystick_x):
+        """Maps joystick X (0-4095) to heading change in degrees. Max ±45deg."""
+        percent = _percent_from_joystick(joystick_x)
+        return (percent / 100.0) * 45.0
+
+    def _joystick_to_altitude_delta(self, joystick_y):
+        """Maps joystick Y (0-4095) to altitude delta in meters. Max ±20m."""
+        percent = _percent_from_joystick(joystick_y)
+        return (percent / 100.0) * 20.0
