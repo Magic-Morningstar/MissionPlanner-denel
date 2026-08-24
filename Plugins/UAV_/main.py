@@ -7,6 +7,7 @@ import signal
 from state.system_state import SystemState
 from state.watchdog import Watchdog
 from serial_controller.serial_handler import SerialHandler
+from API.json_api_updater import *
 from mavlink.mavlink_handler import Mavlink_controller
 from commands.translator import InputTranslator
 from logging_config import setup_logging
@@ -30,14 +31,28 @@ class Controller:
         self.translator = InputTranslator(self.command_bus, self.state)
         self.Mavlink_controller = Mavlink_controller(self.state, self.command_bus, self.watchdog)
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
+
+        # GuiStateExporter only ever reads from self.state — same
+        # boundary rule as everything else that touches SystemState.
+        # template_path is the static schema (checked into the repo,
+        # never overwritten); json_path is the live file the GUI
+        # actually polls, rewritten on every update. Adjust these two
+        # paths to wherever you actually want them to live.
+        self.gui_exporter = GuiStateExporter(
+            self.state,
+            json_path="menu_info.json",
+            template_path="",
+        )
+
         self._shutdown = threading.Event()
 
     def start(self):
         signal.signal(signal.SIGINT, self._on_shutdown)
         signal.signal(signal.SIGTERM, self._on_shutdown)
-
+        
         self.SerialHandler.connect()
         self.Mavlink_controller.connect()
+        self.gui_exporter.start()
         self.watchdog.start()
         logger.info("Controller started.")
 
@@ -51,6 +66,7 @@ class Controller:
         logger.info("Shutdown signal received.")
         self.SerialHandler.disconnect()
         self.Mavlink_controller.disconnect()
+        self.gui_exporter.stop()
         self._shutdown.set()
 
 

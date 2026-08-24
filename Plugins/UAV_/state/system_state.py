@@ -43,13 +43,47 @@ class SystemState:
         self._PAYLOAD_JOYSTICK_X = 0
         self._PAYLOAD_JOYSTICK_Y = 0
 
+        # ── Discrete payload button status — ALL 30 PayloadCommand fields,
+        # mirrored 1:1, not just the handful this used to have. Naming
+        # matches the existing convention exactly (field name uppercased,
+        # underscores collapsed, +_PRESSED) — e.g. focus_in -> FOCUSIN_PRESSED
+        # was already the pattern for the 4 fields that existed before;
+        # every other field below follows the same rule, generated
+        # mechanically so there's no risk of a typo diverging from
+        # PayloadCommand's actual field names.
         self.ZOOMIN_PRESSED = False
-        self.ZOOMING_IN = False
-        self.ZOOMING_OUT =False
         self.ZOOMOUT_PRESSED = False
-
+        self.WIDEIN_PRESSED = False
+        self.WIDEOUT_PRESSED = False
         self.FOCUSIN_PRESSED = False
         self.FOCUSOUT_PRESSED = False
+        self.LASERONOFF_PRESSED = False
+        self.LASERCONTMODE_PRESSED = False
+        self.LASERSINGLEMODE_PRESSED = False
+        self.LASERZOOMIN_PRESSED = False
+        self.LASERZOOMOUT_PRESSED = False
+        self.TRACKINGSEARCHONOFF_PRESSED = False
+        self.AITRACKINGONOFF_PRESSED = False
+        self.TRACKINGTEMPLATETOGGLE_PRESSED = False
+        self.TRACKINGSOURCETOGGLE_PRESSED = False
+        self.JOYSTICKTRACK_PRESSED = False
+        self.TAKEPICTURE_PRESSED = False
+        self.STARTRECORD_PRESSED = False
+        self.STOPRECORD_PRESSED = False
+        self.PICTURERECORDMODETOGGLE_PRESSED = False
+        self.IMAGESENSORCHANGE_PRESSED = False
+        self.IRPOLARITY_PRESSED = False
+        self.IRCAMERADZOOMPLUS_PRESSED = False
+        self.IRCAMERADZOOMMINUS_PRESSED = False
+        self.NEARINFRAREDTOGGLE_PRESSED = False
+        self.EOIMAGEONOFF_PRESSED = False
+        self.MOTORONOFF_PRESSED = False
+        self.VIDEOIP_PRESSED = False
+        self.EODZOOMTOGGLE_PRESSED = False
+        self.IRRAINBOW_PRESSED = False
+
+        self.ZOOMING_IN = False
+        self.ZOOMING_OUT =False
 
         # When True, Joystick2 nudges the tracking search cross instead
         # of setting gimbal rate — set by JoystickTrackModeOnCommand /
@@ -78,6 +112,24 @@ class SystemState:
         # ── Payload options ──────────────────────────────────────────────────────    
         self.GIMBAL_ZOOM  = 0
         self.GIMBAL_FOCUS = 0
+
+        # ── Discrete control status (edge-detected in translator.py) ─────────
+        # The last ButtonState translator.py ran edge-detection against —
+        # was previously written via a method that didn't exist here,
+        # which crashed InputTranslator.__init__ every time. Fixed by
+        # actually defining it.
+        self._CONTROL_STATUS = None
+
+        # ── Latest PAYLOAD_COMMAND ────────────────────────────────────────────
+        # Full decoded PayloadCommand object, most recent one received.
+        # This is the "gateway" — the one thing gui_state_exporter.py and
+        # any future menu-dispatch code need, so they don't each need
+        # their own path from the wire into state. Individual
+        # commonly-read fields are also mirrored onto the plain
+        # ZOOMIN_PRESSED-style attributes below by translator.py, for
+        # code (PayloadAnalogInputHandler) that already reads those
+        # directly rather than going through the full object.
+        self._LATEST_PAYLOAD_COMMAND = None
 
 
 
@@ -226,3 +278,31 @@ class SystemState:
     def clear_UAV_State_Changed(self):
         with self._lock:
             self.UAV_STATE_CHANGE = False
+
+    # ── Control status (ButtonState edge-detection baseline) ─────────────────
+
+    def update_Control_Status(self, status):
+        """status is a ButtonState — the last one translator.py ran
+        edge-detection against. Was called from translator.py before
+        this method existed, which crashed on every InputTranslator
+        construction."""
+        with self._lock:
+            self._CONTROL_STATUS = status
+
+    @property
+    def get_Control_Status(self):
+        return self._CONTROL_STATUS
+
+    # ── Payload command (gateway) ─────────────────────────────────────────────
+
+    def update_Latest_Payload_Command(self, payload_command):
+        """Called by translator.py whenever a new PayloadCommand decodes
+        off the wire. Stores the full object — get_latest_payload_command()
+        below is the one thing gui_state_exporter.py needs from this
+        class, and it's a plain method (not a @property) to match that
+        contract exactly."""
+        with self._lock:
+            self._LATEST_PAYLOAD_COMMAND = payload_command
+
+    def get_latest_payload_command(self):
+        return self._LATEST_PAYLOAD_COMMAND

@@ -4,7 +4,7 @@
   "menu_register": {
     "type": "bitmask",
     "note": "",
-    "selected menu":5,
+    "selected menu": 5,
     "active_menu_field": "menu_register",
     "bit_to_menu_id": {
       "0": "zoom_fov_focus",
@@ -17,7 +17,7 @@
     }
   },
   "menus": [
-    { 
+    {
       "id": "zoom_fov_focus",
       "bit": 0,
       "title": "Zoom / FOV / Focus",
@@ -25,32 +25,37 @@
       "status": "implemented",
       "bindings": [
         {
+          "field": "zoomin",
           "label": "Zoom In",
           "active": false,
           "note": ""
         },
         {
+          "field": "zoomout",
           "label": "Zoom Out",
           "active": false,
           "note": ""
         },
         {
-
+          "field": "widein",
           "label": "FOV Narrow",
           "active": false,
           "note": ""
         },
         {
+          "field": "wideout",
           "label": "FOV Wide",
           "active": false,
           "note": ""
         },
         {
+          "field": "focus_in",
           "label": "Focus Near",
           "active": false,
           "note": ""
         },
         {
+          "field": "focus_out",
           "label": "Focus Far",
           "active": false,
           "note": ""
@@ -66,27 +71,32 @@
       "status": "implemented",
       "bindings": [
         {
+          "field": "image_sensor_change",
           "label": "Image Sensor",
           "active": false,
           "note": ""
         },
         {
+          "field": "ir_polarity",
           "label": "IR Polarity",
           "active": false,
           "note": ""
         },
         {
+          "field": "near_infrared_toggle",
           "label": "Near IR",
           "active": false,
           "note": ""
         },
         {
+          "field": "ir_camera_dzoom_plus",
           "label": "IR DZoom +",
           "active": false,
           "note": ""
         },
         {
-          "label": "IR DZoom −",
+          "field": "ir_camera_dzoom_minus",
+          "label": "IR DZoom \u2212",
           "active": false,
           "note": ""
         },
@@ -107,26 +117,31 @@
       "status": "implemented",
       "bindings": [
         {
+          "field": "tracking_search_on_off",
           "label": "Tracking Search",
           "active": false,
           "note": ""
         },
         {
+          "field": "joystick_track",
           "label": "Joystick Track",
           "active": false,
           "note": ""
         },
         {
+          "field": "ai_tracking_on_off",
           "label": "AI Tracking",
           "active": false,
           "note": ""
         },
         {
+          "field": "tracking_template_toggle",
           "label": "Template",
           "active": false,
           "note": ""
         },
         {
+          "field": "tracking_source_toggle",
           "label": "Track Source",
           "active": false,
           "note": ""
@@ -148,21 +163,25 @@
       "status": "implemented",
       "bindings": [
         {
+          "field": "laser_cont_mode",
           "label": "Laser Continuous",
           "active": false,
           "note": ""
         },
         {
+          "field": "laser_single_mode",
           "label": "Laser Single",
           "active": false,
           "note": ""
         },
         {
+          "field": "laser_zoom_in",
           "label": "Laser Zoom In",
           "active": false,
           "note": ""
         },
         {
+          "field": "laser_zoom_out",
           "label": "Laser Zoom Out",
           "active": false,
           "note": ""
@@ -191,7 +210,7 @@
       "status_note": "",
       "bindings": [
         {
-
+          "field": "take_picture",
           "label": "Take Picture",
           "active": false,
           "note": ""
@@ -201,6 +220,8 @@
           "action_type": "toggle",
           "firmware_handler": "onRECORD_Button_Press",
           "label": "Record",
+          "field_on": "start_record",
+          "field_off": "stop_record",
           "commands": {
             "on": "StartRecordCommand",
             "off": "StopRecordCommand"
@@ -213,6 +234,7 @@
           "action_type": "hold",
           "firmware_bit": "BIT_PICTURE_RECORD_MODE_TOGGLE",
           "label": "Photo/Video Mode",
+          "field": "picture_record_mode_toggle",
           "commands": {
             "press": "PictureRecordModeToggleCommand",
             "release": null
@@ -225,6 +247,7 @@
           "action_type": "hold",
           "firmware_bit": "BIT_MOTOR_TOGGLE",
           "label": "Gimbal Motors",
+          "field": "motor_on_off",
           "commands": {
             "press": "MotorToggleCommand",
             "release": null
@@ -256,21 +279,25 @@
       "status_note": "",
       "bindings": [
         {
+          "field": "video_ip",
           "label": "Video Source",
           "active": false,
           "note": ""
         },
         {
+          "field": "eo_image_on_off",
           "label": "EO Image",
           "active": false,
           "note": ""
         },
         {
+          "field": "eo_dzoom_toggle",
           "label": "EO DZoom",
           "active": false,
           "note": ""
         },
         {
+          "field": "ir_rainbow",
           "label": "IR Rainbow",
           "active": false,
           "note": ""
@@ -299,6 +326,7 @@
       "status_note": "",
       "bindings": [
         {
+          "field": "laser_on_off",
           "label": "Laser Power",
           "active": false,
           "note": ""
@@ -337,5 +365,4 @@
       "menu_note": ""
     }
   ]
-
 }

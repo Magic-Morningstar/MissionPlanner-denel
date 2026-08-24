@@ -4,3 +4,45 @@
 14:09:05.670 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
 14:09:05.670 [MainThread      ] INFO     __main__                     Controller started.
 14:09:05.688 [Thread-1 (_run) ] INFO     serial_controller.serial_handler No STM32 device found on any COM port.
+11:25:24.977 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+11:25:24.978 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+11:25:24.982 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+11:25:24.982 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+11:25:24.982 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: started, writing to menu_info.json
+11:25:24.984 [MainThread      ] INFO     __main__                     Controller started.
+11:25:25.000 [Thread-1 (_run) ] INFO     serial_controller.serial_handler No STM32 device found on any COM port.
+11:27:17.569 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+11:27:17.570 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+11:27:17.575 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+11:27:17.576 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+11:27:17.576 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: started, writing to menu_info.json
+11:27:17.577 [Thread-1 (_run) ] INFO     serial_controller.serial_handler No STM32 device found on any COM port.
+11:27:17.578 [MainThread      ] INFO     __main__                     Controller started.
+12:01:43.037 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: loaded template from menu_info.json (7 menus)
+12:01:43.038 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: indexed 29 live bindings out of 42 total
+12:01:43.039 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+12:01:43.040 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+12:01:43.040 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: first snapshot, 29 bindings
+12:01:43.043 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+12:01:43.044 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+12:01:43.045 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: started, writing to menu_info.json
+12:01:43.045 [MainThread      ] INFO     __main__                     Controller started.
+12:01:43.052 [Thread-1 (_run) ] INFO     serial_controller.serial_handler No STM32 device found on any COM port.
+12:01:44.151 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:45.254 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:46.335 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:47.443 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:48.528 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:49.628 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:50.735 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:51.749 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:52.862 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:53.955 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:55.039 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:56.127 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:57.228 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:58.244 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:01:59.334 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:02:00.437 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:02:01.533 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+12:02:02.628 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
