@@ -146,13 +146,14 @@ static debounce_state_t menuBtnDb = { GPIO_PIN_SET, GPIO_PIN_SET, GPIO_PIN_SET, 
 static uint8_t rx_byte;
 #define TLV_SYNC 0xAA
 #define TLV_END  0x55
-#define MASTER_BTN_PORT GPIOA
-#define MASTER_BTN_PIN   GPIO_PIN_6
+#define MASTER_BTN_PORT GPIOC
+#define MASTER_BTN_PIN   GPIO_PIN_13
 #define TLV_TYPE_BUTTON_STATE 0x01
 #define TLV_TYPE_JOYSTICK     0x02
 #define TLV_TYPE_JOYSTICK2    0x03
 uint32_t USB_MESSAGE = 0x00;
 uint8_t menu_register = 0b001;
+uint8_t LED_number = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -439,11 +440,15 @@ void onWideOUT_Button_Press(void)
    Reuses leds[0], leds[1], leds[3] — call AFTER Test_Loop() so it wins. */
 static void Update_Menu_LEDs(void)
 {
-    HAL_GPIO_WritePin(leds[0].port, leds[0].pin, (menu_register & 0b001) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(leds[1].port, leds[1].pin, (menu_register & 0b010) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(leds[3].port, leds[3].pin, (menu_register & 0b100) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-}
+    uint8_t LED_number = 0;
+    if      (menu_register & 0b001) LED_number = 0;
+    else if (menu_register & 0b010) LED_number = 1;
+    else if (menu_register & 0b100) LED_number = 2;
 
+    ws2812_pixel_all(0, 0, 0);              /* clear all pixels first */
+    ws2812_pixel(LED_number, 255, 255, 255); /* light the active menu's pixel */
+    ws2812_send_spi();                       /* nothing shows until this is called */
+}
 
 /* Replaces poll_button(): fires onPress exactly once on the debounced
    idle->pressed transition. edge_last is tracked per physical pin (not
@@ -562,8 +567,6 @@ int main(void)
   static uint8_t counter = 0;
   static uint8_t message_counter = 0;
   /* USER CODE END 2 */
-  ws2812_pixel(2,0, 0, 255);
-  ws2812_send_spi();
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -744,14 +747,14 @@ static void MX_ADC3_Init(void)
   hadc3.Instance = ADC3;
   hadc3.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc3.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc3.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc3.Init.ContinuousConvMode = ENABLE;
+  hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc3.Init.ContinuousConvMode = DISABLE;
   hadc3.Init.DiscontinuousConvMode = DISABLE;
   hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc3.Init.NbrOfConversion = 4;
-  hadc3.Init.DMAContinuousRequests = ENABLE;
+  hadc3.Init.NbrOfConversion = 1;
+  hadc3.Init.DMAContinuousRequests = DISABLE;
   hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc3) != HAL_OK)
   {
@@ -975,8 +978,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PC7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  /*Configure GPIO pins : PC7 PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
