@@ -10,16 +10,9 @@ logger = logging.getLogger(__name__)
 from connection_manager import ConnectionManager
 from serial_controller.protocol.registry import get_decoder, MessageType
 from serial_controller.protocol.stream_parser import StreamParser
-from serial_controller.protocol.frame_builder import build_frame, build_sync_frame, SYNC_SENTINEL
+from serial_controller.protocol.frame_builder import build_frame
 from serial_controller.status_builder import StatusBuilder
-import struct
 import config
-
-# Wire form of SYNC_SENTINEL as it arrives in a BUTTON_STATE payload —
-# compared directly against raw bytes so the sentinel is intercepted
-# before it ever reaches ButtonStateDecoder (which would otherwise
-# decode it as "every button pressed" and hand that to the translator).
-_SYNC_SENTINEL_PAYLOAD = struct.pack('<I', SYNC_SENTINEL)
 
 
 class SerialHandler(ConnectionManager):
@@ -44,44 +37,15 @@ class SerialHandler(ConnectionManager):
         self._frame_queue = queue.Queue()
         self._reader_stop = threading.Event()
         self._processor_stop = threading.Event()
-        # Set by _processor_loop the moment the STM32 announces the
-        # 0xFFFFFFFF sync sentinel (fresh boot, or echoing a resync
-        # request). _sync_watchdog waits on this after every connect to
-        # decide whether it needs to force a resync itself.
-        self._sentinel_seen = threading.Event()
-        # Set only by our own disconnect() override — signals "give up
-        # retrying," not "tear down for a retry." Watched by
-        # _reconnect_loop() between attempts.
-        self._reconnect_stop = threading.Event()
         # Testing hook only: if set, _do_connect() uses this object
         # directly instead of scanning for real hardware and opening a
         # real serial.Serial. Must support .read(n), .write(data),
         # .is_open, .close() — see testing/fake_serial.py.
         self._serial_override = serial_override
 
-        if self.watchdog:
-            self.watchdog.register_serial_timeout_callback(self._on_watchdog_serial_timeout)
-
     # ── ConnectionManager interface ───────────────────────────────────────────
 
-    def disconnect(self):
-        """
-        Overrides ConnectionManager.disconnect() only to also cancel any
-        in-flight watchdog-triggered reconnect loop — otherwise shutting
-        down while the STM32 happens to be unreachable would leave a
-        retry loop spinning in the background after the app has asked
-        to stop.
-        """
-        self._reconnect_stop.set()
-        super().disconnect()
-
     def _do_connect(self):
-        # A fresh connect attempt (first connect, or a watchdog-triggered
-        # reconnect) means any earlier "please stop retrying" request no
-        # longer applies — clear it so a later watchdog timeout can
-        # trigger a new reconnect loop.
-        self._reconnect_stop.clear()
-
         if self.is_cancelled():
             return False
 
@@ -122,7 +86,6 @@ class SerialHandler(ConnectionManager):
 
         self._reader_stop.clear()
         self._processor_stop.clear()
-        self._sentinel_seen.clear()
 
         threading.Thread(
             target=self._reader_loop,
@@ -134,12 +97,6 @@ class SerialHandler(ConnectionManager):
             target=self._processor_loop,
             daemon=True,
             name="SerialProcessor"
-        ).start()
-
-        threading.Thread(
-            target=self._sync_watchdog,
-            daemon=True,
-            name="SerialSyncWatchdog"
         ).start()
 
         return True
@@ -154,89 +111,6 @@ class SerialHandler(ConnectionManager):
         self.ser = None
         self.state.update_Serial_connection(False, None)
         logger.info("STM32 disconnected.")
-
-    # ── Watchdog-triggered reconnect ──────────────────────────────────────────
-
-    def _on_watchdog_serial_timeout(self):
-        """
-        Fires on the Watchdog's own monitor thread — must not block it.
-        Hands off to a dedicated thread so the retry loop (which does
-        real IO and can sleep for tens of seconds on backoff) never
-        stalls the shared watchdog loop that also monitors the mavlink
-        threads.
-        """
-        logger.warning("SerialHandler: watchdog reports the serial link is dead — reconnecting.")
-        threading.Thread(target=self._reconnect_loop, daemon=True, name="SerialReconnect").start()
-
-    def _reconnect_loop(self):
-        """
-        Tears down the dead connection, then retries connect() with
-        exponential backoff (capped) until it succeeds or disconnect()
-        is called explicitly (which sets _reconnect_stop). Each
-        successful connect() goes through the normal _do_connect() path,
-        which clears _sentinel_seen — so a reconnect always requires a
-        fresh handshake before _processor_loop will dispatch anything to
-        the translator again (see the _sentinel_seen gate there).
-
-        Uses _do_disconnect() directly rather than self.disconnect():
-        the latter would set _reconnect_stop and cancel this very loop.
-        """
-        self._do_disconnect()
-
-        delay = 1.0
-        max_delay = 30.0
-
-        while not self._reconnect_stop.is_set():
-            logger.info("SerialHandler: attempting reconnect...")
-            t = self.connect()
-            if t is not None:
-                t.join()
-
-            if self.state.is_Serial_Connection_Available:
-                logger.info("SerialHandler: reconnect successful.")
-                return
-
-            logger.info(f"SerialHandler: STM32 not found — retrying in {delay:.0f}s.")
-            if self._reconnect_stop.wait(timeout=delay):
-                return
-            delay = min(delay * 2, max_delay)
-
-    # ── Boot/resync handshake ─────────────────────────────────────────────────
-
-    def _sync_watchdog(self):
-        """
-        Runs once per connect. We can't tell, right after connecting,
-        whether the STM32 just booted (it'll announce the 0xFFFFFFFF
-        sentinel on its own within a couple hundred ms) or was already
-        running from a previous session (it'll just be sending real
-        button data and will never announce the sentinel unprompted).
-
-        Give it a short window to announce itself. If it doesn't, force
-        the issue: send it the sentinel ourselves. The STM32 treats a
-        STATUS frame carrying 0xFFFFFFFF as "drop back to awaiting-sync"
-        and starts announcing the sentinel via BUTTON_STATE, which
-        _on_sync_sentinel() below then answers exactly like the fresh-
-        boot case.
-        """
-        if self._sentinel_seen.wait(timeout=2.0):
-            return
-        if self._reader_stop.is_set():
-            return
-        logger.info("SerialHandler: STM32 didn't announce a sync sentinel — requesting resync.")
-        self.send(build_sync_frame())
-
-    def _on_sync_sentinel(self):
-        """
-        STM32 is in its awaiting-sync state and just told us so (via an
-        all-ones BUTTON_STATE frame) — either it's fresh off boot, or
-        it's answering a resync we just forced in _sync_watchdog. Either
-        way: send it the real system state now. It'll keep re-announcing
-        the sentinel every ~100ms until it gets that, so this is safe to
-        call more than once.
-        """
-        self._sentinel_seen.set()
-        logger.info("SerialHandler: STM32 requested sync — sending current state.")
-        self.compile_Send()
 
     # ── Background threads ────────────────────────────────────────────────────
 
@@ -268,11 +142,7 @@ class SerialHandler(ConnectionManager):
 
             except serial.SerialException:
                 logger.info("SerialReader: connection lost!")
-                # _do_disconnect(), not self.disconnect(): this is an
-                # unexpected error, not the user asking us to stop — the
-                # watchdog should still be free to trigger a reconnect
-                # once it notices the heartbeat has stopped.
-                self._do_disconnect()
+                self.disconnect()
                 break
 
         logger.info("SerialReader: stopped.")
@@ -289,25 +159,6 @@ class SerialHandler(ConnectionManager):
         while not self._processor_stop.is_set():
             try:
                 msg_type, payload = self._frame_queue.get(timeout=0.1)
-
-                # Must be checked before decode/dispatch: as real
-                # ButtonState data this would decode as "every button
-                # pressed," which is not what it means here.
-                if msg_type == MessageType.BUTTON_STATE and payload == _SYNC_SENTINEL_PAYLOAD:
-                    self._on_sync_sentinel()
-                    self._frame_queue.task_done()
-                    continue
-
-                if not self._sentinel_seen.is_set():
-                    # Handshake for this connection hasn't completed yet
-                    # — hold off on dispatching anything else to the
-                    # translator. Matters most right after a reconnect:
-                    # _sentinel_seen is cleared on every _do_connect(), so
-                    # this guarantees the PC always re-syncs before it
-                    # acts on anything the STM32 sends.
-                    logger.debug(f"SerialProcessor: sync not complete yet — dropping type {msg_type:#x}")
-                    self._frame_queue.task_done()
-                    continue
 
                 decoder = get_decoder(msg_type)
                 if decoder is None:
@@ -370,6 +221,4 @@ class SerialHandler(ConnectionManager):
                 self.ser.write(data)
         except serial.SerialException:
             logger.error("Send failed — connection lost!")
-            # See _reader_loop's SerialException handler: internal
-            # teardown only, must not block the watchdog's reconnect.
-            self._do_disconnect()
+            self.disconnect()

@@ -60,8 +60,8 @@ all: main-build
 main-build: Nucleo_GCS.elf secondary-outputs
 
 # Tool invocations
-Nucleo_GCS.elf Nucleo_GCS.map: $(OBJS) $(USER_OBJS) C:\Users\denel\Documents\GitHub\MissionPlanner-denel\Vtol_pheripherials_Code\Nucleo_GCS\STM32F767ZITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Nucleo_GCS.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\denel\Documents\GitHub\MissionPlanner-denel\Vtol_pheripherials_Code\Nucleo_GCS\STM32F767ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Nucleo_GCS.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Nucleo_GCS.elf Nucleo_GCS.map: $(OBJS) $(USER_OBJS) C:\Users\denel\Downloads\MissionPlanner-denel-71330147b270f89e53fc272ae2dbc26a912397a0\MissionPlanner-denel-71330147b270f89e53fc272ae2dbc26a912397a0\Vtol_pheripherials_Code\Nucleo_GCS\STM32F767ZITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Nucleo_GCS.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\denel\Downloads\MissionPlanner-denel-71330147b270f89e53fc272ae2dbc26a912397a0\MissionPlanner-denel-71330147b270f89e53fc272ae2dbc26a912397a0\Vtol_pheripherials_Code\Nucleo_GCS\STM32F767ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Nucleo_GCS.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
