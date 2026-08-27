@@ -1,17 +1,21 @@
 """
 btn_message_reader.py
 ──────────────────────
-Reads BUTTON_STATE frames from the STM32 and prints:
+Reads BUTTON_STATE and PAYLOAD_COMMAND frames from the STM32 and prints:
   1. The TRUE raw 32-bit register, unpacked directly from the wire bytes
-     (independent of ButtonState's field-splitting logic).
-  2. The decoded "intent" using the project's real ButtonState fields
-     (arm/rtl/manual/takeoff/emergency/system_check/pot_value) — this is
-     what commands/translator.py actually acts on.
+     (independent of the decoders' field-splitting logic) for each type.
+  2. The decoded "intent" using the real ButtonState/PayloadCommand
+     fields — this is what commands/translator.py actually acts on.
 
-NOTE: as of writing, main.c's BIT_* defines and
-serial_controller/protocol/bit_definitions.py do NOT agree on bit
-positions. The raw value below is ground truth; the decoded intent will
-be wrong until the two sides are reconciled. Compare them side by side.
+BUTTON_STATE and PAYLOAD_COMMAND both print as change-only lines — one
+line per frame that actually differs from the last one of that type,
+nothing per-frame otherwise. Both registers get sent every ~10ms
+unconditionally by main.c regardless of whether anything changed, so
+without this the terminal fills with identical repeats.
+
+JOYSTICK/JOYSTICK2 frames are intentionally still ignored — this is a
+*button* message reader; the two register types above are what
+commands/translator.py's edge-detection actually reads.
 """
 
 import sys
@@ -24,7 +28,7 @@ import serial.tools.list_ports
 
 from serial_controller.protocol.stream_parser import StreamParser
 from serial_controller.protocol.registry import get_decoder, MessageType
-from serial_controller.protocol.messages import ButtonState
+from serial_controller.protocol.messages import ButtonState, PayloadCommand
 
 STM_BAUDRATE = 115200
 
@@ -50,25 +54,60 @@ def find_stm_port():
 
 
 def describe_intent(bs: ButtonState) -> str:
-    """Mirrors the fields commands/translator.py actually reads."""
+    """Mirrors FLIGHT_EDGE_TABLE's fields in translator.py — flight/
+    status only. menu_select (0-3) is shown separately since it's a
+    level value, not something translator.py edge-detects."""
     parts = []
     if bs.arm:            parts.append("ARM")
     if bs.rtl:            parts.append("RTL")
     if bs.manual:         parts.append("MANUAL")
+    if bs.auto:           parts.append("AUTO")
     if bs.takeoff:        parts.append("TAKEOFF")
     if bs.emergency:      parts.append("EMERGENCY")
-    if bs.auto:           parts.append("AUTO MODE")
     if bs.autoland:       parts.append("AUTOLAND")
-    if bs.speedup:        parts.append("SPEEDUP")
+    if bs.speedup:        parts.append("SPEED UP")
     if bs.speeddown:      parts.append("SPEED DOWN")
-    if bs.zoomin:         parts.append("ZOOM IN")
-    if bs.zoomout:        parts.append("ZOOM OUT")
-    if bs.widein:         parts.append("WIDE IN")
-    if bs.wideout:        parts.append("WIDE OUT")
 
     label = ", ".join(parts) if parts else "IDLE"
-    pot = getattr(bs, "pot_value", "N/A")
-    return f"{label}  (pot={pot})"
+    return f"{label}  (menu={bs.menu_select})"
+
+
+def describe_payload_intent(pc: PayloadCommand) -> str:
+    """Mirrors PAYLOAD_EDGE_TABLE's field order in translator.py — all
+    30 PayloadCommand fields, camera/laser/tracking/gimbal."""
+    parts = []
+    if pc.zoomin:                     parts.append("ZOOM IN")
+    if pc.zoomout:                    parts.append("ZOOM OUT")
+    if pc.widein:                     parts.append("FOV NARROW")
+    if pc.wideout:                    parts.append("FOV WIDE")
+    if pc.focus_in:                   parts.append("FOCUS NEAR")
+    if pc.focus_out:                  parts.append("FOCUS FAR")
+    if pc.laser_on_off:               parts.append("LASER ON/OFF")
+    if pc.laser_cont_mode:            parts.append("LASER CONT MODE")
+    if pc.laser_single_mode:          parts.append("LASER SINGLE MODE")
+    if pc.laser_zoom_in:              parts.append("LASER ZOOM IN")
+    if pc.laser_zoom_out:             parts.append("LASER ZOOM OUT")
+    if pc.tracking_search_on_off:     parts.append("TRACKING SEARCH")
+    if pc.ai_tracking_on_off:         parts.append("AI TRACKING")
+    if pc.tracking_template_toggle:   parts.append("TRACKING TEMPLATE")
+    if pc.tracking_source_toggle:     parts.append("TRACKING SOURCE")
+    if pc.joystick_track:             parts.append("JOYSTICK TRACK")
+    if pc.take_picture:               parts.append("TAKE PICTURE")
+    if pc.start_record:               parts.append("START RECORD")
+    if pc.stop_record:                parts.append("STOP RECORD")
+    if pc.picture_record_mode_toggle: parts.append("PIC/REC MODE")
+    if pc.image_sensor_change:        parts.append("IMAGE SENSOR")
+    if pc.ir_polarity:                parts.append("IR POLARITY")
+    if pc.ir_camera_dzoom_plus:       parts.append("IR DZOOM +")
+    if pc.ir_camera_dzoom_minus:      parts.append("IR DZOOM -")
+    if pc.near_infrared_toggle:       parts.append("NEAR IR")
+    if pc.eo_image_on_off:            parts.append("EO IMAGE")
+    if pc.motor_on_off:               parts.append("MOTOR")
+    if pc.video_ip:                   parts.append("VIDEO IP")
+    if pc.eo_dzoom_toggle:            parts.append("EO DZOOM")
+    if pc.ir_rainbow:                 parts.append("IR RAINBOW")
+
+    return ", ".join(parts) if parts else "IDLE"
 
 
 def build_tlv_frame(msg_type: int, payload: bytes) -> bytes:
@@ -107,6 +146,7 @@ def handle_command_line(ser: serial.Serial, line: str) -> bool:
             "                                    build+send a TLV frame the way TLV_Send()\n"
             "                                    in main.c does — SYNC/LEN/CRC8/END are\n"
             "                                    added for you, e.g. 'tlv 01 00 00 00 00'\n"
+            "                                    (type 01 = BUTTON_STATE, 04 = PAYLOAD_COMMAND)\n"
             "  quit / exit                       stop the tool\n"
         )
         return True
@@ -166,14 +206,18 @@ def main():
 
     ser = serial.Serial(port, args.baud, timeout=0.1)
     print(f"\nConnected to {port} at {args.baud} baud.")
-    print("Press buttons to test, or type a command ('help' lists them). Ctrl+C to stop.\n")
+    print("Press buttons to test, or type a command ('help' lists them). Ctrl+C to stop.")
+    print("BUTTON_STATE updates live on one line; PAYLOAD_COMMAND logs new lines on change.\n")
 
     cmd_queue: "queue.Queue[str]" = queue.Queue()
     input_thread = threading.Thread(target=stdin_reader, args=(cmd_queue,), daemon=True)
     input_thread.start()
 
     stream = StreamParser()
-    frame_count = 0
+    button_frame_count = 0
+    payload_frame_count = 0
+    last_button_raw = None    # for change-only logging
+    last_payload_raw = None   # for change-only logging
     running = True
 
     try:
@@ -196,33 +240,66 @@ def main():
                 continue
 
             for msg_type, payload in stream.feed(chunk):
-                if msg_type != MessageType.BUTTON_STATE:
-                    continue  # ignore joystick frames here
 
-                # Ground truth: unpack the raw register ourselves,
-                # bypassing ButtonState's (currently mismatched) bit map.
-                raw_value = struct.unpack('<I', payload)[0]
+                if msg_type == MessageType.BUTTON_STATE:
+                    raw_value = struct.unpack('<I', payload)[0]
 
-                decoder = get_decoder(msg_type)
-                bs: ButtonState = decoder.decode(payload)
+                    # Change-only, same treatment as PAYLOAD_COMMAND below —
+                    # main.c sends this every ~10ms regardless of whether
+                    # anything actually changed.
+                    if raw_value == last_button_raw:
+                        continue
+                    last_button_raw = raw_value
 
-                try:
-                    intent = describe_intent(bs)
-                except AttributeError as e:
-                    # This is exactly the BIT_* / bit_definitions.py mismatch
-                    # the module docstring warns about — surface it, don't crash.
-                    intent = f"<field mismatch: {e}>"
+                    decoder = get_decoder(msg_type)
+                    bs: ButtonState = decoder.decode(payload)
 
-                frame_count += 1
-                line = (
-                    f"RAW  HEX:0x{raw_value:08X}  BIN:{raw_value:032b}  DEC:{raw_value:>10d}  |  "
-                    f"DECODED INTENT: {intent}"
-                )
-                sys.stdout.write("\r" + line + " " * 5)
-                sys.stdout.flush()
+                    try:
+                        intent = describe_intent(bs)
+                    except AttributeError as e:
+                        # Safety net in case ButtonState's field set ever
+                        # drifts from what this tool expects again —
+                        # surface it, don't crash.
+                        intent = f"<field mismatch: {e}>"
+
+                    button_frame_count += 1
+                    print(
+                        f"BUTTON_STATE  HEX:0x{raw_value:08X}  BIN:{raw_value:032b}  |  "
+                        f"{intent}"
+                    )
+
+                elif msg_type == MessageType.PAYLOAD_COMMAND:
+                    raw_value = struct.unpack('<I', payload)[0]
+
+                    # Change-only: skip if identical to the last PAYLOAD_COMMAND
+                    # frame seen — this register is idle most of the time,
+                    # and logging every 10ms frame regardless would be far
+                    # noisier than useful.
+                    if raw_value == last_payload_raw:
+                        continue
+                    last_payload_raw = raw_value
+
+                    decoder = get_decoder(msg_type)
+                    pc: PayloadCommand = decoder.decode(payload)
+
+                    try:
+                        intent = describe_payload_intent(pc)
+                    except AttributeError as e:
+                        intent = f"<field mismatch: {e}>"
+
+                    payload_frame_count += 1
+                    print(
+                        f"PAYLOAD_COMMAND  HEX:0x{raw_value:08X}  BIN:{raw_value:032b}  |  "
+                        f"{intent}"
+                    )
+
+                # JOYSTICK/JOYSTICK2 intentionally ignored — see module docstring.
 
     except KeyboardInterrupt:
-        print(f"\n\nStopped. Received {frame_count} button-state frames.")
+        print(
+            f"\n\nStopped. Received {button_frame_count} BUTTON_STATE frames, "
+            f"{payload_frame_count} PAYLOAD_COMMAND changes."
+        )
     finally:
         ser.close()
 
