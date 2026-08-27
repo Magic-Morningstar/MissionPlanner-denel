@@ -5,7 +5,7 @@
 
 from serial_controller.protocol.registry import get_decoder
 from serial_controller.protocol.stream_parser import _crc8
-from config import START_BYTE, END_BYTE
+from state.system_config import START_BYTE, END_BYTE
 
 
 def build_frame(msg_type: int, obj) -> bytes:

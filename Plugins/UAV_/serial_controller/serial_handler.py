@@ -7,12 +7,12 @@ from utils.helper import system_Print
 import threading
 import logging
 logger = logging.getLogger(__name__)
-from connection_manager import ConnectionManager
+from utils.connection_manager import ConnectionManager
 from serial_controller.protocol.registry import get_decoder, MessageType
 from serial_controller.protocol.stream_parser import StreamParser
 from serial_controller.protocol.frame_builder import build_frame
 from serial_controller.status_builder import StatusBuilder
-import config
+import state.system_config as system_config
 
 
 class SerialHandler(ConnectionManager):
@@ -65,8 +65,8 @@ class SerialHandler(ConnectionManager):
 
             new_ser = serial.Serial(
                 port=detected_port,
-                baudrate=config.BAUDRATE,
-                timeout=config.SERIAL_TIMEOUT
+                baudrate=system_config.BAUDRATE,
+                timeout=system_config.SERIAL_TIMEOUT
             )
 
         if self.is_cancelled():

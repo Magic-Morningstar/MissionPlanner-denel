@@ -10,7 +10,7 @@
 # never raises, never desyncs permanently, never blocks.
 
 from enum import Enum, auto
-from config import START_BYTE, END_BYTE
+from state.system_config import START_BYTE, END_BYTE
 
 
 class _State(Enum):

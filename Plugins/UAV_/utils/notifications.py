@@ -1,5 +1,5 @@
 import socket
-from config import GCS_NOTIFICATION_PORT
+from state.system_config import GCS_NOTIFICATION_PORT
 
 
 def send_buzzer_alert(message: str) -> bool:

@@ -10,7 +10,8 @@ from serial_controller.serial_handler import SerialHandler
 from API.panel_sync import PanelStateSync
 from mavlink.mavlink_handler import Mavlink_controller
 from commands.translator import InputTranslator
-from logging_config import setup_logging
+from PySide6.QtCore import QTimer
+from utils.logging_config import setup_logging
 # Assumes gui_main.py lives alongside main.py — adjust if it's elsewhere.
 from Menu_UI.gui_main import create_gui
 import logging
@@ -22,18 +23,14 @@ class Controller:
     def __init__(self):
         self.state = SystemState()
         self.watchdog = Watchdog(state=self.state)
-
         self.command_bus = queue.Queue(maxsize=256)
-
         self.translator = InputTranslator(self.command_bus, self.state)
         self.Mavlink_controller = Mavlink_controller(self.state, self.command_bus, self.watchdog)
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
-
-
         self.panel_sync = PanelStateSync(self.state)
+        self.app = None   # This the Front end object. It it set in the start function
+        self._shutdown = threading.Event
 
-        self.app = None   # set in start() once the GUI is created
-        self._shutdown = threading.Event()
 
     def start(self):
         signal.signal(signal.SIGINT, self._on_shutdown)
@@ -46,7 +43,7 @@ class Controller:
         logger.info("Controller started.")
 
 
-        from PySide6.QtCore import QTimer
+
         self.app, self.gui_window = create_gui()
         signal_pump = QTimer()
         signal_pump.timeout.connect(lambda: None)

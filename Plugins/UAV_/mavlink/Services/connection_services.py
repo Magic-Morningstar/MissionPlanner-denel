@@ -3,7 +3,7 @@
 import threading
 import time
 from pymavlink import mavutil
-from connection_manager import ConnectionManager
+from utils.connection_manager import ConnectionManager
 from utils.helper import *
 
 

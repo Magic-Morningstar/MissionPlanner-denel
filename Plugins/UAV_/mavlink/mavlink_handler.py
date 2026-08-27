@@ -3,7 +3,7 @@
 from utils.helper import *
 from mavlink.state_update.state_poller import UAVStatePoller
 from mavlink.uav_commads.command_sender import UAVCommandSender
-from config import *
+from state.system_config import *
 
 
 class Mavlink_controller:
