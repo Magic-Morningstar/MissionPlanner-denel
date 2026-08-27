@@ -131,6 +131,14 @@ class SystemState:
         # directly rather than going through the full object.
         self._LATEST_PAYLOAD_COMMAND = None
 
+        # ── Current menu selected on the physical unit ────────────────────────
+        # 0-3, matching ButtonState.menu_select exactly (0=menu1, 1=menu2,
+        # 2=menu3, 3=menu4) — decoded from BUTTON_STATE bits 6-7, set by
+        # translator.py on every ButtonState received. This is the piece
+        # gui_state_exporter.py's "selected menu" field never had a real
+        # source for before now.
+        self._CURRENT_MENU = 0
+
 
 
         # ── Thread safety ─────────────────────────────────────────────────────
@@ -306,3 +314,16 @@ class SystemState:
 
     def get_latest_payload_command(self):
         return self._LATEST_PAYLOAD_COMMAND
+
+    # ── Current menu ───────────────────────────────────────────────────────────
+
+    def update_Current_Menu(self, menu_select: int):
+        """menu_select is the raw 0-3 value from ButtonState — called by
+        translator.py on every ButtonState received, unconditionally
+        (this is a level/state value, not something to edge-detect)."""
+        with self._lock:
+            self._CURRENT_MENU = menu_select
+
+    @property
+    def get_Current_Menu(self):
+        return self._CURRENT_MENU

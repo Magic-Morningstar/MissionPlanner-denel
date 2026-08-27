@@ -46,3 +46,244 @@
 12:02:00.437 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
 12:02:01.533 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
 12:02:02.628 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (menu_info.json)
+14:09:26.003 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: loaded template from Menu_UI/menu_config.json (7 menus)
+14:09:26.004 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: indexed 29 live bindings out of 42 total
+14:09:26.005 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+14:09:26.006 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+14:09:26.006 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: first snapshot, 29 bindings
+14:09:26.009 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+14:09:26.011 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+14:09:26.013 [MainThread      ] INFO     API.json_api_updater         GuiStateExporter: started, writing to Menu_UI/menu_config.json
+14:09:26.015 [MainThread      ] INFO     __main__                     Controller started.
+14:09:26.028 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM67 — 'USB-Enhanced-SERIAL-D CH344 (COM67)'
+14:09:26.029 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM67.
+14:09:26.030 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+14:09:26.030 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+14:09:26.051 [SerialProcessor ] INFO     commands.translator          laser_on_off rising edge -> LaserPowerOnCommand
+14:09:26.052 [SerialProcessor ] INFO     commands.translator          laser_cont_mode rising edge -> LaserContModeStartCommand
+14:09:26.052 [SerialProcessor ] INFO     commands.translator          tracking_search_on_off rising edge -> TrackingStartCommand
+14:09:26.052 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+14:09:26.052 [SerialProcessor ] INFO     commands.translator          video_ip rising edge -> VideoSourceToggleCommand
+14:09:26.121 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: tracking[0] False -> True
+14:09:26.121 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: tracking[2] False -> True
+14:09:26.121 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: laser[0] False -> True
+14:09:26.122 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: display[0] False -> True
+14:09:26.122 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: system[0] False -> True
+14:09:27.228 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:28.236 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:29.322 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:30.429 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:31.515 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:31.961 [SerialProcessor ] INFO     commands.translator          laser_on_off falling edge -> LaserPowerOffCommand
+14:09:31.962 [SerialProcessor ] INFO     commands.translator          laser_cont_mode falling edge -> LaserContModeStopCommand
+14:09:31.963 [SerialProcessor ] INFO     commands.translator          tracking_search_on_off falling edge -> TrackingStopCommand
+14:09:31.964 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+14:09:31.966 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: tracking[0] True -> False
+14:09:31.967 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: tracking[2] True -> False
+14:09:31.968 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: laser[0] True -> False
+14:09:31.969 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: display[0] True -> False
+14:09:31.970 [GuiStateExporter] INFO     API.json_api_updater         GuiStateExporter: system[0] True -> False
+14:09:33.081 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:34.178 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+14:09:35.192 [GuiStateExporter] DEBUG    API.json_api_updater         GuiStateExporter: heartbeat write, no change (Menu_UI/menu_config.json)
+16:00:32.194 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+16:00:32.195 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+16:00:32.196 [MainThread      ] INFO     API.panel_sync               PanelStateSync: started.
+16:00:32.197 [MainThread      ] INFO     __main__                     Controller started.
+16:00:32.197 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+16:00:32.198 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+16:00:32.205 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM67 — 'USB-Enhanced-SERIAL-D CH344 (COM67)'
+16:00:32.207 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM67.
+16:00:32.207 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+16:00:32.207 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+08:30:58.096 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+08:30:58.098 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:30:58.099 [MainThread      ] INFO     API.panel_sync               PanelStateSync: started.
+08:30:58.101 [MainThread      ] INFO     __main__                     Controller started.
+08:30:58.101 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+08:30:58.188 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+08:31:00.396 [Thread-1 (_run) ] INFO     serial_controller.serial_handler No STM32 device found on any COM port.
+08:32:53.122 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+08:32:53.122 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:32:53.123 [MainThread      ] INFO     API.panel_sync               PanelStateSync: started.
+08:32:53.123 [MainThread      ] INFO     __main__                     Controller started.
+08:32:53.150 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+08:32:53.151 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+08:32:54.241 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM67 — 'USB-Enhanced-SERIAL-D CH344 (COM67)'
+08:32:54.247 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM67.
+08:32:54.250 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+08:32:54.250 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+08:33:25.815 [SerialProcessor ] INFO     commands.translator          zoomin rising edge -> ZoomInCommand
+08:33:26.035 [SerialProcessor ] INFO     commands.translator          zoomin falling edge -> ZoomInFallCommand
+08:33:26.846 [SerialProcessor ] INFO     commands.translator          zoomin rising edge -> ZoomInCommand
+08:33:27.208 [SerialProcessor ] INFO     commands.translator          zoomin falling edge -> ZoomInFallCommand
+08:33:29.155 [SerialProcessor ] INFO     commands.translator          zoomout rising edge -> ZoomOutCommand
+08:33:29.619 [SerialProcessor ] INFO     commands.translator          zoomout falling edge -> ZoomOutFallCommand
+08:33:30.238 [SerialProcessor ] INFO     commands.translator          focus_in rising edge -> FocusPlusCommand
+08:33:30.651 [SerialProcessor ] INFO     commands.translator          focus_in falling edge -> FocusPlusFallCommand
+08:33:30.947 [SerialProcessor ] INFO     commands.translator          wideout rising edge -> FOVMinusCommand
+08:33:31.333 [SerialProcessor ] INFO     commands.translator          wideout falling edge -> FOVMinusFallCommand
+08:33:35.458 [SerialProcessor ] INFO     commands.translator          widein rising edge -> FOVPlusCommand
+08:33:35.754 [SerialProcessor ] INFO     commands.translator          widein falling edge -> FOVPlusFallCommand
+08:33:36.192 [SerialProcessor ] INFO     commands.translator          widein rising edge -> FOVPlusCommand
+08:33:36.463 [SerialProcessor ] INFO     commands.translator          widein falling edge -> FOVPlusFallCommand
+08:33:36.747 [SerialProcessor ] INFO     commands.translator          focus_out rising edge -> FocusMinusCommand
+08:33:36.966 [SerialProcessor ] INFO     commands.translator          focus_out falling edge -> FocusMinusFallCommand
+08:33:37.172 [SerialProcessor ] INFO     commands.translator          focus_out rising edge -> FocusMinusCommand
+08:33:37.430 [SerialProcessor ] INFO     commands.translator          focus_out falling edge -> FocusMinusFallCommand
+08:33:37.842 [SerialProcessor ] INFO     commands.translator          widein rising edge -> FOVPlusCommand
+08:33:38.100 [SerialProcessor ] INFO     commands.translator          widein falling edge -> FOVPlusFallCommand
+08:33:38.461 [SerialProcessor ] INFO     commands.translator          focus_out rising edge -> FocusMinusCommand
+08:33:38.732 [SerialProcessor ] INFO     commands.translator          focus_out falling edge -> FocusMinusFallCommand
+08:33:39.106 [SerialProcessor ] INFO     commands.translator          focus_in rising edge -> FocusPlusCommand
+08:33:39.377 [SerialProcessor ] INFO     commands.translator          focus_in falling edge -> FocusPlusFallCommand
+08:33:39.673 [SerialProcessor ] INFO     commands.translator          wideout rising edge -> FOVMinusCommand
+08:33:39.957 [SerialProcessor ] INFO     commands.translator          wideout falling edge -> FOVMinusFallCommand
+08:33:40.266 [SerialProcessor ] INFO     commands.translator          zoomin rising edge -> ZoomInCommand
+08:33:40.524 [SerialProcessor ] INFO     commands.translator          zoomin falling edge -> ZoomInFallCommand
+08:33:40.782 [SerialProcessor ] INFO     commands.translator          zoomout rising edge -> ZoomOutCommand
+08:33:41.001 [SerialProcessor ] INFO     commands.translator          zoomout falling edge -> ZoomOutFallCommand
+08:34:06.832 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:08.159 [SerialProcessor ] INFO     commands.translator          video_ip rising edge -> VideoSourceToggleCommand
+08:34:10.788 [SerialProcessor ] INFO     commands.translator          ir_polarity rising edge -> IRPolarityToggleCommand
+08:34:13.429 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:15.878 [SerialProcessor ] INFO     commands.translator          video_ip rising edge -> VideoSourceToggleCommand
+08:34:16.316 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:17.115 [SerialProcessor ] INFO     commands.translator          ir_polarity rising edge -> IRPolarityToggleCommand
+08:34:20.233 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:22.849 [SerialProcessor ] INFO     commands.translator          ir_polarity rising edge -> IRPolarityToggleCommand
+08:34:24.511 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:25.066 [SerialProcessor ] INFO     commands.translator          video_ip rising edge -> VideoSourceToggleCommand
+08:34:27.398 [SerialProcessor ] INFO     commands.translator          ir_polarity rising edge -> IRPolarityToggleCommand
+08:34:28.519 [SerialProcessor ] INFO     commands.translator          ir_polarity rising edge -> IRPolarityToggleCommand
+08:34:29.370 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:30.840 [SerialProcessor ] INFO     commands.translator          video_ip rising edge -> VideoSourceToggleCommand
+08:34:34.990 [SerialProcessor ] INFO     commands.translator          ir_polarity rising edge -> IRPolarityToggleCommand
+08:34:35.403 [SerialProcessor ] INFO     commands.translator          image_sensor_change rising edge -> ImageSensorChangeCommand
+08:34:42.029 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:34:42.623 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:34:47.016 [SerialProcessor ] INFO     commands.translator          laser_cont_mode rising edge -> LaserContModeStartCommand
+08:34:47.983 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:34:47.984 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:04.813 [SerialProcessor ] INFO     commands.translator          laser_cont_mode falling edge -> LaserContModeStopCommand
+08:35:04.813 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:05.419 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:05.419 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:06.835 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:07.634 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:08.369 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:08.871 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:09.193 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:09.837 [SerialProcessor ] INFO     commands.translator          laser_cont_mode rising edge -> LaserContModeStartCommand
+08:35:10.224 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:10.224 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:10.997 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:10.997 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:11.666 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:11.667 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:12.375 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:12.375 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:13.058 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:13.059 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:13.935 [SerialProcessor ] INFO     commands.translator          laser_cont_mode falling edge -> LaserContModeStopCommand
+08:35:14.463 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:17.529 [SerialProcessor ] INFO     commands.translator          laser_on_off rising edge -> LaserPowerOnCommand
+08:35:17.967 [SerialProcessor ] INFO     commands.translator          tracking_search_on_off rising edge -> TrackingStartCommand
+08:35:18.289 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:18.521 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:19.036 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:25.156 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:26.483 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:28.479 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:30.165 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:33.901 [SerialProcessor ] INFO     commands.translator          laser_cont_mode rising edge -> LaserContModeStartCommand
+08:35:37.223 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:37.223 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:37.570 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:38.020 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:38.047 [SerialProcessor ] INFO     commands.translator          laser_cont_mode falling edge -> LaserContModeStopCommand
+08:35:38.188 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:42.103 [SerialProcessor ] INFO     commands.translator          laser_on_off falling edge -> LaserPowerOffCommand
+08:35:42.849 [SerialProcessor ] INFO     commands.translator          tracking_search_on_off falling edge -> TrackingStopCommand
+08:35:43.223 [SerialProcessor ] INFO     commands.translator          laser_on_off rising edge -> LaserPowerOnCommand
+08:35:43.674 [SerialProcessor ] INFO     commands.translator          joystick_track rising edge -> JoystickTrackModeOnCommand
+08:35:43.971 [SerialProcessor ] INFO     commands.translator          laser_single_mode rising edge -> LaserSingleTriggerCommand
+08:35:44.666 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:44.666 [SerialProcessor ] INFO     commands.translator          joystick_track falling edge -> JoystickTrackModeOffCommand
+08:35:44.965 [SerialProcessor ] INFO     commands.translator          laser_cont_mode rising edge -> LaserContModeStartCommand
+08:35:44.988 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off falling edge -> AITrackingOffCommand
+08:35:47.525 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:35:47.615 [SerialProcessor ] INFO     commands.translator          laser_cont_mode falling edge -> LaserContModeStopCommand
+08:41:39.312 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+08:41:39.312 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:41:39.313 [MainThread      ] INFO     API.panel_sync               PanelStateSync: started.
+08:41:39.314 [MainThread      ] INFO     __main__                     Controller started.
+08:41:39.348 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connected on udpin:0.0.0.0:14551.
+08:41:39.351 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker       UAVCommandSender waiting for heartbeat...
+08:41:40.970 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM67 — 'USB-Enhanced-SERIAL-D CH344 (COM67)'
+08:41:40.972 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM67.
+08:41:40.974 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+08:41:40.975 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+08:41:40.991 [SerialProcessor ] INFO     commands.translator          laser_on_off rising edge -> LaserPowerOnCommand
+08:41:40.998 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:43:10.345 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Scanning for STM32 on COM ports...
+08:43:10.346 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:10.347 [MainThread      ] INFO     API.panel_sync               PanelStateSync: started.
+08:43:10.347 [MainThread      ] INFO     __main__                     Controller started.
+08:43:10.348 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:10.461 [Thread-1 (_run) ] INFO     serial_controller.serial_handler Found STM32 (DFRobot CH340, matched by description) on COM67 — 'USB-Enhanced-SERIAL-D CH344 (COM67)'
+08:43:10.471 [Thread-1 (_run) ] INFO     serial_controller.serial_handler STM32 connected on COM67.
+08:43:10.473 [SerialReader    ] INFO     serial_controller.serial_handler SerialReader: started.
+08:43:10.474 [SerialProcessor ] INFO     serial_controller.serial_handler SerialProcessor: started.
+08:43:10.488 [SerialProcessor ] INFO     commands.translator          laser_on_off rising edge -> LaserPowerOnCommand
+08:43:10.489 [SerialProcessor ] INFO     commands.translator          ai_tracking_on_off rising edge -> AITrackingOnCommand
+08:43:12.378 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:12.379 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:14.380 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:14.382 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:16.383 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:16.383 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:18.383 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:18.384 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:20.385 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:20.386 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:22.386 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:22.387 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:24.388 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:24.389 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:26.392 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:26.393 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:28.394 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:28.394 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:30.396 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:30.397 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:32.398 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:32.398 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:34.401 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:34.404 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:36.405 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:36.406 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:38.407 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:38.410 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:40.411 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:40.412 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:42.414 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:42.416 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:44.417 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:44.418 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:46.420 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:46.421 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:48.422 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:48.422 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:50.423 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:50.424 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:52.427 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:52.428 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:54.430 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:54.431 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:56.445 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:56.454 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:43:58.485 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:43:58.486 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...
+08:44:00.487 [Thread-2 (_run) ] INFO     mavlink.mavlink_worker         [command-sender] connecting to udpin:0.0.0.0:14551...
+08:44:00.487 [Thread-2 (_run) ] WARNING  mavlink.mavlink_worker         [command-sender] udpin:0.0.0.0:14551 not available (PermissionError) — waiting 2s...

@@ -35,8 +35,17 @@ register(Joystick2Decoder())
 @dataclass
 class ButtonState:
     """
-    Discrete button flags + the pot reading, decoded from the STM32's
-    button register. arm/rtl/manual/takeoff/emergency/system_check are
+    Flight/status bits ONLY, decoded from the STM32's BUTTON_STATE
+    register. Every payload/camera/laser/tracking concept that used to
+    live here (zoomin, focus_in, laser_on_off, ...) has been removed —
+    they're decoded from PayloadCommand now (its own 32-bit register,
+    message type 0x04), which is where the real firmware actually puts
+    them. Keeping them here too was decoding stale bit positions that
+    haven't corresponded to anything the firmware sends since the
+    PAYLOAD_COMMAND split — see bit_definitions.py's BUTTON_STATE
+    section for the current (much shorter) real bit list.
+
+    arm/rtl/manual/auto/takeoff/emergency/autoland/speedup/speeddown are
     LEVEL values here (current switch position) — edge detection happens
     later, in commands/translator.py. This class only decodes; it does
     not interpret.
@@ -50,21 +59,7 @@ class ButtonState:
     autoland: bool
     speedup: bool
     speeddown: bool
-    zoomin: bool
-    zoomout: bool
-    widein: bool
-    wideout: bool
-    tracking: bool
-    focus_in: bool
-    focus_out: bool
-    video_ip: bool
-    laser_on_off: bool
-    laser_cont_mode: bool
-    laser_single_mode: bool
-    ai_tracking: bool
-    joystick_track: bool
-    ir_polarity: bool
-    image_sensor_change: bool
+    menu_select: int   # 0-3, raw 2-bit value: 0=menu1, 1=menu2, 2=menu3, 3=menu4
 
 
 
@@ -76,34 +71,30 @@ class ButtonStateDecoder(Decoder):
         return ButtonState(
             arm          = bool((value >> ARM_BIT) & 1),
             manual       = bool((value >> MANUAL_BIT) & 1),
-            takeoff      = bool((value >> 25) & 1),
             auto         = bool((value >> AUTO_BIT) & 1),
+            speedup      = bool((value >> SPEED_UP_BIT) & 1),
+            speeddown    = bool((value >> SPEED_DOWN_BIT) & 1),
+            # Two adjacent bits, MENU_SELECT_BIT_0 is the low bit — a
+            # plain 2-bit mask shifted down gives the 0-3 value directly.
+            menu_select  = (value >> MENU_SELECT_BIT_0) & 0b11,
+            # FIXED (carried over from before, still true): takeoff,
+            # emergency, and rtl were all previously decoded from bit 25
+            # — the same bit the old (now-removed) laser_single_mode
+            # mapping also used. None of these three have a dedicated
+            # bit anywhere in the current main.c BUTTON_STATE list, which
+            # only defines ARM/ARM_STATUS/AUTO/AUTO_STATUS/MANUAL/
+            # MANUAL_STATUS/SPEED_UP/SPEED_DOWN. Hardcoded False until
+            # real bits are actually assigned, same treatment autoland
+            # already has.
+            takeoff      = False,
+            emergency    = False,
+            rtl          = False,
             # FIXED: previously read from AUTO_LAND_BIT, which was
             # actually IR_POLARITY (bit 6) in real firmware — meaning
             # pressing the White button also fired LandCommand. There's
             # no dedicated autoland bit in the current main.c list, so
             # this is hardcoded False until one is actually assigned.
             autoland     = False,
-            emergency    =  bool((value >> 25) & 1), 
-            speedup      = bool((value >> SPEED_UP_BIT) & 1),
-            speeddown    = bool((value >> SPEED_DOWN_BIT) & 1),
-            zoomin       = bool((value >> ZOOM_IN_BIT) & 1),
-            zoomout      = bool((value >> ZOOM_OUT_BIT) & 1),
-            rtl          = bool((value >> 25) & 1),
-            widein       = bool((value >> WIDE_IN_BIT) & 1),
-            wideout      = bool((value >> WIDE_OUT_BIT) & 1),
-            tracking     = bool((value >> TRACKING_BIT) & 1),
-            focus_in         = bool((value >> FOCUS_IN_BIT) & 1),
-            focus_out        = bool((value >> FOCUS_OUT_BIT) & 1),
-            video_ip         = bool((value >> VIDEO_IP_BIT) & 1),
-            laser_on_off     = bool((value >> LASER_ON_OFF_BIT) & 1),
-            laser_cont_mode  = bool((value >> LASER_CONT_MODE_BIT) & 1),
-            laser_single_mode= bool((value >> LASER_SINGLE_MODE_BIT) & 1),
-            ai_tracking      = bool((value >> AI_TRACKING_ON_OFF_BIT) & 1),
-            joystick_track   = bool((value >> JOYSTICK_TRACK_BIT) & 1),
-            ir_polarity          = bool((value >> IR_POLARITY_BIT) & 1),
-            image_sensor_change  = bool((value >> IMAGE_SENSOR_CHANGE_BIT) & 1),
-
         )
 
 

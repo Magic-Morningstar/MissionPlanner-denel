@@ -185,6 +185,88 @@ class IRPolarityToggleCommand(Command):
 class ImageSensorChangeCommand(Command):
     pass
 
+
+# ── Added: the payload concepts that had a PAYLOAD_COMMAND bit but no
+# Command class yet — PAYLOAD_EDGE_TABLE in translator.py needed these
+# to exist before it could cover all 30 PayloadCommand fields. ──────────
+
+@dataclass
+class LaserZoomInCommand(Command):
+    pass
+
+@dataclass
+class LaserZoomInFallCommand(Command):
+    pass
+
+@dataclass
+class LaserZoomOutCommand(Command):
+    pass
+
+@dataclass
+class LaserZoomOutFallCommand(Command):
+    pass
+
+@dataclass
+class TrackingTemplateToggleCommand(Command):
+    pass
+
+@dataclass
+class TrackingSourceToggleCommand(Command):
+    pass
+
+@dataclass
+class TakePictureCommand(Command):
+    pass
+
+@dataclass
+class StartRecordCommand(Command):
+    pass
+
+@dataclass
+class StopRecordCommand(Command):
+    pass
+
+@dataclass
+class PictureRecordModeToggleCommand(Command):
+    pass
+
+@dataclass
+class IRCameraDzoomPlusCommand(Command):
+    pass
+
+@dataclass
+class IRCameraDzoomPlusFallCommand(Command):
+    pass
+
+@dataclass
+class IRCameraDzoomMinusCommand(Command):
+    pass
+
+@dataclass
+class IRCameraDzoomMinusFallCommand(Command):
+    pass
+
+@dataclass
+class NearInfraredToggleCommand(Command):
+    pass
+
+@dataclass
+class EOImageToggleCommand(Command):
+    pass
+
+@dataclass
+class MotorToggleCommand(Command):
+    pass
+
+@dataclass
+class EODzoomToggleCommand(Command):
+    pass
+
+@dataclass
+class IRRainbowCommand(Command):
+    pass
+
+
 # Reserved for when it's wired up — config.py already defines the bit,
 # it's just not acted on yet:
 #

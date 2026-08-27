@@ -2,15 +2,17 @@
 
 import threading
 import queue
-import time
+import timeg
 import signal
 from state.system_state import SystemState
 from state.watchdog import Watchdog
 from serial_controller.serial_handler import SerialHandler
-from API.json_api_updater import *
+from API.panel_sync import PanelStateSync
 from mavlink.mavlink_handler import Mavlink_controller
 from commands.translator import InputTranslator
 from logging_config import setup_logging
+# Assumes gui_main.py lives alongside main.py — adjust if it's elsewhere.
+from Menu_UI.gui_main import create_gui
 import logging
 logger = logging.getLogger(__name__)
 
@@ -32,18 +34,10 @@ class Controller:
         self.Mavlink_controller = Mavlink_controller(self.state, self.command_bus, self.watchdog)
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
 
-        # GuiStateExporter only ever reads from self.state — same
-        # boundary rule as everything else that touches SystemState.
-        # template_path is the static schema (checked into the repo,
-        # never overwritten); json_path is the live file the GUI
-        # actually polls, rewritten on every update. Adjust these two
-        # paths to wherever you actually want them to live.
-        self.gui_exporter = GuiStateExporter(
-            self.state,
-            json_path="menu_info.json",
-            template_path="",
-        )
 
+        self.panel_sync = PanelStateSync(self.state)
+
+        self.app = None   # set in start() once the GUI is created
         self._shutdown = threading.Event()
 
     def start(self):
@@ -52,13 +46,18 @@ class Controller:
         
         self.SerialHandler.connect()
         self.Mavlink_controller.connect()
-        self.gui_exporter.start()
+        self.panel_sync.start()
         self.watchdog.start()
         logger.info("Controller started.")
 
-        while not self._shutdown.is_set():
 
-            time.sleep(2)
+        from PySide6.QtCore import QTimer
+        self.app, self.gui_window = create_gui()
+        signal_pump = QTimer()
+        signal_pump.timeout.connect(lambda: None)
+        signal_pump.start(200)
+
+        self.app.exec()
 
         logger.info("Shutting down.")
 
@@ -66,8 +65,10 @@ class Controller:
         logger.info("Shutdown signal received.")
         self.SerialHandler.disconnect()
         self.Mavlink_controller.disconnect()
-        self.gui_exporter.stop()
+        self.panel_sync.stop()
         self._shutdown.set()
+        if self.app is not None:
+            self.app.quit()   # unblocks app.exec() in start()
 
 
 if __name__ == "__main__":
