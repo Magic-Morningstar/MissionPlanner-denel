@@ -12,12 +12,15 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QFrame,
     QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QColor
 
 
 EXPANDED_TIMEOUT_MS = 4000
+BUTTON_FADE_TIMEOUT_MS = 1800
+BUTTON_IDLE_OPACITY = 0.18
 EDGE_MARGIN_PX = 4
 
 
@@ -189,6 +192,10 @@ class MenuUI(QWidget):
         self.collapse_timer.setSingleShot(True)
         self.collapse_timer.timeout.connect(lambda: self.set_expanded(False))
 
+        self.button_fade_timer = QTimer(self)
+        self.button_fade_timer.setSingleShot(True)
+        self.button_fade_timer.timeout.connect(self.fade_controls)
+
         self.hardware_timer = QTimer(self)
         self.hardware_timer.timeout.connect(self.update_hardware_states)
         self.hardware_timer.start(50)
@@ -298,6 +305,12 @@ class MenuUI(QWidget):
         # Expanded action controls: true bottom-right.
         self.control_panel = QFrame()
         self.control_panel.setObjectName("controlPanel")
+
+        # Keep the button HUD visible at all times. It sits very faint when
+        # idle and returns to full brightness when a real control changes.
+        self.control_opacity = QGraphicsOpacityEffect(self.control_panel)
+        self.control_panel.setGraphicsEffect(self.control_opacity)
+        self.control_opacity.setOpacity(BUTTON_IDLE_OPACITY)
 
         self.control_layout = QVBoxLayout(self.control_panel)
         self.control_layout.setContentsMargins(7, 6, 7, 7)
@@ -585,6 +598,7 @@ class MenuUI(QWidget):
     def open_from_hover(self):
         """Hovering the collapsed tab exposes the menu without changing selection."""
         self.set_expanded(True)
+        self.activate_controls()
         if hasattr(self, "collapse_timer"):
             self.collapse_timer.stop()
 
@@ -596,6 +610,7 @@ class MenuUI(QWidget):
         """
         self.preview_menu_id = menu_id
         self.set_expanded(True)
+        self.activate_controls()
         if hasattr(self, "collapse_timer"):
             self.collapse_timer.stop()
         self.update_display()
@@ -615,7 +630,9 @@ class MenuUI(QWidget):
 
         self.compact_tab.setVisible(not expanded)
         self.menu_panel.setVisible(expanded)
-        self.control_panel.setVisible(expanded)
+
+        # Only the menu collapses. The button HUD remains in the bottom-right.
+        self.control_panel.setVisible(True)
 
         if expanded:
             self.raise_()
@@ -624,8 +641,21 @@ class MenuUI(QWidget):
         if not self.expanded:
             self.set_expanded(True)
 
+        # Any real UI interaction/menu activity should make the button HUD
+        # return to its normal full/dark appearance.
+        self.activate_controls()
+
         if hasattr(self, "collapse_timer"):
             self.collapse_timer.start(EXPANDED_TIMEOUT_MS)
+
+    def activate_controls(self):
+        """Make the bottom-right button HUD fully visible for a short time."""
+        self.control_opacity.setOpacity(1.0)
+        self.button_fade_timer.start(BUTTON_FADE_TIMEOUT_MS)
+
+    def fade_controls(self):
+        """Return the bottom-right button HUD to the faint idle state."""
+        self.control_opacity.setOpacity(BUTTON_IDLE_OPACITY)
 
     # ------------------------------------------------------------------
     # Backend / hardware sync
@@ -671,6 +701,7 @@ class MenuUI(QWidget):
 
             if previous is not None and states != previous:
                 self.wake_ui()
+                self.activate_controls()
 
                 # Only put action text in the status area if this is the
                 # currently displayed/selected menu.
@@ -737,3 +768,13 @@ def create_gui():
 if __name__ == "__main__":
     app, window = create_gui()
     sys.exit(app.exec())
+
+
+
+
+
+# BUTTON_IDLE_OPACITY = 0.18       # faint/idle
+# # activate_controls:
+# self.control_opacity.setOpacity(1.0)  # dark/active
+# BUTTON_FADE_TIMEOUT_MS = 1800    # how long before going faint
+# find these value to change the opacity and fade timeout for the button HUD in the MenuUI class.
