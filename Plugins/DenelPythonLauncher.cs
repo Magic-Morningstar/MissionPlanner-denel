@@ -36,7 +36,8 @@ namespace MissionPlanner.Plugin
                 {
                     string msg = "Python was not found or is not runnable on this machine. " +
                                  "The STM32/joystick controller bridge will not start.\n\n" +
-                                 "Re-run the Denel GCS installer, or install Python manually and ensure it is on PATH.";
+                                 "Install Python, make sure it is on PATH, then run:\n" +
+                                 "    pip install -r plugins\\UAV_\\requirements.txt";
                     Console.WriteLine("[DenelPythonLauncher] " + msg);
                     MainV2.instance.Invoke(new Action(() =>
                         MessageBox.Show(MainV2.instance, msg, "Denel GCS - Python Bridge Unavailable",
@@ -44,10 +45,11 @@ namespace MissionPlanner.Plugin
                     return true;
                 }
 
-                // ProgramData is writable by a standard (non-admin) user, unlike an
-                // install under Program Files — writing next to the exe throws
-                // UnauthorizedAccessException there and silently kills the bridge
-                // before it starts.
+                // ProgramData rather than next to the exe: it is always writable no
+                // matter where the release ZIP was extracted, and the log survives
+                // replacing the app folder on an upgrade. Writing into a read-only
+                // location throws UnauthorizedAccessException here and silently kills
+                // the bridge before it starts.
                 string logDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Denel GCS");
                 Directory.CreateDirectory(logDir);
@@ -89,12 +91,14 @@ namespace MissionPlanner.Plugin
             return true;
         }
 
-        // Reads the exact python.exe path the installer resolved and recorded at
-        // install time (plugins\UAV_\python_path.txt) — installed via DenelGCS.iss,
-        // which always provisions its own bundled Python rather than relying on
-        // whatever "python.exe" happens to resolve via PATH (unpredictable if another
-        // Python is also installed). Falls back to a bare PATH lookup for a source/dev
-        // checkout not using the installer.
+        // Normally resolves to "python.exe" on PATH — target machines are expected
+        // to have Python and the bridge's dependencies (plugins\UAV_\requirements.txt)
+        // already installed.
+        //
+        // Optional manual override: drop a python_path.txt next to main.py holding the
+        // full path to a python.exe, and that interpreter is used instead. That is the
+        // escape hatch for a machine with several Pythons installed, where PATH order
+        // decides which one wins and the dependencies may only be present in one of them.
         private string ResolvePythonExe(string scriptDir)
         {
             try
