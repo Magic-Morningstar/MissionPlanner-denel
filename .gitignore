@@ -49,3 +49,7 @@ obj2/
 obj3/
 
 /.claude/settings.local.json
+
+# Runtime log written by plugins/UAV_/utils/logging_config.py (relative to cwd)
+Plugins/UAV_/controller.log
+Plugins/UAV_/controller.log.*

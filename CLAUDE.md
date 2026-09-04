@@ -251,6 +251,22 @@ As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_POR
 **MAVLink connection for SITL testing:**
 The script connects via `udpin:0.0.0.0:14551` (both `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `state/system_config.py`). For ArduPilot SITL (sim_vehicle.py), add a matching output so SITL forwards MAVLink to that port, e.g. `--out udp:127.0.0.1:14551`, or add `output add 127.0.0.1:14551` in the MAVProxy console.
 
+**UDP 14551 is reserved for the bridge — do not re-enable it in AutoConnect.** Mission Planner's own
+auto-connect used to listen on 14551 as well (`ExtLibs/Utilities/AutoConnect.cs`, `"Mavlink alt
+port"`, enabled upstream by default). `AutoConnect.ProcessEntry()` opens a `UdpClient` on the port
+and never disposes it, so whichever process binds first owns 14551 for the whole session — a
+startup race against `main.py`. Both outcomes fail quietly: when the GCS won, the bridge logged
+`not available (PermissionError)` and retried every 2s forever, leaving the STM32 controller dead;
+when the bridge won, `ProcessEntry` swallowed the bind error in its `catch`. Adding PySide6 made
+the bridge slower to start and tilted the race toward the GCS.
+
+Fixed in two places, both needed: the source default is now `false`, **and** `AutoConnect.Start()`
+carries a one-time migration that disables the entry in already-saved profiles. The migration is
+not optional — `Start()` only consults the default list when `Settings.Instance["AutoConnect"]` is
+null, so on any machine that has run Mission Planner before, the default alone does nothing. It
+runs once and sets `AutoConnect_denel14551=done` so a deliberate re-enable is not overridden every
+start. Port 14550 is untouched and still auto-connects normally.
+
 **Python requirement:** `DenelPythonLauncher.cs` resolves the interpreter via `ResolvePythonExe()`,
 which normally just uses `"python.exe"` from `PATH`. Target machines are expected to have Python and
 the bridge's dependencies already installed (see "Release packaging" below).
