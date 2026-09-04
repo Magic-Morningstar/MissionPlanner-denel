@@ -102,13 +102,6 @@ MSBuild is not in PATH. Use the full path:
 ```
 Kill any running `MissionPlanner.exe` first — it locks DLLs and breaks the copy step.
 
-### Inno Setup Compiler path (this machine)
-Installed via `winget install --id JRSoftware.InnoSetup`, which put it under the user profile, **not** the usual `Program Files (x86)` location:
-```
-C:\Users\user\AppData\Local\Programs\Inno Setup 6\ISCC.exe
-```
-Check both locations if it's not found — winget/manual installs can land in either.
-
 ---
 
 ### Branding
@@ -217,7 +210,7 @@ A custom STM32 hardware controller communicates with the drone via a Python scri
 ```
 STM32 → COM7 (binary serial packets) → main.py → udpin:0.0.0.0:14551 (state + command) → ArduPilot
 ```
-As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `config.py` both point at the same shared UDP endpoint (`udpin:0.0.0.0:14551`) instead of the previous two separate TCP ports (`5762`/`5763`) — an intentional architecture change (enables Herelink digital-link compatibility). `SERIAL_PORT` (STM32 COM port) also now lives in `config.py` rather than being set elsewhere.
+As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `state/system_config.py` both point at the same shared UDP endpoint (`udpin:0.0.0.0:14551`) instead of the previous two separate TCP ports (`5762`/`5763`) — an intentional architecture change (enables Herelink digital-link compatibility). `SERIAL_PORT` (STM32 COM port) also now lives in `state/system_config.py` rather than being set elsewhere.
 
 **Startup ordering / connection resilience:** `DenelPythonLauncher.cs` auto-starts `main.py` as soon as the GCS plugin loads — this is typically *before* the operator has manually connected MissionPlanner to the vehicle, so nothing may be listening on `MAVLINK_CONNECTION` yet. `Mavlink_controller.initiate_Connection()` (`plugins/UAV_/mavlink/mavlink_contoller.py`) wraps `mavutil.mavlink_connection()` in a `try`/`except` retry loop (1s interval, `system_Print`-logged) instead of letting a refused connection raise uncaught — matching the existing STM32 serial-retry pattern in `main.py`'s read loop. There is no process-level watchdog (`DenelPythonLauncher.cs` does not restart `main.py` if it exits), so this in-script retry is the only thing standing between a cold-boot race and a permanently-dead bridge for the rest of the GCS session — do not remove it without adding an equivalent safeguard.
 
@@ -227,7 +220,11 @@ As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_POR
 |---|---|
 | `plugins/DenelPythonLauncher.cs` | C# plugin — auto-starts `plugins/UAV_/main.py` on GCS startup, kills it on exit, logs to `denel_python.log` |
 | `plugins/UAV_/main.py` | Entry point — modular Controller class; connects MAVLink + STM32 serial |
-| `plugins/UAV_/config.py` | Central config — `MAVLINK_STATE_PORT`, `MAVLINK_COMMAND_PORT`, `SERIAL_PORT`, bitmask bits, timeouts, debug flags |
+| `plugins/UAV_/state/system_config.py` | Central config — `MAVLINK_STATE_PORT`, `MAVLINK_COMMAND_PORT`, `SERIAL_PORT`, bitmask bits, timeouts, debug flags (was `plugins/UAV_/config.py`, which no longer exists) |
+| `plugins/UAV_/API/` | Panel state sync + API-side config/model |
+| `plugins/UAV_/Menu_UI/gui_main.py` | PySide6 (Qt) operator GUI — `create_gui()`, driven from `main.py` |
+| `plugins/UAV_/commands/` | Input translation: `intents.py`, `registry.py`, `translator.py` |
+| `plugins/UAV_/requirements.txt` | Pinned Python dependencies — ships in the release ZIP |
 | `plugins/UAV_/mavlink/` | Flight controllers: arms, RTL, auto-takeoff, manual, speed control (`mavlink/Services/Pre_Flight_Checks/` holds battery/flight/GPS pre-flight checks) |
 | `plugins/UAV_/serial_controller/` | Binary packet protocol: `serial_handler.py`, `packet_Parser.py`, `packet_builder.py` |
 | `plugins/UAV_/serial_controller/protocol/bit_definitions.py` | Centralised bitmask definitions |
@@ -252,88 +249,90 @@ As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_POR
 | 15 | Is flying (state read-back) |
 
 **MAVLink connection for SITL testing:**
-The script connects via `udpin:0.0.0.0:14551` (both `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `config.py`). For ArduPilot SITL (sim_vehicle.py), add a matching output so SITL forwards MAVLink to that port, e.g. `--out udp:127.0.0.1:14551`, or add `output add 127.0.0.1:14551` in the MAVProxy console.
+The script connects via `udpin:0.0.0.0:14551` (both `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `state/system_config.py`). For ArduPilot SITL (sim_vehicle.py), add a matching output so SITL forwards MAVLink to that port, e.g. `--out udp:127.0.0.1:14551`, or add `output add 127.0.0.1:14551` in the MAVProxy console.
 
-**Python requirement:** `DenelPythonLauncher.cs` resolves the interpreter via `ResolvePythonExe()`: it reads `plugins\UAV_\python_path.txt` — a file the installer writes at install time with the exact resolved path to the Python it just provisioned (e.g. `C:\Program Files\Python313\python.exe`) — and uses that directly. It only falls back to a bare `"python.exe"` PATH lookup if that file is absent, which covers a source/dev checkout not using the installer. This deliberately does **not** trust ambient PATH order: on a machine with more than one Python installed, PATH order is unpredictable, and (see "Installer (Inno Setup)" below) the offline wheels are pinned to one specific Python version, so using the wrong one on PATH silently breaks the offline `pip install`. If Python is still missing/unusable at launch, `IsPythonAvailable()` shows a warning dialog instead of failing silently.
+**UDP 14551 is reserved for the bridge — do not re-enable it in AutoConnect.** Mission Planner's own
+auto-connect used to listen on 14551 as well (`ExtLibs/Utilities/AutoConnect.cs`, `"Mavlink alt
+port"`, enabled upstream by default). `AutoConnect.ProcessEntry()` opens a `UdpClient` on the port
+and never disposes it, so whichever process binds first owns 14551 for the whole session — a
+startup race against `main.py`. Both outcomes fail quietly: when the GCS won, the bridge logged
+`not available (PermissionError)` and retried every 2s forever, leaving the STM32 controller dead;
+when the bridge won, `ProcessEntry` swallowed the bind error in its `catch`. Adding PySide6 made
+the bridge slower to start and tilted the race toward the GCS.
 
-For a **source/dev checkout not using the installer**, you still need a real Python install on `PATH` (not the Windows Store stub — check with `python --version`; if it prints an "install from the Store" prompt instead of a version, install Python from python.org or via `py`/`winget`).
+Fixed in two places, both needed: the source default is now `false`, **and** `AutoConnect.Start()`
+carries a one-time migration that disables the entry in already-saved profiles. The migration is
+not optional — `Start()` only consults the default list when `Settings.Instance["AutoConnect"]` is
+null, so on any machine that has run Mission Planner before, the default alone does nothing. It
+runs once and sets `AutoConnect_denel14551=done` so a deliberate re-enable is not overridden every
+start. Port 14550 is untouched and still auto-connects normally.
 
-**Python dependencies:** pinned in `Plugins/UAV_/requirements.txt` (source of truth — also used by the installer's offline `pip install`, see below). For a manual dev-machine setup:
+**Python requirement:** `DenelPythonLauncher.cs` resolves the interpreter via `ResolvePythonExe()`,
+which normally just uses `"python.exe"` from `PATH`. Target machines are expected to have Python and
+the bridge's dependencies already installed (see "Release packaging" below).
+
+As an **optional manual override**, it first looks for `plugins\UAV_\python_path.txt` — a one-line
+text file holding the full path to a `python.exe`. If present and valid, that interpreter is used
+instead. This is the escape hatch for a machine with several Pythons installed, where `PATH` order
+decides which one wins and the dependencies may only be present in one of them. Nothing creates this
+file; you write it by hand when you need it.
+
+If Python is missing or unusable at launch, `IsPythonAvailable()` shows a warning dialog instead of
+failing silently.
+
+**Python dependencies:** pinned in `plugins/UAV_/requirements.txt` (source of truth). It is copied
+into the build output, so it ships inside the release ZIP:
 ```
-pip install -r Plugins\UAV_\requirements.txt
+pip install -r plugins\UAV_\requirements.txt
 ```
+`PySide6` is in there because `main.py` now builds a Qt GUI (`Menu_UI/gui_main.py`) — it is not an
+optional extra; the bridge will not start without it.
 
 **Monitoring the script:**
 ```powershell
 Get-Content -Path "C:\ProgramData\Denel GCS\denel_python.log" -Wait   # PowerShell tail -f equivalent
 ```
-Both `denel_python.log` (C# launcher, stdout/stderr of `main.py`) and `controller.log` (Python's own `logging_config.py` output) are written to `C:\ProgramData\Denel GCS\` — **not** next to `MissionPlanner.exe`. This is deliberate: a standard (non-admin) user can't write into `Program Files`, where the installer places the app, so both logs use the same writable location Mission Planner itself already uses for settings (`C:\ProgramData\Mission Planner\`). Discovered via real install testing — an earlier version of this doc said the log was created next to the exe, which silently breaks once the app is installed there.
+`denel_python.log` (the C# launcher's capture of `main.py`'s stdout/stderr) is written to
+`C:\ProgramData\Denel GCS\` — **not** next to `MissionPlanner.exe`. Keep it there: it is always
+writable regardless of where the ZIP was extracted, and it survives replacing the app folder on an
+upgrade. Do not "simplify" it back to the exe directory.
+
+**Known wart:** `controller.log` (Python's own `logging_config.py` output) does *not* follow this.
+`utils/logging_config.py` uses a bare relative `DEFAULT_LOG_FILE = "controller.log"`, so it lands in
+the working directory — `plugins\UAV_\` — and gets committed by accident. Owned by the UAV_ Python
+author; left alone deliberately.
 
 ---
 
 ### Release packaging
 
-UAV_ Python scripts live in `plugins/UAV_/` in the repo. `MissionPlanner.csproj` has a `<None Include="plugins\UAV_\**\*.py">` item with `CopyToOutputDirectory=PreserveNewest`, so every `.py` file under `plugins/UAV_/` (including new ones) is copied to `bin\<Config>\net461\plugins\UAV_\` automatically on build — no manual copy step needed.
+UAV_ Python scripts live in `plugins/UAV_/` in the repo. `MissionPlanner.csproj` has a `<None Include="plugins\UAV_\**\*.py">` item with `CopyToOutputDirectory=PreserveNewest`, so every `.py` file under `plugins/UAV_/` (including new ones) is copied to `bin\<Config>\net461\plugins\UAV_\` automatically on build — no manual copy step needed. A sibling item does the same for `plugins\UAV_\requirements.txt`, so the dependency list ships alongside the scripts it describes.
 
-Distribution is via the **Inno Setup installer** (`installer/DenelGCS.iss`), which replaces the old manual-zip workflow. Build chain:
+Distribution is a **plain ZIP of the Release build output** — there is no installer. Build chain:
 ```powershell
-# One-time per dev machine: install Inno Setup Compiler (jrsoftware.org). Not on PATH
-# by default — typical location: C:\Program Files (x86)\Inno Setup 6\ISCC.exe
-
-# 1. Refresh offline deps (only needed when requirements.txt or the pinned Python
-#    version in DenelGCS.iss changes)
-.\installer\fetch-offline-deps.ps1
-
-# 2. Build the app (Release)
+# 1. Build the app (Release). Kill any running MissionPlanner.exe first — it locks DLLs.
 "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" -v:m -restore -t:Build -p:Configuration=Release MissionPlanner.sln
 
-# 3. Compile the installer
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\DenelGCS.iss
-
-# Output: installer\output\DenelGCS-Setup-<version>.exe
+# 2. Zip the output folder — that folder IS the release.
+Compress-Archive -Path bin\Release\net461\* -DestinationPath DenelGCS-<version>.zip
 ```
+The ZIP is extracted anywhere writable on the target machine and run in place. Nothing is
+registered with Windows, so "upgrading" is just replacing the folder.
 
-**Target machine requirements:** Windows 10/11 + .NET 4.7.2 (near-universal on modern Windows; the installer checks and warns, but does not bundle a .NET installer). Run `DenelGCS-Setup.exe` — it always installs its own bundled Python + `pymavlink`/`pyserial` (see "Python provisioning logic" below for why it doesn't try to reuse an existing Python), fully offline (no internet needed at install time). Apply Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
+**Target machine requirements** — nothing provisions these automatically any more, so they must
+already be true before the GCS is handed over:
+
+- Windows 10/11 and .NET Framework 4.7.2 (near-universal on modern Windows).
+- A real Python on `PATH` — **not** the Windows Store stub. Check with `python --version`; if it
+  prints an "install from the Store" prompt instead of a version number, install from python.org
+  or via `py`/`winget`.
+- The bridge's Python dependencies: `pip install -r plugins\UAV_\requirements.txt` (that file
+  ships inside the ZIP — see the csproj item above).
+
+Apply the Denel theme on first launch via Config → Planner → Theme → `denel_cyan`.
+
+If Python or its dependencies are missing, `DenelPythonLauncher` shows a warning dialog naming the
+`pip install` command at startup rather than failing silently — that dialog is the only signal a
+non-technical operator gets, so do not remove it.
 
 **Auto-connect (future):** `ExtLibs/Utilities/AutoConnect.cs` already supports TCP auto-connect. To enable it, set `Enabled = true` on the relevant `ConnectionInfo` entry and set the target IP/port. No other code changes needed.
-
----
-
-### Installer (Inno Setup)
-
-`installer/` (repo root) layout:
-
-| Path | Tracked? | Purpose |
-|---|---|---|
-| `installer/DenelGCS.iss` | Yes | Inno Setup script — packages `bin\Release\net461\*`, bundles Python + wheels, always installs the bundled Python, runs an offline `pip install`, records the resolved path |
-| `installer/fetch-offline-deps.ps1` | Yes | Regenerates `redist/` and `wheels/` — run manually whenever `Plugins/UAV_/requirements.txt` or the pinned Python version changes |
-| `installer/DenelGCS-SandboxTest.wsb` | Yes | Windows Sandbox config for clean-machine testing — see "Testing the installer" below |
-| `installer/redist/` | No (gitignored) | `python-<ver>-amd64.exe`, the official offline Python installer |
-| `installer/wheels/` | No (gitignored) | Downloaded `.whl` files for `pymavlink`/`pyserial` + transitive deps, for offline `pip install --no-index` |
-| `installer/output/` | No (gitignored) | Compiled `DenelGCS-Setup-<version>.exe` lands here |
-| `installer/.wheelbuild/` | No (gitignored) | Scratch venv used only by `fetch-offline-deps.ps1` |
-
-`redist/`/`wheels/`/`output/` are regenerable binary build inputs (~150-200MB), not source — same treatment the repo already gives `bin/`/`obj/`.
-
-**`AppId` GUID in `DenelGCS.iss` must never change** across releases — it's how Windows identifies upgrades/uninstalls for this app.
-
-**Python provisioning logic** (in `DenelGCS.iss`'s `[Code]` section, `CurStepChanged`): **always** installs the bundled Python (`/quiet InstallAllUsers=1 PrependPath=0`), never reuses whatever Python is already on `PATH`. This was a deliberate fix, not the original design — see "Bugs found via real install testing" below for why. The official installer is idempotent (no-ops/repairs if that exact version is already present), so this costs a few extra seconds even when a compatible Python already exists, in exchange for determinism. After installing, it resolves the real `python.exe` path via the registry key the official installer writes (`HKLM64\SOFTWARE\Python\PythonCore\3.13\InstallPath`), runs the offline `pip install` against that exact path, and writes it to `{app}\plugins\UAV_\python_path.txt` for `DenelPythonLauncher.cs` to read at runtime (see "Python requirement" above). Failures at either the Python-install or `pip install` step show a warning dialog but do not block the app install — `IsPythonAvailable()` is the runtime fallback diagnostic if this ever happens. The whole step logs to the Inno Setup log (`Log(...)` calls) — pass `/LOG=path` to `Setup.exe` to capture it when debugging.
-
-This step can take several minutes (running the real Python installer, then `pip install`) with nothing visible in the wizard between the file-copy progress bar and the "Finished" page — confusing enough in Sandbox testing (compounded by Windows stalling on an online certificate-revocation check for the signed Python installer, since networking is disabled there) that it read as a hang. Fixed with a `CreateOutputProgressPage` (`ProgressPage` var, shown/hidden via `try...finally` around the whole `CurStepChanged` body) that steps through "Installing Python runtime..." → "Installing Python dependencies..." → "Finishing up..." — doesn't show a real percentage (Inno has no visibility into the subprocess's internal progress), just stage feedback so it doesn't look stuck.
-
-**Do not** add Python removal to the uninstaller — it may be shared with other software on the machine (documented as a comment in `DenelGCS.iss`). The uninstaller does a full `{app}` directory wipe (`[UninstallDelete]`) to catch runtime-generated files Inno's normal file-list-driven uninstall doesn't know about (`python_path.txt`, `__pycache__`) — safe since `{app}` is exclusively this app's own install directory.
-
-#### Bugs found via real install testing
-
-Two real, non-obvious bugs were only caught by actually running the compiled installer end-to-end (install → launch → uninstall) rather than just compiling the `.iss` and reading the code — both are why the current design looks the way it does:
-
-1. **ABI/wheel-version mismatch when reusing an existing Python.** The original design preferred whatever Python was already on `PATH`, only falling back to the bundled installer if none was found. But the offline wheel set is pinned to one specific Python version (`fetch-offline-deps.ps1`'s `--python-version`/`--abi` flags), and `pymavlink`'s compiled dependencies (`fastcrc`, `lxml`) ship version-specific ABI-tagged wheels. On a real machine with a *different* existing Python already on `PATH` (this dev machine had 3.14; the bundled/pinned version is 3.13.14), the offline `pip install --no-index` failed outright with "No matching distribution found." Fixed by always installing the bundled Python and always using its exact resolved path — see "Python provisioning logic" above.
-2. **`Program Files` isn't writable by a standard user.** Both `denel_python.log` (C#) and `controller.log` (Python's `logging_config.py`) originally wrote next to the running executable / relative to cwd. That's fine when running from a normal directory, but once installed to `Program Files` (required for the installer's admin-elevated install), a non-admin launch of the app threw `UnauthorizedAccessException` trying to create the log file — silently killing the bridge before it ever started, with no earlier symptom than "nothing happens." Fixed by moving both logs to `C:\ProgramData\Denel GCS\` (see "Monitoring the script" above) — this is exactly why `DenelPythonLauncher.cs`'s visible-failure MessageBox (see "Python requirement" above) was worth adding: it turned a silent, undebuggable failure into a dialog with the exact path and reason.
-
-Both were validated by deliberately reproducing a clean-ish state on this dev machine (uninstalling `pymavlink`/`pyserial`, running as a non-admin user) rather than assuming — see "Testing the installer" below for the genuinely-blank-machine test, which has since passed.
-
-#### Testing the installer
-
-`installer/DenelGCS-SandboxTest.wsb` launches Windows Sandbox (a disposable, ephemeral Windows VM — enable via `DISM /Online /Enable-Feature /FeatureName:Containers-DisposableClientVM /All`, requires a reboot) with `installer/output/` mounted read-only on the Desktop and **networking disabled** — deliberately, since that's the real test of the installer's offline claim, not just a convenience setting. Double-click the `.wsb` file, run `DenelGCS-Setup-<version>.exe` inside, and verify the app launches and the bridge starts (`C:\ProgramData\Denel GCS\denel_python.log` inside the Sandbox) — this is the closest available approximation of a genuinely blank target machine, and is preferred over uninstalling Python on a real dev machine (leaves registry/PATH residue even after uninstalling, and risks breaking other tools on that machine). The Sandbox discards all state when closed, so no cleanup is needed.
-
-**Result (2026-07-16):** passed — a machine with zero prior Python installed cleanly (fully offline) and the bridge started correctly (`denel_python.log` showed normal STM32-not-found / MAVLink-connection-retry behavior, as expected with no hardware or vehicle attached). The install took several minutes, mostly genuine work plus a certificate-revocation-check timeout specific to having no network available — see the progress-page note above, added in response to this taking longer than expected with no feedback.

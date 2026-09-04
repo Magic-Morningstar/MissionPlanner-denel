@@ -24,7 +24,13 @@ namespace MissionPlanner.Utilities
         {
             new ConnectionInfo("Mavlink default port", true, 14550, ProtocolType.Udp, ConnectionFormat.MAVLink,
                 Direction.Inbound, ""),
-            new ConnectionInfo("Mavlink alt port", true, 14551, ProtocolType.Udp, ConnectionFormat.MAVLink,
+            // Denel: disabled by default. The UAV_ Python bridge (plugins/UAV_/main.py) binds
+            // udpin:0.0.0.0:14551 itself. ProcessEntry() below opens a UdpClient on this port and
+            // never disposes it, so whichever process binds first owns 14551 for the whole
+            // session — a startup race between AutoConnect and the bridge. When the GCS won, the
+            // bridge logged "not available (PermissionError)" and retried forever, silently
+            // leaving the STM32 controller dead. 14550 stays enabled for normal auto-connect.
+            new ConnectionInfo("Mavlink alt port", false, 14551, ProtocolType.Udp, ConnectionFormat.MAVLink,
                 Direction.Inbound, ""),
 
             new ConnectionInfo("Mavlink sitl port", false, 5760, ProtocolType.Tcp, ConnectionFormat.MAVLink,
@@ -70,6 +76,27 @@ namespace MissionPlanner.Utilities
             }
 
             connectionInfos = config.FromJSON<List<ConnectionInfo>>();
+
+            // Denel: one-time migration for profiles saved before 14551 was disabled above.
+            // The default list is only consulted when no config exists yet, so without this an
+            // existing config.xml keeps the old enabled entry and keeps racing the Python bridge
+            // for the port. Runs once and records a flag, so an operator who deliberately
+            // re-enables 14551 afterwards is not overridden on every subsequent start.
+            if (Settings.Instance[SettingsName + "_denel14551"] == null)
+            {
+                foreach (var connectionInfo in connectionInfos)
+                {
+                    if (connectionInfo.Port == 14551 && connectionInfo.Protocol == ProtocolType.Udp &&
+                        connectionInfo.Direction == Direction.Inbound && connectionInfo.Enabled)
+                    {
+                        connectionInfo.Enabled = false;
+                        log.Info("Denel: disabled AutoConnect UDP 14551 (reserved for the UAV_ Python bridge)");
+                    }
+                }
+
+                Settings.Instance[SettingsName] = connectionInfos.ToJSON();
+                Settings.Instance[SettingsName + "_denel14551"] = "done";
+            }
 
             foreach (var connectionInfo in connectionInfos)
             {
