@@ -54,3 +54,5 @@ obj3/
 /installer/wheels/
 /installer/output/
 /installer/.wheelbuild/
+Plugins/UAV_/controller.log
+Plugins/UAV_/controller.log
