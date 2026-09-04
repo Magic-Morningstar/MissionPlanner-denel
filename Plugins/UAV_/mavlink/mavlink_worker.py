@@ -39,6 +39,16 @@ class MavlinkWorker(ConnectionManager):
 
             try:
                 conn = mavutil.mavlink_connection(conn_str, wait_ready=True)
+                # FIXED (correction to my own previous fix): the bind()
+                # workaround below is ONLY valid for udpout:/udp:-style
+                # connections. udpin: already binds the socket internally
+                # as part of setting up its listening address — calling
+                # bind() again on an already-bound socket is itself
+                # invalid on Windows and throws the exact same class of
+                # OSError this was meant to prevent. Gating on the prefix
+                # so udpin: connections are left alone.
+                if not conn_str.startswith("udpin:"):
+                    conn.port.bind(('', 0))
                 logger.info(f"  [{label}] connected on {conn_str}.")
                 return conn
 
@@ -65,7 +75,7 @@ class MavlinkWorker(ConnectionManager):
         "working" until you notice the loop just never logs anything.
         """
         logger.info(f"{self.__class__.__name__} waiting for heartbeat...")
-        msg = connection.wait_heartbeat()
+        msg = connection.wait_heartbeat(timeout=timeout)
         if msg is None:
             logger.warning(f"{self.__class__.__name__}: no heartbeat within {timeout}s — closing and retrying.")
             connection.close()   # free the port rather than leave a dead socket holding it
