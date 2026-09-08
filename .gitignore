@@ -50,9 +50,10 @@ obj3/
 
 /.claude/settings.local.json
 
-/installer/redist/
-/installer/wheels/
-/installer/output/
-/installer/.wheelbuild/
-Plugins/UAV_/controller.log
-Plugins/UAV_/controller.log
+# Runtime logs from plugins/UAV_/utils/logging_config.py. DEFAULT_LOG_FILE is a
+# bare relative path, so the file lands in whatever the working directory happens
+# to be: plugins/UAV_/ when DenelPythonLauncher starts main.py, or the repo root
+# when it is run by hand. Unanchored so it matches at any depth, plus the
+# RotatingFileHandler backups (controller.log.1 ... .5).
+controller.log
+controller.log.*
