@@ -16,7 +16,10 @@ namespace MissionPlanner
 
             string strVersion = typeof(Splash).GetType().Assembly.GetName().Version.ToString();
 
-            TXT_version.Text = "Version: " + Application.ProductVersion; // +" Build " + strVersion;
+            // Denel release version first — that's the number we hand out with a release ZIP.
+            // Upstream's build id is kept in brackets so a support request can still identify
+            // exactly which Mission Planner build this was compiled from.
+            TXT_version.Text = "Version: " + Program.DenelVersion + "  (MP " + Application.ProductVersion + ")";
 
             Console.WriteLine(strVersion);
 

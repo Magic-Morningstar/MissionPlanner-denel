@@ -43,6 +43,67 @@ namespace MissionPlanner
 
         public static string name { get; internal set; }
 
+        /// <summary>
+        /// Denel GCS release version, shown in the title bar and on the splash. This is our own
+        /// version line and is unrelated to Application.ProductVersion, which is upstream Mission
+        /// Planner's auto-generated build id (1.3.xxxx.xxxxx) and changes on every build.
+        ///
+        /// Read from denel_version.txt next to the exe (denel_version.txt at the repo root, copied
+        /// to the output on build) so the number can be corrected on a machine without a rebuild.
+        ///
+        /// The fallback is deliberately NOT a real version number. It is only reached when the
+        /// file is missing or unreadable — an incomplete ZIP extraction, say — and a hardcoded
+        /// "1.0" there would silently display a plausible but wrong version once the real one
+        /// moves on, and would need remembering to bump on every release. An obviously-broken
+        /// string makes the actual problem visible instead.
+        /// </summary>
+        private const string DenelVersionFallback = "unknown";
+
+        private static string _denelVersion;
+
+        public static string DenelVersion
+        {
+            get
+            {
+                if (_denelVersion != null)
+                    return _denelVersion;
+
+                _denelVersion = DenelVersionFallback;
+
+                try
+                {
+                    var file = Settings.GetRunningDirectory() + "denel_version.txt";
+                    if (File.Exists(file))
+                    {
+                        var text = File.ReadAllText(file).Trim();
+                        if (!string.IsNullOrEmpty(text))
+                            _denelVersion = text;
+                    }
+                }
+                catch
+                {
+                    // Keep the fallback — a missing/locked version file must never stop startup.
+                }
+
+                return _denelVersion;
+            }
+        }
+
+        /// <summary>
+        /// Title-bar form of the release version. Formatted here rather than at the call sites
+        /// so the fallback does not read as "vunknown" — the "v" prefix only makes sense in
+        /// front of an actual number.
+        /// </summary>
+        public static string DenelVersionDisplay
+        {
+            get
+            {
+                return DenelVersion == DenelVersionFallback
+                    ? "(version " + DenelVersionFallback + ")"
+                    : "v" + DenelVersion;
+            }
+        }
+
         public static bool WindowsStoreApp
         {
             get { return Application.ExecutablePath.Contains("WindowsApps"); }
@@ -279,7 +340,10 @@ namespace MissionPlanner
             string strVersion = File.Exists("version.txt")
                 ? File.ReadAllText("version.txt")
                 : System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
-            Splash.Text = name + " " + Application.ProductVersion;
+            // Denel release version rather than upstream's build id — this string becomes the
+            // splash caption and, via MainV2, the main window title bar. The Mission Planner
+            // build id is still shown on the splash itself (see Splash.cs).
+            Splash.Text = name + " " + DenelVersionDisplay;
             Console.WriteLine("Splash.Show()");
             Splash.Show();
 
