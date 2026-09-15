@@ -32,30 +32,58 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+/* BUTTON_STATE (0x01) — flight/status only. Payload/camera/laser/
+   tracking concepts live on PAYLOAD_COMMAND (0x04) below instead. */
 #define BIT_ARM                 0
 #define BIT_ARM_STATUS          1
 #define BIT_AUTO                2
 #define BIT_AUTO_STATUS         3
 #define BIT_MANUAL              4
 #define BIT_MANUAL_STATUS       5
-#define BIT_IR_POLARITY         6
-#define BIT_IMAGE_SENSOR_CHANGE 7
+#define BIT_MENU_SELECT_0       6
+#define BIT_MENU_SELECT_1       7
 #define BIT_SPEED_UP            8
 #define BIT_SPEED_DOWN          9
-#define BIT_ZOOM_IN             10
-#define BIT_ZOOM_OUT            11
-#define BIT_WIDE_IN             12
-#define BIT_WIDE_OUT            13
-#define BIT_FOCUS_IN            14
-#define BIT_FOCUS_OUT           15
-#define BIT_VIDEO_IP            21
-#define BIT_LASER_ON_OFF        22
-#define BIT_LASER_CONT_MODE     24
-#define BIT_LASER_SINGLE_MODE   25
-#define BIT_TRCKING_START_STOP  26
-#define BIT_AI_TRACKING_ON_OFF  27
-#define BIT_JOYSTICK_TRACK      28
+#define BIT_MENU_SELECT_2       10
+#define BIT_MENU_SELECT_3       11
+#define BIT_MENU_SELECT_4       12
+#define BIT_MENU_SELECT_5       13
+#define Bit_Stropes             14
 #define DEBOUNCE_MS  15
+
+/* PAYLOAD_COMMAND (0x04) — payload/gimbal/camera/laser/tracking, own
+   32-bit register. Numbering matches bit_definitions.py's
+   PAYLOAD_*_BIT constants exactly. */
+#define PAYLOAD_BIT_ZOOM_IN                    0
+#define PAYLOAD_BIT_ZOOM_OUT                   1
+#define PAYLOAD_BIT_FOV_IN                     2   /* a.k.a. "wide in" */
+#define PAYLOAD_BIT_FOV_OUT                    3   /* a.k.a. "wide out" */
+#define PAYLOAD_BIT_FOCUS_IN                   4
+#define PAYLOAD_BIT_FOCUS_OUT                  5
+#define PAYLOAD_BIT_LASER_ON_OFF               6
+#define PAYLOAD_BIT_LASER_CONT_MODE            7
+#define PAYLOAD_BIT_LASER_SINGLE_MODE          8
+#define PAYLOAD_BIT_LASER_ZOOM_IN              9
+#define PAYLOAD_BIT_LASER_ZOOM_OUT              10
+#define PAYLOAD_BIT_TRACKING_SEARCH_ON_OFF     11
+#define PAYLOAD_BIT_AI_TRACKING_ON_OFF         12
+#define PAYLOAD_BIT_TRACKING_TEMPLATE_TOGGLE   13
+#define PAYLOAD_BIT_TRACKING_SOURCE_TOGGLE     14
+#define PAYLOAD_BIT_JOYSTICK_TRACK             15
+#define PAYLOAD_BIT_TAKE_PICTURE               16
+#define PAYLOAD_BIT_START_RECORD               17
+#define PAYLOAD_BIT_STOP_RECORD                18
+#define PAYLOAD_BIT_PIC_RECORD_MODE_TOGGLE     19
+#define PAYLOAD_BIT_IMAGE_SENSOR_CHANGE        20
+#define PAYLOAD_BIT_IR_POLARITY                21
+#define PAYLOAD_BIT_IR_DZOOM_PLUS              22
+#define PAYLOAD_BIT_IR_DZOOM_MINUS             23
+#define PAYLOAD_BIT_NEAR_IR_TOGGLE             24
+#define PAYLOAD_BIT_EO_IMAGE_ON_OFF            25
+#define PAYLOAD_BIT_MOTOR_ON_OFF               26
+#define PAYLOAD_BIT_VIDEO_IP                   27
+#define PAYLOAD_BIT_EO_DZOOM_TOGGLE            28
+#define PAYLOAD_BIT_IR_RAINBOW                 29
 
 /* USER CODE END PD */
 
@@ -86,17 +114,19 @@ typedef struct {
 
 /* Order must match: buttons[i] drives leds[i] */
 static const button_t buttons[10] = {
-    { GPIOF, GPIO_PIN_12, 1 },  /* PF12 */
+    { GPIOA, GPIO_PIN_6,  1 },  /* PF12: RA2 = DOWN */
     { GPIOD, GPIO_PIN_14, 1 },  /* PD14 */
-    { GPIOD, GPIO_PIN_15, 1 },  /* PD15 */
+	{ GPIOD, GPIO_PIN_15, 1 },  /* PD15: RS2 = UP */
     { GPIOC, GPIO_PIN_7,  1 },  /* PC7  */
-    { GPIOE, GPIO_PIN_10, 0 },  /* PE10 */
-    { GPIOE, GPIO_PIN_12, 0 },  /* PE12 */
-    { GPIOE, GPIO_PIN_14, 0 },  /* PE14 */
-    { GPIOD, GPIO_PIN_11, 0 },  /* PD11 */
-    { GPIOD, GPIO_PIN_12, 0 },  /* PD12 */
-    { GPIOD, GPIO_PIN_13, 0 },  /* PD13 */
+	{ GPIOE, GPIO_PIN_10, 1 },  /* PE10: RS3 = UP */
+	{ GPIOE, GPIO_PIN_11, 1 },  /* PE11: RS4 = DOWN */
+    { GPIOE, GPIO_PIN_14, 1 },  /* PE14: RS3 = DOWN */
+	{ GPIOE, GPIO_PIN_12, 1 },  /* PE12: RS4 = UP */
+	{ GPIOD, GPIO_PIN_11, 1 },  /* PD11: RS5 = DOWN */
+    { GPIOD, GPIO_PIN_13, 1 },  /* PD13: RS5 = UP */
+
 };
+
 
 static const led_t leds[10] = {
 	{ GPIOF, GPIO_PIN_13 }, // Led0
@@ -110,8 +140,6 @@ static const led_t leds[10] = {
     { GPIOB, GPIO_PIN_0  }, // User Led 1
     { GPIOB, GPIO_PIN_7  }, // User Led 2
     { GPIOE, GPIO_PIN_13 }, // User Led 3
-
-
 };
 
 /* Debounce state, one struct per physical pin — indexed to match buttons[].
@@ -132,28 +160,38 @@ typedef struct {
 static debounce_state_t btn_db[10] = {
     { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 0: PF12 active_low  */
     { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 1: PD14 active_low  */
-    { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 2: PD15 active_low  */
+	{ GPIO_PIN_SET, GPIO_PIN_SET, GPIO_PIN_SET, 0 },  /* 2: PD15 active_low  */
     { GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 3: PC7  active_low  */
-    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 4: PE10 active_high */
-    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 5: PE12 active_high */
-    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 6: PE14 active_high */
-    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 7: PD11 active_high */
-    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 8: PD12 active_high */
-    { GPIO_PIN_RESET, GPIO_PIN_RESET, GPIO_PIN_RESET, 0 }, /* 9: PD13 active_high */
+	{ GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 4: PE10 active_high */
+	{ GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 5: PE12 active_high */
+	{ GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 6: PE14 active_high */
+	{ GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 7: PD11 active_high */
+	{ GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 8: PD12 active_high */
+	{ GPIO_PIN_SET,   GPIO_PIN_SET,   GPIO_PIN_SET,   0 }, /* 9: PD13 active_high */
 };
-static debounce_state_t menuBtnDb = { GPIO_PIN_SET, GPIO_PIN_SET, GPIO_PIN_SET, 0 }; /* PA6, pull-up */
+
 
 static uint8_t rx_byte;
 #define TLV_SYNC 0xAA
 #define TLV_END  0x55
-#define MASTER_BTN_PORT GPIOC
-#define MASTER_BTN_PIN   GPIO_PIN_13
+
 #define TLV_TYPE_BUTTON_STATE 0x01
 #define TLV_TYPE_JOYSTICK     0x02
 #define TLV_TYPE_JOYSTICK2    0x03
+#define TLV_TYPE_PAYLOAD_COMMAND 0x04
+/* PC -> STM32, sent once right after the Python side opens the serial
+   port. On receipt, the STM32 performs a full system reset so it
+   always starts from a known-clean state in sync with a freshly
+   launched Python process, rather than potentially carrying over
+   stale menu_register/USB_MESSAGE/PAYLOAD_MESSAGE state from before
+   Python restarted. Carries no payload (LEN=0). */
+#define TLV_TYPE_HELLO           0x20
 uint32_t USB_MESSAGE = 0x00;
-uint8_t menu_register = 0b001;
+uint32_t PAYLOAD_MESSAGE = 0x00;
+uint8_t menu_register = 0b000001;
 uint8_t LED_number = 0;
+
+static uint8_t is_recording = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -197,6 +235,100 @@ static uint8_t TLV_Send(uint8_t type, const uint8_t *payload, uint8_t len)
     return (HAL_UART_Transmit(&huart2, buf, len + 5, HAL_MAX_DELAY) == HAL_OK);
 }
 
+/* ── Incoming (PC -> STM32) TLV receive parser ────────────────────────────
+   Mirrors the Python StreamParser's state machine exactly, including
+   being self-resyncing: any corruption (bad sync, bad CRC, bad end
+   byte) just drops that one frame and returns to hunting for the next
+   SYNC byte. Runs one byte per call, from HAL_UART_RxCpltCallback
+   (interrupt context) — kept deliberately simple and non-blocking. The
+   actual RESPONSE to a received frame (the system reset, for
+   TLV_TYPE_HELLO) is deferred to the main loop via reset_requested,
+   not performed here — resetting from inside an ISR is avoidable, so
+   it's avoided. */
+typedef enum {
+    RX_WAIT_SYNC,
+    RX_READ_TYPE,
+    RX_READ_LEN,
+    RX_READ_PAYLOAD,
+    RX_READ_CRC,
+    RX_READ_END,
+} rx_state_t;
+
+static rx_state_t rx_state = RX_WAIT_SYNC;
+static uint8_t    rx_type;
+static uint8_t    rx_len;
+static uint8_t    rx_payload[16];   /* big enough for any incoming type so far — HELLO carries 0 bytes */
+static uint8_t    rx_payload_idx;
+static uint8_t    rx_crc_ok;
+
+/* Set here (interrupt context), acted on in the main loop — see the
+   reset_requested check near the top of while(1) below. */
+volatile uint8_t reset_requested = 0;
+
+static void Process_Received_Byte(uint8_t byte)
+{
+    switch (rx_state)
+    {
+    case RX_WAIT_SYNC:
+        if (byte == TLV_SYNC) rx_state = RX_READ_TYPE;
+        break;
+
+    case RX_READ_TYPE:
+        rx_type = byte;
+        rx_state = RX_READ_LEN;
+        break;
+
+    case RX_READ_LEN:
+        rx_len = byte;
+        rx_payload_idx = 0;
+        if (rx_len > sizeof(rx_payload)) {
+            rx_state = RX_WAIT_SYNC;   /* can't hold it — drop and resync, same spirit as the Python parser's bad-frame handling */
+        } else {
+            rx_state = (rx_len > 0) ? RX_READ_PAYLOAD : RX_READ_CRC;
+        }
+        break;
+
+    case RX_READ_PAYLOAD:
+        rx_payload[rx_payload_idx++] = byte;
+        if (rx_payload_idx == rx_len) rx_state = RX_READ_CRC;
+        break;
+
+    case RX_READ_CRC:
+        rx_crc_ok = (byte == tlv_crc8(rx_payload, rx_len));
+        rx_state = RX_READ_END;
+        break;
+
+    case RX_READ_END:
+        rx_state = RX_WAIT_SYNC;
+        if (byte == TLV_END && rx_crc_ok)
+        {
+            if (rx_type == TLV_TYPE_HELLO)
+            {
+                reset_requested = 1;
+            }
+            /* Other incoming types would be handled here as they're added. */
+        }
+        /* Bad CRC or bad end byte — silently drop and resync, same as
+           the Python StreamParser does; no error path needed here. */
+        break;
+    }
+}
+
+
+volatile uint8_t rx_rearm_pending = 0;
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART2)
+    {
+        Process_Received_Byte(rx_byte);
+        if (HAL_UART_Receive_IT(&huart2, &rx_byte, 1) != HAL_OK)
+        {
+            rx_rearm_pending = 1;
+        }
+    }
+}
+
 static uint8_t Button_Is_Pressed(const button_t *b)
 {
     GPIO_PinState state = HAL_GPIO_ReadPin(b->port, b->pin);
@@ -206,21 +338,7 @@ static uint8_t Button_Is_Pressed(const button_t *b)
         return (state == GPIO_PIN_SET);
 }
 
-/* Call this every loop iteration in place of your normal logic */
-void Test_Loop(void)
-{
-    uint8_t master_pressed =
-        (HAL_GPIO_ReadPin(MASTER_BTN_PORT, MASTER_BTN_PIN) == GPIO_PIN_RESET);
 
-    for (int i = 0; i < 10; i++)
-    {
-        uint8_t on = master_pressed || Button_Is_Pressed(&buttons[i]);
-        HAL_GPIO_WritePin(leds[i].port, leds[i].pin,
-                           on ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    }
-
-    HAL_Delay(10); /* light debounce */
-}
 uint16_t ADC_Read_Channel(uint32_t channel)
 {
     ADC_ChannelConfTypeDef sConfig = {0};
@@ -273,7 +391,7 @@ static void Debounce_Update(GPIO_TypeDef *port, uint16_t pin, debounce_state_t *
    button. Call this once, at the very top of the main loop. */
 static void Debounce_Sample_All(uint32_t now)
 {
-    Debounce_Update(MASTER_BTN_PORT, MASTER_BTN_PIN, &menuBtnDb, now);
+
     for (int i = 0; i < 10; i++) {
         Debounce_Update(buttons[i].port, buttons[i].pin, &btn_db[i], now);
     }
@@ -285,12 +403,36 @@ static inline uint8_t Debounced_Is_Pressed(const debounce_state_t *db, uint8_t a
 }
 
 /* Replaces set_bit_from_pin(): mirrors the debounced (not raw) level into
-   USB_MESSAGE, so momentary/held buttons no longer flicker on bounce. */
-static inline void Set_Bit_From_Debounced(debounce_state_t *db, uint8_t active_low, uint32_t bit)
+   *target (USB_MESSAGE or PAYLOAD_MESSAGE, whichever the caller passes),
+   so momentary/held buttons no longer flicker on bounce. */
+static inline void Set_Bit_From_Debounced(debounce_state_t *db, uint8_t active_low, uint32_t *target, uint32_t bit)
 {
-    if (Debounced_Is_Pressed(db, active_low)) USB_MESSAGE |= (1UL << bit);
-    else                                       USB_MESSAGE &= ~(1UL << bit);
+    if (Debounced_Is_Pressed(db, active_low)) *target |= (1UL << bit);
+    else                                       *target &= ~(1UL << bit);
 }
+
+
+static uint8_t Get_Menu_Index(void)
+{
+    if (menu_register & 0b0000001) return 0;
+    if (menu_register & 0b0000010) return 1;
+    if (menu_register & 0b0000100) return 2;
+    if (menu_register & 0b0001000) return 3;
+    if (menu_register & 0b0010000) return 4;
+    if (menu_register & 0b0100000) return 5;
+    if (menu_register & 0b1000000) return 6;
+    return 0;
+}
+
+static void Update_Menu_LEDs(void)
+{
+    uint8_t LED_number = Get_Menu_Index();
+
+    ws2812_pixel_all(0, 0, 0);              /* clear all pixels first */
+    ws2812_pixel(LED_number, 255, 255, 255); /* light the active menu's pixel */
+    ws2812_send_spi();                       /* nothing shows until this is called */
+}
+
 
 void onARM_Button_Press(void)
 {
@@ -298,13 +440,22 @@ void onARM_Button_Press(void)
     else                              USB_MESSAGE |= (1 << BIT_ARM);
 }
 
-void onMenuSelect_Button_Press(void)
+void onUpMenuSelect_Button_Press(void)
 {
-    if (menu_register & (1 << 2)) menu_register = 0b001;
-    else                              menu_register = menu_register << 1 ;
+
+    if (menu_register & (1 << 6)) menu_register = 0b000001;
+    else                          menu_register = menu_register << 1;
+
+    Update_Menu_LEDs();
 }
 
+void onDownMenuSelect_Button_Press(void)
+{
 
+    if (menu_register & (1 << 0)) menu_register = 0b100000;
+    else                          menu_register = menu_register >> 1;
+    Update_Menu_LEDs();
+}
 /*
 void onManual_Button_Press(void)
 {
@@ -334,128 +485,167 @@ void onSpeedDown_Button_Press(void)
 }*/
 
 
-
-
-
-
 void onAI_JOYSTICK_TRACK_Button_Press(void)
 {
-	if (USB_MESSAGE & (1 << BIT_AI_TRACKING_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_AI_TRACKING_ON_OFF);
-    if (USB_MESSAGE & (1 << BIT_JOYSTICK_TRACK)) USB_MESSAGE &= ~(1 << BIT_JOYSTICK_TRACK);
-    else                                    USB_MESSAGE |= (1 << BIT_JOYSTICK_TRACK);
+	if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_AI_TRACKING_ON_OFF)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_AI_TRACKING_ON_OFF);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_JOYSTICK_TRACK)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_JOYSTICK_TRACK);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_JOYSTICK_TRACK);
 }
 
 
 void onAI_TRACKING_Button_Press(void)
 {
-	if (USB_MESSAGE & (1 << BIT_JOYSTICK_TRACK)) USB_MESSAGE &= ~(1 << BIT_JOYSTICK_TRACK);
-    if (USB_MESSAGE & (1 << BIT_AI_TRACKING_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_AI_TRACKING_ON_OFF);
-    else                                    USB_MESSAGE |= (1 << BIT_AI_TRACKING_ON_OFF);
+	if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_JOYSTICK_TRACK)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_JOYSTICK_TRACK);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_AI_TRACKING_ON_OFF)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_AI_TRACKING_ON_OFF);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_AI_TRACKING_ON_OFF);
 }
 
 
 void onTRACKING_START_STOP_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_TRCKING_START_STOP)) USB_MESSAGE &= ~(1 << BIT_TRCKING_START_STOP);
-    else                                    USB_MESSAGE |= (1 << BIT_TRCKING_START_STOP);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_TRACKING_SEARCH_ON_OFF)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_TRACKING_SEARCH_ON_OFF);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_TRACKING_SEARCH_ON_OFF);
 }
 
+/* NEW: tracking menu (config.py bit=2) needs these two, previously
+   unhandled anywhere. */
+void onTrackingTemplateToggle_Button_Press(void)
+{
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_TRACKING_TEMPLATE_TOGGLE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_TRACKING_TEMPLATE_TOGGLE);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_TRACKING_TEMPLATE_TOGGLE);
+}
 
-
+void onTrackingSourceToggle_Button_Press(void)
+{
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_TRACKING_SOURCE_TOGGLE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_TRACKING_SOURCE_TOGGLE);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_TRACKING_SOURCE_TOGGLE);
+}
 
 
 void onLASERSINGLE_Button_Press(void)
 {
-	if (USB_MESSAGE & (1 << BIT_LASER_CONT_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_CONT_MODE);
-    if (USB_MESSAGE & (1 << BIT_LASER_SINGLE_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_SINGLE_MODE);
-    else                                    USB_MESSAGE |= (1 << BIT_LASER_SINGLE_MODE);
+	if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_LASER_CONT_MODE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_LASER_CONT_MODE);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_LASER_SINGLE_MODE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_LASER_SINGLE_MODE);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_LASER_SINGLE_MODE);
 }
 
 
 
 void onLASERCONT_Button_Press(void)
 {
-	if (USB_MESSAGE & (1 << BIT_LASER_SINGLE_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_SINGLE_MODE);
-    if (USB_MESSAGE & (1 << BIT_LASER_CONT_MODE)) USB_MESSAGE &= ~(1 << BIT_LASER_CONT_MODE);
-    else                                    USB_MESSAGE |= (1 << BIT_LASER_CONT_MODE);
+	if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_LASER_SINGLE_MODE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_LASER_SINGLE_MODE);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_LASER_CONT_MODE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_LASER_CONT_MODE);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_LASER_CONT_MODE);
 }
 
 
 void onLASER_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_LASER_ON_OFF)) USB_MESSAGE &= ~(1 << BIT_LASER_ON_OFF);
-    else                                    USB_MESSAGE |= (1 << BIT_LASER_ON_OFF);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_LASER_ON_OFF)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_LASER_ON_OFF);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_LASER_ON_OFF);
 }
 
 
 
 void onVIDEOIP_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_VIDEO_IP)) USB_MESSAGE &= ~(1 << BIT_VIDEO_IP);
-    else                                    USB_MESSAGE |= (1 << BIT_VIDEO_IP);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_VIDEO_IP)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_VIDEO_IP);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_VIDEO_IP);
 }
 
+/* NEW: picture_select menu (config.py bit=1) needed this — was
+   completely unhandled anywhere before. */
+void onNearInfraredToggle_Button_Press(void)
+{
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_NEAR_IR_TOGGLE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_NEAR_IR_TOGGLE);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_NEAR_IR_TOGGLE);
+}
+
+/* NEW: display menu (config.py bit=5) fields, all previously unhandled. */
+void onEOImageToggle_Button_Press(void)
+{
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_EO_IMAGE_ON_OFF)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_EO_IMAGE_ON_OFF);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_EO_IMAGE_ON_OFF);
+}
+
+void onEODzoomToggle_Button_Press(void)
+{
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_EO_DZOOM_TOGGLE)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_EO_DZOOM_TOGGLE);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_EO_DZOOM_TOGGLE);
+}
+
+void onIRRainbow_Button_Press(void)
+{
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_IR_RAINBOW)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_IR_RAINBOW);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_IR_RAINBOW);
+}
+
+void onRECORD_Button_Press(void)
+{
+    if (is_recording)
+    {
+        PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_START_RECORD);
+        PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_STOP_RECORD);
+        is_recording = 0;
+    }
+    else
+    {
+        PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_STOP_RECORD);
+        PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_START_RECORD);
+        is_recording = 1;
+    }
+}
 
 void onFocusIn_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_FOCUS_IN)) USB_MESSAGE &= ~(1 << BIT_FOCUS_IN);
-    else                                    USB_MESSAGE |= (1 << BIT_FOCUS_IN);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_FOCUS_IN)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_FOCUS_IN);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_FOCUS_IN);
 }
 
 void onFocusOut_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_FOCUS_OUT)) USB_MESSAGE &= ~(1 << BIT_FOCUS_OUT);
-    else                                      USB_MESSAGE |= (1 << BIT_FOCUS_OUT);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_FOCUS_OUT)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_FOCUS_OUT);
+    else                                      PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_FOCUS_OUT);
 }
 
 
 
 void onZoomIn_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_ZOOM_IN)) USB_MESSAGE &= ~(1 << BIT_ZOOM_IN);
-    else                                   USB_MESSAGE |= (1 << BIT_ZOOM_IN);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_ZOOM_IN)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_ZOOM_IN);
+    else                                   PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_ZOOM_IN);
 }
 
 void onZoomOUT_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_ZOOM_OUT)) USB_MESSAGE &= ~(1 << BIT_ZOOM_OUT);
-    else                                    USB_MESSAGE |= (1 << BIT_ZOOM_OUT);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_ZOOM_OUT)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_ZOOM_OUT);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_ZOOM_OUT);
 }
 
 
 void onWideIn_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_WIDE_IN)) USB_MESSAGE &= ~(1 << BIT_WIDE_IN);
-    else                                   USB_MESSAGE |= (1 << BIT_WIDE_IN);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_FOV_IN)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_FOV_IN);
+    else                                   PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_FOV_IN);
 }
 
 void onWideOUT_Button_Press(void)
 {
-    if (USB_MESSAGE & (1 << BIT_WIDE_OUT)) USB_MESSAGE &= ~(1 << BIT_WIDE_OUT);
-    else                                    USB_MESSAGE |= (1 << BIT_WIDE_OUT);
+    if (PAYLOAD_MESSAGE & (1 << PAYLOAD_BIT_FOV_OUT)) PAYLOAD_MESSAGE &= ~(1 << PAYLOAD_BIT_FOV_OUT);
+    else                                    PAYLOAD_MESSAGE |= (1 << PAYLOAD_BIT_FOV_OUT);
 }
 
-/* Menu-status indicator: exactly one LED lit for the active menu
-   (menu_register is one-hot: 0b001 / 0b010 / 0b100).
-   Reuses leds[0], leds[1], leds[3] — call AFTER Test_Loop() so it wins. */
-static void Update_Menu_LEDs(void)
+void onStropesToggle_Button_Press(void)
 {
-    uint8_t LED_number = 0;
-    if      (menu_register & 0b001) LED_number = 0;
-    else if (menu_register & 0b010) LED_number = 1;
-    else if (menu_register & 0b100) LED_number = 2;
-
-    ws2812_pixel_all(0, 0, 0);              /* clear all pixels first */
-    ws2812_pixel(LED_number, 255, 255, 255); /* light the active menu's pixel */
-    ws2812_send_spi();                       /* nothing shows until this is called */
+	if (USB_MESSAGE & (1 << Bit_Stropes)) USB_MESSAGE &= ~(1 << Bit_Stropes);
+	    else                                 USB_MESSAGE |= (1 << Bit_Stropes);
 }
 
-/* Replaces poll_button(): fires onPress exactly once on the debounced
-   idle->pressed transition. edge_last is tracked per physical pin (not
-   per menu binding), so switching menus mid-press can't ghost-fire a
-   different menu's handler, and multiple menus sharing one pin never
-   fight over separate lastState variables the way the old code did.
-   polarity: 1 = active-low (pull-up, press reads RESET), 0 = active-high (pull-down, press reads SET) */
+
+
+
+
+
 static void Poll_Debounced(debounce_state_t *db, uint8_t active_low, void (*onPress)(void))
 {
     GPIO_PinState pressedState = active_low ? GPIO_PIN_RESET : GPIO_PIN_SET;
@@ -474,45 +664,18 @@ static inline void Set_LED_From_Bit(uint8_t led_idx, uint32_t bit)
                        (USB_MESSAGE & (1UL << bit)) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+static inline void Set_LED_From_Payload_Bit(uint8_t led_idx, uint32_t bit)
+{
+    HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin,
+                       (PAYLOAD_MESSAGE & (1UL << bit)) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
 static inline void Set_LED_Off(uint8_t led_idx)
 {
     HAL_GPIO_WritePin(leds[led_idx].port, leds[led_idx].pin, GPIO_PIN_RESET);
 }
 
-/* Shows what each button currently DOES in USB_MESSAGE, per the active menu.
-   leds[0]/[1]/[3] stay reserved for Update_Menu_LEDs(). leds[2] is currently
-   unused (Auto-Land was removed) and free for whatever goes there next. */
-static void Update_Button_LEDs(void)
-{
-    /* fixed pin->LED pairing across menus: E10=4  E12=5  E14=6  D11=7  D12=8  D13=9 */
-    if (menu_register & (1 << 0))
-    {
-        Set_LED_From_Bit(7, BIT_WIDE_IN);      /* GPIOD11 - BLACK BTN */
-        Set_LED_From_Bit(9, BIT_FOCUS_IN);     /* GPIOD13 - RED BTN   */
-        Set_LED_From_Bit(6, BIT_ZOOM_OUT);     /* GPIOE14 - YELLOW BTN*/
-        Set_LED_From_Bit(5, BIT_WIDE_OUT);     /* GPIOE12 - WHITE BTN */
-        Set_LED_From_Bit(8, BIT_FOCUS_OUT);    /* GPIOD12 - BLUE BTN  */
-        Set_LED_From_Bit(4, BIT_ZOOM_IN);      /* GPIOE10 - GREEN BTN */
-    }
-    else if (menu_register & (1 << 1))
-    {
-        Set_LED_From_Bit(6, BIT_VIDEO_IP);             /* GPIOE14 - Yellow BTN */
-        Set_LED_From_Bit(4, BIT_IMAGE_SENSOR_CHANGE);  /* GPIOE10 - GREEN BTN  */
-        Set_LED_From_Bit(5, BIT_IR_POLARITY);          /* GPIOE12 - WHITE BTN  */
-        Set_LED_Off(7);
-        Set_LED_Off(8);
-        Set_LED_Off(9);
-    }
-    else if (menu_register & (1 << 2))
-    {
-        Set_LED_From_Bit(6, BIT_TRCKING_START_STOP);   /* GPIOE14 - YELLOW BTN */
-        Set_LED_From_Bit(5, BIT_JOYSTICK_TRACK);       /* GPIOE12 - WHITE BTN  */
-        Set_LED_From_Bit(8, BIT_AI_TRACKING_ON_OFF);   /* GPIOD12 - BLUE BTN   */
-        Set_LED_From_Bit(4, BIT_LASER_ON_OFF);         /* GPIOE10 - GREEN BTN  */
-        Set_LED_From_Bit(7, BIT_LASER_CONT_MODE);      /* GPIOD11 - BLACK BTN  */
-        Set_LED_From_Bit(9, BIT_LASER_SINGLE_MODE);    /* GPIOD13 - BLUE BTN   */
-    }
-}
+
 
 /* USER CODE END 0 */
 
@@ -557,7 +720,7 @@ int main(void)
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   ws2812_init();
   uint16_t pot1 = 0, pot2 = 0, pot3 = 0, pot4 = 0;
-
+  Update_Menu_LEDs();
 
   static uint32_t last_usb_send = 0;
   static uint16_t avg1 = 0;
@@ -565,18 +728,34 @@ int main(void)
   static uint16_t avg3 = 0;
   static uint16_t avg4 = 0;
   static uint8_t counter = 0;
-  static uint8_t message_counter = 0;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
     {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+
+
+	    if (reset_requested)
+	    {
+	        HAL_Delay(10);   /* let any in-flight UART transmit finish before resetting */
+	        NVIC_SystemReset();
+	    }
+
+	    if (rx_rearm_pending)
+	    {
+	        if (HAL_UART_Receive_IT(&huart2, &rx_byte, 1) == HAL_OK)
+	        {
+	            rx_rearm_pending = 0;
+	        }
+	    }
 
 	    uint32_t now = HAL_GetTick();
         Debounce_Sample_All(now);   /* samples every physical pin, every iteration, no matter the menu */
-
-        Update_Menu_LEDs();
 
 
 
@@ -586,47 +765,71 @@ int main(void)
         pot4 += ADC_Read_Channel(ADC_CHANNEL_7);
 
         /* Persistent MODE buttons: toggle/latch on press, stay set until pressed again. */
-        Poll_Debounced(&menuBtnDb, 1, onMenuSelect_Button_Press);   /* PA6, pull-up, active-low */
+        Poll_Debounced(&btn_db[0], buttons[0].active_low, onUpMenuSelect_Button_Press);   /* PA6, pull-up, active-low */
+        Poll_Debounced(&btn_db[2], buttons[2].active_low, onDownMenuSelect_Button_Press);   /* PD15, pull-up, active-low */
 
-        /* MOMENTARY command buttons: bit mirrors the debounced pin level, set only while held. */
-        /*                       btn_db[i]     active_low             bit */
-        if(menu_register& (1<<0)){
-        	/*Zoom*/
-        	Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, BIT_ZOOM_IN);   // GPIOE10 - GREEN BTN
-        	Set_Bit_From_Debounced(&btn_db[6], buttons[6].active_low, BIT_ZOOM_OUT);  // GPIOE14 - YELLOW BTN
+        {
 
-
-        	/*FOV*/
-			Set_Bit_From_Debounced(&btn_db[7], buttons[7].active_low, BIT_WIDE_IN);   // GPIOD11 - BLACK BTN
-			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, BIT_WIDE_OUT);  // GPIOE12 - WHITE BTN
-
-			/*FOCUS*/
-			Set_Bit_From_Debounced(&btn_db[9], buttons[9].active_low, BIT_FOCUS_IN);  // GPIOD13 - RED BTN
-			Set_Bit_From_Debounced(&btn_db[8], buttons[8].active_low, BIT_FOCUS_OUT); // GPIOD12 - BLUE BTN
-
+            uint8_t menu_idx = Get_Menu_Index();
+            if (menu_idx == 0) USB_MESSAGE |= (1 << BIT_MENU_SELECT_0); else USB_MESSAGE &= ~(1 << BIT_MENU_SELECT_0);
+            if (menu_idx == 1) USB_MESSAGE |= (1 << BIT_MENU_SELECT_1); else USB_MESSAGE &= ~(1 << BIT_MENU_SELECT_1);
+            if (menu_idx == 2) USB_MESSAGE |= (1 << BIT_MENU_SELECT_2); else USB_MESSAGE &= ~(1 << BIT_MENU_SELECT_2);
+            if (menu_idx == 3) USB_MESSAGE |= (1 << BIT_MENU_SELECT_3); else USB_MESSAGE &= ~(1 << BIT_MENU_SELECT_3);
+            if (menu_idx == 4) USB_MESSAGE |= (1 << BIT_MENU_SELECT_4); else USB_MESSAGE &= ~(1 << BIT_MENU_SELECT_4);
+            if (menu_idx == 5) USB_MESSAGE |= (1 << BIT_MENU_SELECT_5); else USB_MESSAGE &= ~(1 << BIT_MENU_SELECT_5);
         }
 
-        if(menu_register& (1<<1)){
-        	/*Video*/
-        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onVIDEOIP_Button_Press);          // GPIOE14 - Yellow BTN
-			Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, BIT_IMAGE_SENSOR_CHANGE); // GPIOE10 - GREEN BTN
-			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, BIT_IR_POLARITY);         // GPIOE12 - WHITE BTN
+        /* MOMENTARY command buttons: bit mirrors the debounced pin level, set only while held. */
+        /*                       btn_db[i]     active_low      target_register        bit */
+        if(menu_register & (1<<0)){
+
+        	Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_ZOOM_IN);   // RS5 - UP
+        	Set_Bit_From_Debounced(&btn_db[6], buttons[6].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_ZOOM_OUT);  // RS5 - DOWN
+			Set_Bit_From_Debounced(&btn_db[7], buttons[7].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_FOV_IN);    // RS4 - UP
+			Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_FOV_OUT);   // RS4 - DOWN
+			Set_Bit_From_Debounced(&btn_db[9], buttons[9].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_FOCUS_IN);  // RS3 - UP
+			Set_Bit_From_Debounced(&btn_db[8], buttons[8].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_FOCUS_OUT); // RS3 - DOWN
+        }
+
+        if(menu_register & (1<<1)){
+			Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_IMAGE_SENSOR_CHANGE); //RS5 - UP
+			Set_Bit_From_Debounced(&btn_db[6], buttons[6].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_IR_POLARITY);         // RS5 - DOWN
+			Poll_Debounced(&btn_db[7], buttons[7].active_low, onNearInfraredToggle_Button_Press);                        // RS4 - UP
+			Set_Bit_From_Debounced(&btn_db[8], buttons[8].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_IR_DZOOM_PLUS);       // RS3 - UP
+			Set_Bit_From_Debounced(&btn_db[9], buttons[9].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_IR_DZOOM_MINUS);      // RS3 - DOWN
 		}
 
-        if(menu_register& (1<<2)){
-        	/*Tracking*/
-        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onTRACKING_START_STOP_Button_Press); // GPIOE14 - YELLOW BTN
-        	Poll_Debounced(&btn_db[5], buttons[5].active_low, onAI_JOYSTICK_TRACK_Button_Press);    // GPIOE12 - WHITE BTN
-        	Poll_Debounced(&btn_db[8], buttons[8].active_low, onAI_TRACKING_Button_Press);          // GPIOD12 - BLUE BTN
+        if(menu_register & (1<<2)){
+        	Poll_Debounced(&btn_db[4], buttons[4].active_low, onTrackingSourceToggle_Button_Press);     // RS5 - UP
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onTRACKING_START_STOP_Button_Press);      // RS5 - DOWN
+        	Poll_Debounced(&btn_db[8], buttons[8].active_low, onTrackingTemplateToggle_Button_Press);   // RS3 - UP
+        	Poll_Debounced(&btn_db[7], buttons[7].active_low, onAI_TRACKING_Button_Press);              // RS4 - UP
 
-        	/*Laser*/
-        	Poll_Debounced(&btn_db[4], buttons[4].active_low, onLASER_Button_Press);                // GPIOE10 - GREEN BTN
-			Poll_Debounced(&btn_db[7], buttons[7].active_low, onLASERCONT_Button_Press);            // GPIOD11 - BLACK BTN
-			Poll_Debounced(&btn_db[9], buttons[9].active_low, onLASERSINGLE_Button_Press);          // GPIOD13 - BLUE BTN
 		}
-        Update_Button_LEDs();
 
+        if(menu_register & (1<<3)){
+        	Poll_Debounced(&btn_db[5], buttons[5].active_low, onLASERCONT_Button_Press);   // RS4 - DOWN
+			Poll_Debounced(&btn_db[7], buttons[7].active_low, onLASERSINGLE_Button_Press); // RS4 - UP
+			Set_Bit_From_Debounced(&btn_db[9], buttons[9].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_LASER_ZOOM_IN);  // RS3 - UP
+			Set_Bit_From_Debounced(&btn_db[8], buttons[8].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_LASER_ZOOM_OUT); // RS3 - DOWN
+			Poll_Debounced(&btn_db[4], buttons[4].active_low, onLASER_Button_Press); // RS3 - UP
+		}
 
+        if(menu_register & (1<<4)){
+        	Set_Bit_From_Debounced(&btn_db[4], buttons[4].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_TAKE_PICTURE); // RS5 - UP
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onRECORD_Button_Press);                              // RS5 - DOWN
+        	Set_Bit_From_Debounced(&btn_db[5], buttons[5].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_PIC_RECORD_MODE_TOGGLE); // RS4 - DOWN
+        	Set_Bit_From_Debounced(&btn_db[7], buttons[7].active_low, &PAYLOAD_MESSAGE, PAYLOAD_BIT_MOTOR_ON_OFF);           // RS4 - UP
+        	Poll_Debounced(&btn_db[8], buttons[8].active_low, onStropesToggle_Button_Press);   // RS3 - UP
+
+		}
+
+        if(menu_register & (1<<5)){
+        	Poll_Debounced(&btn_db[4], buttons[4].active_low, onVIDEOIP_Button_Press);      // RS5 - UP
+        	Poll_Debounced(&btn_db[6], buttons[6].active_low, onEOImageToggle_Button_Press); // RS5 - DOWN
+        	Poll_Debounced(&btn_db[5], buttons[5].active_low, onEODzoomToggle_Button_Press); // RS4 - DOWN
+        	Poll_Debounced(&btn_db[8], buttons[8].active_low, onTrackingTemplateToggle_Button_Press);   // RS3 - UP
+		}
         counter++;
 
         if (counter >= 16)
@@ -662,6 +865,12 @@ int main(void)
                 (uint8_t)(avg4 & 0xFF), (uint8_t)((avg4 >> 8) & 0xFF),
             };
             TLV_Send(TLV_TYPE_JOYSTICK2, joy2_payload, sizeof(joy2_payload));
+
+            uint8_t payload_cmd_payload[4] = {
+                (uint8_t)(PAYLOAD_MESSAGE & 0xFF), (uint8_t)((PAYLOAD_MESSAGE >> 8) & 0xFF),
+                (uint8_t)((PAYLOAD_MESSAGE >> 16) & 0xFF), (uint8_t)((PAYLOAD_MESSAGE >> 24) & 0xFF),
+            };
+            TLV_Send(TLV_TYPE_PAYLOAD_COMMAND, payload_cmd_payload, sizeof(payload_cmd_payload));
 
             last_usb_send = HAL_GetTick();
         }
@@ -943,7 +1152,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PF12 */
   GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PF13 PF14 PF15 */
@@ -961,15 +1170,15 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE10 PE12 PE14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12|GPIO_PIN_14;
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12|GPIO_PIN_14|GPIO_PIN_11;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD11 PD12 PD13 */
   GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD14 PD15 */
@@ -981,7 +1190,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pins : PC7 PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PG9 PG14 */
@@ -990,6 +1199,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
+
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

@@ -24,6 +24,7 @@ class StatusBuilder:
             auto_mode   = self.state.get_UAV_Current_Mode in ("AUTO"),
             autoland_mode = self.state.get_UAV_Current_Mode in ("QLAND"),
             is_flying   = self.state.is_flying,
+            
         )
         logger.info(f"StatusBuilder: {status}")
         return status

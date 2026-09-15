@@ -59,7 +59,8 @@ class ButtonState:
     autoland: bool
     speedup: bool
     speeddown: bool
-    menu_select: int   # 0-3, raw 2-bit value: 0=menu1, 1=menu2, 2=menu3, 3=menu4
+    strobe: bool
+    menu_select: int   # 0-5, index of whichever ONE of the six MENU_SELECT_BITS is set
 
 
 
@@ -74,26 +75,24 @@ class ButtonStateDecoder(Decoder):
             auto         = bool((value >> AUTO_BIT) & 1),
             speedup      = bool((value >> SPEED_UP_BIT) & 1),
             speeddown    = bool((value >> SPEED_DOWN_BIT) & 1),
-            # Two adjacent bits, MENU_SELECT_BIT_0 is the low bit — a
-            # plain 2-bit mask shifted down gives the 0-3 value directly.
-            menu_select  = (value >> MENU_SELECT_BIT_0) & 0b11,
-            # FIXED (carried over from before, still true): takeoff,
-            # emergency, and rtl were all previously decoded from bit 25
-            # — the same bit the old (now-removed) laser_single_mode
-            # mapping also used. None of these three have a dedicated
-            # bit anywhere in the current main.c BUTTON_STATE list, which
-            # only defines ARM/ARM_STATUS/AUTO/AUTO_STATUS/MANUAL/
-            # MANUAL_STATUS/SPEED_UP/SPEED_DOWN. Hardcoded False until
-            # real bits are actually assigned, same treatment autoland
-            # already has.
+            strobe       = bool((value >> STROBE_BIT) & 1),
+
+            # FIXED: was (value >> MENU_SELECT_BIT_0) & 0b11 — treating
+            # two bits as a binary pair. Menu selection is six SEPARATE
+            # one-hot bits (see bit_definitions.py's MENU_SELECT_BITS),
+            # not a packed value — that old line could only ever produce
+            # {0, 1, 2}, with every menu from position 2 onward
+            # (bits 10-13, outside the 2-bit window it was reading)
+            # silently collapsing to 0. This walks all six real bit
+            # positions and reports whichever one is actually set.
+            menu_select  = next(
+                (i for i, bit in enumerate(MENU_SELECT_BITS) if (value >> bit) & 1),
+                0,
+            ),
             takeoff      = False,
             emergency    = False,
             rtl          = False,
-            # FIXED: previously read from AUTO_LAND_BIT, which was
-            # actually IR_POLARITY (bit 6) in real firmware — meaning
-            # pressing the White button also fired LandCommand. There's
-            # no dedicated autoland bit in the current main.c list, so
-            # this is hardcoded False until one is actually assigned.
+
             autoland     = False,
         )
 
@@ -166,6 +165,28 @@ class StatusUpdateDecoder(Decoder):
 
 
 register(StatusUpdateDecoder())
+
+
+@dataclass
+class Hello:
+    """No fields — the type byte alone is the whole message. Sent once,
+    right after the serial port opens (see SerialHandler._do_connect),
+    to tell the STM32 to reset and start from a known-clean state in
+    sync with the freshly launched Python process. Matches main.c's
+    TLV_TYPE_HELLO / Process_Received_Byte on the receiving end."""
+    pass
+
+
+class HelloDecoder(Decoder):
+    TYPE = MessageType.HELLO
+
+    def encode(self, obj: Hello) -> bytes:
+        return b''
+
+    # No decode(): HELLO is PC -> STM32 only, the PC never receives it.
+
+
+register(HelloDecoder())
 
 
 @dataclass

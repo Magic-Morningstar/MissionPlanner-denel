@@ -267,6 +267,17 @@ class IRRainbowCommand(Command):
     pass
 
 
+
+
+@dataclass
+class StrobeOnCommand(Command):
+    pass
+
+@dataclass
+class StrobeOffCommand(Command):
+    pass
+
+
 # Reserved for when it's wired up — config.py already defines the bit,
 # it's just not acted on yet:
 #

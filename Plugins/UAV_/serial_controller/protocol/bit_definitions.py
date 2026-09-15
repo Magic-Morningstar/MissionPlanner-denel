@@ -23,14 +23,49 @@ AUTO_STATUS_BIT         = 3
 MANUAL_BIT              = 4
 MANUAL_STATUS_BIT       = 5
 
-# 2-bit menu index: 00=menu1 01=menu2 10=menu3 11=menu4. Bits freed up
-# by the earlier payload split (used to be IR_POLARITY/IMAGE_SENSOR_CHANGE,
-# both long since moved to PAYLOAD_COMMAND).
+# Menu selection is NOT a packed binary value — it's six separate
+# one-hot bits, one dedicated bit per menu position. The firmware sets
+# exactly one of these based on Get_Menu_Index() (0-5) and clears the
+# rest every loop iteration:
+#
+#   if (menu_idx & 0b000001) set BIT_MENU_SELECT_0 else clear it
+#   if (menu_idx & 0b000010) set BIT_MENU_SELECT_1 else clear it
+#   ... through BIT_MENU_SELECT_5
+#
+# Decoding this means checking which ONE of these six bits is set and
+# reporting its index — NOT shifting/masking a contiguous 2-or-3-bit
+# window the way an earlier version of this file assumed. That earlier
+# assumption was actively wrong: reading bits 6-7 as a 2-bit binary pair
+# only ever produces {0, 1, 2} — menu 0 decodes as 1, menu 1 decodes as
+# 2, and menus 2 through 5 (which set bits 10-13, entirely outside that
+# 2-bit window) all silently decode as 0, indistinguishable from each
+# other or from genuinely being on menu 0.
+#
+# Bits 0/1 sit in the gap freed by the earlier payload split (used to be
+# IR_POLARITY/IMAGE_SENSOR_CHANGE, long since moved to PAYLOAD_COMMAND).
+# Bits 2-5 pick up at position 10, after SPEED_UP/SPEED_DOWN (8/9) —
+# not contiguous with 0/1, which is exactly why treating this as one
+# shiftable field was wrong in the first place.
 MENU_SELECT_BIT_0       = 6
 MENU_SELECT_BIT_1       = 7
 
 SPEED_UP_BIT            = 8
 SPEED_DOWN_BIT          = 9
+
+MENU_SELECT_BIT_2       = 10
+MENU_SELECT_BIT_3       = 11
+MENU_SELECT_BIT_4       = 12
+MENU_SELECT_BIT_5       = 13
+
+
+STROBE_BIT              = 14
+
+# In bit-index order — messages.py's decoder walks this to find which
+# one is set, rather than hardcoding six separate checks.
+MENU_SELECT_BITS = (
+    MENU_SELECT_BIT_0, MENU_SELECT_BIT_1, MENU_SELECT_BIT_2,
+    MENU_SELECT_BIT_3, MENU_SELECT_BIT_4, MENU_SELECT_BIT_5,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

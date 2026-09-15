@@ -20,13 +20,13 @@ class MavlinkWorker(ConnectionManager):
         self._loop_thread = None
 
     def _connect_with_retry(self, label, retry_delay=2):
-        PORT_MIN = 14550
+        PORT_MIN = 14550 #14551
         PORT_MAX = 14559
         PORT_RANGE = PORT_MAX - PORT_MIN + 1
 
         parts = self.connection_string.rsplit(":", 1)
         prefix = parts[0]
-        try:
+        try:  
             start_port = int(parts[1])
         except (IndexError, ValueError):
             raise ValueError(f"Cannot parse port from: {self.connection_string}")
@@ -39,14 +39,7 @@ class MavlinkWorker(ConnectionManager):
 
             try:
                 conn = mavutil.mavlink_connection(conn_str, wait_ready=True)
-                # FIXED (correction to my own previous fix): the bind()
-                # workaround below is ONLY valid for udpout:/udp:-style
-                # connections. udpin: already binds the socket internally
-                # as part of setting up its listening address — calling
-                # bind() again on an already-bound socket is itself
-                # invalid on Windows and throws the exact same class of
-                # OSError this was meant to prevent. Gating on the prefix
-                # so udpin: connections are left alone.
+
                 if not conn_str.startswith("udpin:"):
                     conn.port.bind(('', 0))
                 logger.info(f"  [{label}] connected on {conn_str}.")
@@ -64,27 +57,27 @@ class MavlinkWorker(ConnectionManager):
 
         raise InterruptedError("Connection cancelled.")
 
-    def _heartbeat(self, connection, timeout=10):
-        """
-        timeout added — this used to block forever with no bound at all.
-        A TCP connect() can succeed against a port that never actually
-        sends MAVLink data (stale socket, wrong port from a hop, etc),
-        and without a timeout that's a silent, permanent hang: the
-        connection thread never reaches _start_loop(), so nothing ever
-        runs, but nothing ever errors either — indistinguishable from
-        "working" until you notice the loop just never logs anything.
-        """
-        logger.info(f"{self.__class__.__name__} waiting for heartbeat...")
-        msg = connection.wait_heartbeat(timeout=timeout)
-        if msg is None:
-            logger.warning(f"{self.__class__.__name__}: no heartbeat within {timeout}s — closing and retrying.")
-            connection.close()   # free the port rather than leave a dead socket holding it
-            raise TimeoutError(f"No heartbeat within {timeout}s on {self.connection_string}")
-        logger.info(
-            f"{self.__class__.__name__} heartbeat received — "
-            f"system {msg.get_srcSystem()} component {msg.get_srcComponent()}"
-        )
-        return msg
+    def _heartbeat(self, connection, timeout=10, retry_delay=5):
+
+        while not self.is_cancelled():
+            logger.info(f"{self.__class__.__name__} waiting for heartbeat...")
+            msg = connection.wait_heartbeat(timeout=timeout)
+            if msg is not None:
+                logger.info(
+                    f"{self.__class__.__name__} heartbeat received — "
+                    f"system {msg.get_srcSystem()} component {msg.get_srcComponent()}"
+                )
+                return msg
+
+            logger.info(
+                f"{self.__class__.__name__}: no heartbeat within {timeout}s on "
+                f"{self.connection_string} — will keep trying every {retry_delay}s. "
+                f"If this persists on one machine but not others running the "
+                f"identical script, check this PC's firewall specifically."
+            )
+            time.sleep(retry_delay)
+
+        raise InterruptedError("Connection cancelled while waiting for heartbeat.")
 
     def send_ping(connection, target_system=1, target_component=1):
         """

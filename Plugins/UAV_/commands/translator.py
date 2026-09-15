@@ -35,6 +35,7 @@ FLIGHT_EDGE_TABLE = [
     ("autoland",  LandCommand,          None),
     ("speedup",   SpeedUpCommand,       None),
     ("speeddown", SpeedDownCommand,     None),
+    ("strobe",    StrobeOnCommand,      StrobeOffCommand),
     ("emergency", EmergencyCommand,     None),
 ]
 
@@ -71,7 +72,7 @@ PAYLOAD_EDGE_TABLE = [
     ("ir_camera_dzoom_minus",      IRCameraDzoomMinusCommand,      IRCameraDzoomMinusFallCommand),
     ("near_infrared_toggle",       NearInfraredToggleCommand,      None),
     ("eo_image_on_off",            EOImageToggleCommand,           None),
-    ("motor_on_off",               MotorToggleCommand,             None),
+    ("motor_on_off",               StrobeOnCommand,             StrobeOffCommand),
     ("video_ip",                   VideoSourceToggleCommand,       None),
     ("eo_dzoom_toggle",            EODzoomToggleCommand,           None),
     ("ir_rainbow",                 IRRainbowCommand,               None),
@@ -87,7 +88,7 @@ class InputTranslator:
         self._prev = ButtonState(
             arm=False, rtl=False, manual=False, auto=False, takeoff=False,
             emergency=False, autoland=False, speedup=False, speeddown=False,
-            menu_select=0,
+            strobe=False, menu_select=0,
         )
         self.state.update_Control_Status(self._prev)
 

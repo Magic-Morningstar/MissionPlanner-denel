@@ -31,9 +31,7 @@ GIMBAL_RATE_KEEPALIVE_SEC = 0.3
 # Small deadzone around center — any deflection producing a percent in
 # this range is treated as exactly 0%, so tiny stick noise near center
 # doesn't produce drift on any axis using _percent_from_joystick.
-DEADZONE_PERCENT = 6
-
-
+DEADZONE_PERCENT = 10
 def _percent_from_joystick(value):
     """
     Maps a raw ADC value (0-4095) to a signed percent, split at the
@@ -74,45 +72,7 @@ class _EdgeTrigger:
 
 
 class AnalogInputHandler:
-    """
-    Completely stateless with respect to MAVLink — it calls methods on
-    UAVCommandSender (set_airspeed, turn_left, set_gimbal_rate,
-    zoom_in_start, etc.) and never touches the drone connection directly.
 
-    Gimbal control (Joystick2 X/Y) — pure RATE control via Manual Speed
-    Mode, sent on change + keepalive:
-      Deflection percent (_percent_from_joystick, +/-DEADZONE_PERCENT
-      dead zone around center) maps directly to a deg/sec rate per axis.
-      A new set_gimbal_rate() call only goes out when the desired rate
-      changes by more than GIMBAL_RATE_CHANGE_THRESHOLD_DEG_S, or when
-      GIMBAL_RATE_KEEPALIVE_SEC has elapsed since the last send (whichever
-      comes first) — plus immediately, unconditionally, the moment both
-      axes return to zero, so releasing the stick stops promptly rather
-      than waiting on the change threshold.
-
-      This replaced an earlier approach that integrated rate into a
-      position delta every tick and sent a relative-angle command
-      whenever the accumulated delta crossed a threshold — at max rate
-      and a 20Hz loop that meant a new command nearly every tick even
-      while the stick was held perfectly steady. Manual Speed Mode (ICD
-      3.3.1.2) is a genuine velocity command: send once, the gimbal keeps
-      moving on its own, no per-tick re-sending needed. There's no local
-      "current angle" tracking here and no clamping — azimuth and tilt
-      are both continuous 360° on this gimbal.
-
-    Zoom / focus — level-triggered via _EdgeTrigger, NOT proportional to
-    deflection:
-      As long as the matching *_PRESSED flag on `state` is True, a single
-      "start" fires once (rising edge) and the gimbal keeps zooming/
-      focusing on its own, per the ICD's "rising edge is valid" behavior;
-      a single "stop" fires once the flag goes False (falling edge).
-      Both zoom axes go through the same _EdgeTrigger instance pattern
-      deliberately — hand-writing the same start/stop state machine
-      separately per button is exactly what previously let one axis's
-      logic get inverted (zoom-out's stop condition was never reachable)
-      while the other axis, written correctly, worked fine. One shared,
-      tested primitive can't drift out of sync with itself.
-    """
 
     def __init__(self, state, manual_ctrl, sender):
         self.state       = state
@@ -205,14 +165,7 @@ class AnalogInputHandler:
         self._last_gimbal_send_time = now
 
     def _handle_joystick2_tracking_search(self):
-        """
-        When JOYSTICK_TRACK_MODE is on (set by JoystickTrackModeOnCommand,
-        BIT_JOYSTICK_TRACK in firmware), Joystick2 nudges the tracking
-        search cross (E1 Search command, ICD 3.11.1.1) instead of setting
-        gimbal rate. Reuses the same percent/deadzone mapping, scaled into
-        the search command's -15..+15 nudge range, and only sends on
-        change rather than every tick.
-        """
+
         payload_joy_x = self.state.get_Payload_Joystick_X
         payload_joy_y = self.state.get_Payload_Joystick_Y
 
@@ -282,4 +235,4 @@ class AnalogInputHandler:
     def _joystick_to_altitude_delta(self, joystick_y):
         """Maps joystick Y (0-4095) to altitude delta in meters. Max ±20m."""
         percent = _percent_from_joystick(joystick_y)
-        return (percent / 100.0) * 20.0
+        return (percent / 100.0) * 45

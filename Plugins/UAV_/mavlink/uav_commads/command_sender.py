@@ -68,7 +68,7 @@ class UAVCommandSender(MavlinkWorker):
 
         self.state.update_UAV_Command_Connection(True, self.command_drone)
         logger.info("UAVCommandSender connected.")
-        self._start_loop()
+        self._start_loop()  
         return True
 
     def _do_disconnect(self):
@@ -564,11 +564,11 @@ class UAVCommandSender(MavlinkWorker):
 
 
 # ── Registered handlers ───────────────────────────────────────────────────────
-'''
+
 @register_handler(ArmCommand)
 def _handle_arm(sender, cmd):
     logger.debug("ArmCommand received")
-    sender.arm()'''
+    sender.arm()
 
 
 @register_handler(DisarmCommand)
@@ -708,6 +708,7 @@ def _handle_ir_polarity_toggle(sender, cmd):
 # network target?), this wiring should stay; if it turns out
 # VIDEO_IP was already correct and this is a distinct third thing,
 # this handler will need to change to call something else instead.
+
 @register_handler(ImageSensorChangeCommand)
 def _handle_image_sensor_change(sender, cmd):
     logger.debug("ImageSensorChangeCommand received")
@@ -824,3 +825,12 @@ def _handle_fov_minus(sender, cmd):
 def _handle_fov_minus_fall(sender, cmd):
     logger.info("FOVMinusFallCommand received")
     sender.zoom_in_stop()
+
+@register_handler(StrobeOnCommand)
+def _handle_strobe_on(sender, cmd):
+    sender.stropes.stropes_on()
+ 
+ 
+@register_handler(StrobeOffCommand)
+def _handle_strobe_off(sender, cmd):
+    sender.stropes.stropes_off()

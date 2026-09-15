@@ -15,12 +15,26 @@ class Arms(BaseCommand):
             self._requires_not_flying
         ):
             return False
-
+        
         logger.info("Arming...")
+        '''
         self._send_command(
             mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
             p1=1
+        )'''
+        STROBE_SERVO_CHANNEL = 7
+        STROBE_PWM_ON = 1900 
+
+        self.command_drone.mav.command_long_send(
+            self.command_drone.target_system,
+            self.command_drone.target_component,
+            mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
+            0,
+            STROBE_SERVO_CHANNEL,
+            STROBE_PWM_ON,
+            0, 0, 0, 0, 0
         )
+        logger.info("Strobe ON")
         self.state.update_UAV_Armed_Status(True)
         logger.info("Arm command sent.")
         return True   # was `return False` — reported failure on success

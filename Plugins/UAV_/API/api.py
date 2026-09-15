@@ -67,26 +67,29 @@ def select(menu_id: str) -> None:
 
 
 def register_value() -> int:
-    """The current menu as the firmware's 2-bit binary index (0-3),
-    matching sync_from_register()'s input format exactly — not the
-    internal one-hot mask _state.register_value holds. If this is ever
-    used to write a menu selection back to the STM32, it needs to be
-    in the same format menu_select decodes on the way in."""
+    """The current menu as the firmware's binary index (0-6), matching
+    sync_from_register()'s input format exactly — not the internal
+    one-hot mask _state.register_value holds. If this is ever used to
+    write a menu selection back to the STM32, it needs to be in the
+    same format menu_select decodes on the way in."""
     return _state.menu.bit
 
 
 def sync_from_register(value: int) -> None:
     """Firmware changed the menu on its own; catch up.
 
-    `value` is the firmware's raw menu_select field — a 2-bit BINARY
-    index (0-3: 0=menu1, 1=menu2, 2=menu3, 3=menu4), not a one-hot mask.
-    Everything in model.py/state.py (Menu.mask, by_mask, register_value)
-    works in one-hot masks instead — by_mask() specifically requires
-    exactly one bit set, so feeding it the raw binary index directly
-    is wrong for 3 of the 4 possible values (0 and 3 raise outright,
-    2 silently decodes as the wrong menu). Converting here, at the one
-    place raw wire data enters this module, rather than changing the
-    one-hot convention everywhere else that already depends on it.
+    `value` is the firmware's raw menu_select field — a BINARY index
+    (0-6, one per menu: zoom_fov_focus, picture_select, tracking, laser,
+    capture, display, system), not a one-hot mask. Everything in
+    model.py/state.py (Menu.mask, by_mask, register_value) works in
+    one-hot masks instead — by_mask() specifically requires exactly one
+    bit set, so feeding it the raw binary index directly would be wrong.
+    Converting here, at the one place raw wire data enters this module,
+    rather than changing the one-hot convention everywhere else that
+    already depends on it. (Docstring previously described a 2-bit/4-menu
+    version of this — the 1 << value conversion itself never needed to
+    change, since it already works for any value, but the description
+    was stale once the firmware grew to 7 menus.)
     """
     _state.select_register(1 << value)
 

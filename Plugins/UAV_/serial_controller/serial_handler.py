@@ -11,6 +11,7 @@ from utils.connection_manager import ConnectionManager
 from serial_controller.protocol.registry import get_decoder, MessageType
 from serial_controller.protocol.stream_parser import StreamParser
 from serial_controller.protocol.frame_builder import build_frame
+from serial_controller.protocol.messages import Hello
 from serial_controller.status_builder import StatusBuilder
 import state.system_config as system_config
 
@@ -80,6 +81,15 @@ class SerialHandler(ConnectionManager):
             logger.info(f"STM32 connected on {detected_port}.")
         else:
             logger.info("STM32 connected (test link).")
+
+        # Tells the STM32 to reset, so it always starts from a
+        # known-clean state in sync with this freshly launched Python
+        # process rather than potentially carrying over stale
+        # menu_register/USB_MESSAGE/PAYLOAD_MESSAGE state from before.
+        # Sent here (not compile_Send/the outgoing STATUS path) since
+        # it's a one-time connect-time action, not a recurring update.
+        self.send(build_frame(MessageType.HELLO, Hello()))
+        logger.info("PC -> STM32: HELLO (requesting reset)")
 
         if self.watchdog:
             self.watchdog.watchSerialThread()

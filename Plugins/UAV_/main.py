@@ -11,7 +11,7 @@ from API.panel_sync import PanelStateSync
 from mavlink.mavlink_handler import Mavlink_controller
 from commands.translator import InputTranslator
 from PySide6.QtCore import QTimer
-from utils.logging_config import setup_logging
+from logging_config import setup_logging
 # Assumes gui_main.py lives alongside main.py — adjust if it's elsewhere.
 from Menu_UI.gui_main import create_gui
 import logging
@@ -35,14 +35,11 @@ class Controller:
     def start(self):
         signal.signal(signal.SIGINT, self._on_shutdown)
         signal.signal(signal.SIGTERM, self._on_shutdown)
-        
         self.SerialHandler.connect()
         self.Mavlink_controller.connect()
         self.panel_sync.start()
         self.watchdog.start()
         logger.info("Controller started.")
-
-
 
         self.app, self.gui_window = create_gui()
         signal_pump = QTimer()

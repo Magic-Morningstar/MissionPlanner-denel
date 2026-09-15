@@ -11,6 +11,7 @@ class MessageType:
     JOYSTICK2        = 0x03   # NEW — second stick
     PAYLOAD_COMMAND  = 0x04   # NEW — payload/gimbal/camera buttons, own 32-bit register
     STATUS           = 0x10
+    HELLO            = 0x20
 
 
 class Decoder:
