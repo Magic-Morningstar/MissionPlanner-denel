@@ -190,6 +190,58 @@ register(HelloDecoder())
 
 
 @dataclass
+class Goodbye:
+    """No fields — the type byte alone is the whole message. Sent once,
+    just before the serial port closes, so the STM32 returns to WAITING
+    and its status LED goes back to amber rather than blinking red.
+
+    Only a clean exit sends this. A crash or an unplugged cable leaves
+    nothing to send it with, which is what the heartbeat timeout covers:
+    GOODBYE distinguishes "shut down deliberately" (amber) from "went
+    away unexpectedly" (red)."""
+    pass
+
+
+class GoodbyeDecoder(Decoder):
+    TYPE = MessageType.GOODBYE
+
+    def encode(self, obj: Goodbye) -> bytes:
+        return b''
+
+    # No decode(): GOODBYE is PC -> STM32 only.
+
+
+register(GoodbyeDecoder())
+
+
+@dataclass
+class Heartbeat:
+    """No fields. Sent at a fixed rate for as long as the session is up.
+
+    Two jobs. The first one completes the handshake — the STM32 stays in
+    SYNCED after HELLO and only reaches CONNECTED (and starts sending
+    button frames) once a beat arrives. After that, its absence is the
+    only evidence the firmware has that this process is gone.
+
+    The rate must stay comfortably inside main.c's HEARTBEAT_TIMEOUT_MS
+    or a healthy link will flicker red — see HEARTBEAT_PERIOD_S in
+    serial_handler.py."""
+    pass
+
+
+class HeartbeatDecoder(Decoder):
+    TYPE = MessageType.HEARTBEAT
+
+    def encode(self, obj: Heartbeat) -> bytes:
+        return b''
+
+    # No decode(): HEARTBEAT is PC -> STM32 only.
+
+
+register(HeartbeatDecoder())
+
+
+@dataclass
 class PayloadCommand:
     """
     Payload/gimbal/camera button state — its own 32-bit register,

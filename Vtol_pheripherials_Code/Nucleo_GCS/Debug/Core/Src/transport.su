@@ -1,0 +1,16 @@
+../Core/Src/transport.c:22:20:deliver	16	static
+../Core/Src/transport.c:51:16:uart_init	8	static
+../Core/Src/transport.c:57:16:uart_send	16	static
+../Core/Src/transport.c:63:13:uart_poll	8	static
+../Core/Src/transport.c:77:6:HAL_UART_RxCpltCallback	16	static
+../Core/Src/transport.c:102:16:usb_init	4	static
+../Core/Src/transport.c:111:16:usb_send	24	static
+../Core/Src/transport.c:122:13:usb_poll	4	static
+../Core/Src/transport.c:139:6:transport_usb_on_rx	24	static
+../Core/Src/transport.c:163:6:transport_set_rx_handler	16	static
+../Core/Src/transport.c:168:9:transport_init	8	static
+../Core/Src/transport.c:174:9:transport_send	16	static
+../Core/Src/transport.c:180:6:transport_poll	8	static
+../Core/Src/transport.c:185:9:transport_select	16	static
+../Core/Src/transport.c:192:16:transport_active	4	static
+../Core/Src/transport.c:197:13:transport_name	4	static

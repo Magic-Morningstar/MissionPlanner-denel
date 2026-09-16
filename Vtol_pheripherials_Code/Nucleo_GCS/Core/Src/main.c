@@ -18,11 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include "fastLed_SPI.h"
+#include "transport.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -128,7 +130,20 @@ static const button_t buttons[10] = {
 };
 
 
-static const led_t leds[10] = {
+/* Unsized on purpose. This was declared [10] with ELEVEN initializers,
+   which gcc warns about and then silently drops the last entry — so
+   "User Led 3" was never actually addressable. Letting the compiler
+   count the rows means the size can't disagree with the contents again.
+
+   HEADS UP: leds[2] is PE11, the same pin buttons[5] reads as a
+   debounced input. One pin cannot be both. Nothing calls the three
+   Set_LED_* helpers below, so it does no harm today, but it will the
+   moment something does.
+
+   The whole GPIO LED bank is dead code — the helpers are defined and
+   never called anywhere. The ws2812 strip is the only live indicator.
+   Deleting it would settle the PE11 conflict for free. */
+static const led_t leds[] = {
 	{ GPIOF, GPIO_PIN_13 }, // Led0
 	{ GPIOE, GPIO_PIN_9  }, // Led1
 	{ GPIOE, GPIO_PIN_11 }, // Led2
@@ -141,6 +156,7 @@ static const led_t leds[10] = {
     { GPIOB, GPIO_PIN_7  }, // User Led 2
     { GPIOE, GPIO_PIN_13 }, // User Led 3
 };
+#define LED_COUNT (sizeof(leds) / sizeof(leds[0]))
 
 /* Debounce state, one struct per physical pin — indexed to match buttons[].
    raw_last/change_time track raw bounce; stable is only updated once a
@@ -171,7 +187,6 @@ static debounce_state_t btn_db[10] = {
 };
 
 
-static uint8_t rx_byte;
 #define TLV_SYNC 0xAA
 #define TLV_END  0x55
 
@@ -186,6 +201,70 @@ static uint8_t rx_byte;
    stale menu_register/USB_MESSAGE/PAYLOAD_MESSAGE state from before
    Python restarted. Carries no payload (LEN=0). */
 #define TLV_TYPE_HELLO           0x20
+#define TLV_TYPE_GOODBYE         0x21
+#define TLV_TYPE_HEARTBEAT       0x22
+
+/* ── FSM tunables ─────────────────────────────────────────────────────────
+   CHECK THESE AGAINST THE PC. The timeout must be a comfortable multiple
+   of whatever rate Python actually sends heartbeats at — three missed
+   beats is the usual choice, so a 150 ms heartbeat wants ~500 ms here.
+   Too tight and a healthy link flickers red. */
+#define HEARTBEAT_TIMEOUT_MS   500
+#define BUTTON_FRAME_PERIOD_MS  10
+#define CONNECT_FLASH_MS      1500
+#define TEST_HOLD_MS          2000
+#define LED_RENDER_PERIOD_MS    25
+
+/* Which ws2812 pixel is the status indicator. */
+#define STATUS_LED_INDEX         0
+/* ── Top-level firmware state ─────────────────────────────────────────────
+   Five states. Only Fsm_Tick() and the event flags below move between
+   them; nothing else in this file writes `fsm`.
+
+     WAITING    powered, no hello yet          amber, slow breathe
+     SYNCED     hello seen, no beat yet        green, double flash
+     CONNECTED  beat flowing, frames going out white, solid
+     LOST       beat stopped                   red, slow blink
+     TESTING    protocol bypassed              blue, blink
+
+   Button frames go out in CONNECTED and TESTING only. In WAITING, SYNCED
+   and LOST the panel is silent — nothing is listening, or nothing has
+   asked yet. */
+typedef enum {
+    FSM_WAITING,
+    FSM_SYNCED,
+    FSM_CONNECTED,
+    FSM_LOST,
+    FSM_TESTING,
+} fsm_state_t;
+
+static fsm_state_t fsm = FSM_WAITING;
+
+/* The Nucleo's B1 user button, PC13. Deliberately NOT part of buttons[]:
+   that array's index IS the wire position of each slot bit, so appending
+   to it would change the protocol. This is a panel-local control that the
+   PC never sees.
+
+   Note it is active HIGH — B1 sits on a pull-down and pressed connects to
+   VDD, the opposite of all ten panel buttons. MX_GPIO_Init() already
+   configures PC13 as a no-pull input, so no CubeMX change is needed. */
+static const button_t user_button = { GPIOC, GPIO_PIN_13, 0 };
+
+/* Idle for an active-high pin reads RESET. Getting this wrong would look
+   like the button being held from the moment of boot. */
+static debounce_state_t user_btn_db = { GPIO_PIN_RESET, GPIO_PIN_RESET,
+                                        GPIO_PIN_RESET, 0 };
+
+static uint32_t fsm_entered_tick = 0;   /* for the green connect flash */
+static uint32_t last_beat_tick   = 0;   /* last heartbeat or hello */
+static uint32_t user_btn_down_tick = 0; /* 0 = not currently held */
+static uint8_t  user_btn_consumed  = 0; /* one toggle per hold */
+
+/* Set in interrupt context by the RX parser, cleared in Fsm_Tick(). */
+volatile uint8_t ev_hello     = 0;
+volatile uint8_t ev_goodbye   = 0;
+volatile uint8_t ev_heartbeat = 0;
+
 uint32_t USB_MESSAGE = 0x00;
 uint32_t PAYLOAD_MESSAGE = 0x00;
 uint8_t menu_register = 0b000001;
@@ -232,19 +311,23 @@ static uint8_t TLV_Send(uint8_t type, const uint8_t *payload, uint8_t len)
     buf[3 + len] = tlv_crc8(payload, len);
     buf[4 + len] = TLV_END;
 
-    return (HAL_UART_Transmit(&huart2, buf, len + 5, HAL_MAX_DELAY) == HAL_OK);
+    /* Which wire this goes out on is transport.h's TRANSPORT_ACTIVE.
+       The frame bytes are identical over UART and USB CDC, so nothing
+       else here — and nothing on the PC side — changes with the switch. */
+    return transport_send(buf, len + 5);
 }
 
 /* ── Incoming (PC -> STM32) TLV receive parser ────────────────────────────
    Mirrors the Python StreamParser's state machine exactly, including
    being self-resyncing: any corruption (bad sync, bad CRC, bad end
    byte) just drops that one frame and returns to hunting for the next
-   SYNC byte. Runs one byte per call, from HAL_UART_RxCpltCallback
+   SYNC byte. Registered with transport_set_rx_handler() and called one
+   byte at a time by whichever link is active, so it works unchanged over
+   UART or USB CDC. Runs one byte per call from interrupt context
    (interrupt context) — kept deliberately simple and non-blocking. The
    actual RESPONSE to a received frame (the system reset, for
-   TLV_TYPE_HELLO) is deferred to the main loop via reset_requested,
-   not performed here — resetting from inside an ISR is avoidable, so
-   it's avoided. */
+   TLV_TYPE_HELLO, GOODBYE and HEARTBEAT) is deferred to the main loop
+   via the event flags, not performed here — see Fsm_Tick(). */
 typedef enum {
     RX_WAIT_SYNC,
     RX_READ_TYPE,
@@ -261,9 +344,10 @@ static uint8_t    rx_payload[16];   /* big enough for any incoming type so far �
 static uint8_t    rx_payload_idx;
 static uint8_t    rx_crc_ok;
 
-/* Set here (interrupt context), acted on in the main loop — see the
-   reset_requested check near the top of while(1) below. */
-volatile uint8_t reset_requested = 0;
+/* HELLO no longer resets the MCU. A reset would wipe the FSM the moment
+   it was supposed to advance, and over USB CDC it drops enumeration and
+   leaves the PC holding a dead handle. Fsm_Tick() clears the three
+   registers instead, which is all the reset was ever for. */
 
 static void Process_Received_Byte(uint8_t byte)
 {
@@ -302,11 +386,21 @@ static void Process_Received_Byte(uint8_t byte)
         rx_state = RX_WAIT_SYNC;
         if (byte == TLV_END && rx_crc_ok)
         {
+            /* ── ADD NEW MESSAGE TYPES HERE ───────────────────────────
+               Set a flag and nothing else — this runs in interrupt
+               context. Fsm_Tick() in the main loop does the work. */
             if (rx_type == TLV_TYPE_HELLO)
             {
-                reset_requested = 1;
+                ev_hello = 1;
             }
-            /* Other incoming types would be handled here as they're added. */
+            else if (rx_type == TLV_TYPE_GOODBYE)
+            {
+                ev_goodbye = 1;
+            }
+            else if (rx_type == TLV_TYPE_HEARTBEAT)
+            {
+                ev_heartbeat = 1;
+            }
         }
         /* Bad CRC or bad end byte — silently drop and resync, same as
            the Python StreamParser does; no error path needed here. */
@@ -315,28 +409,12 @@ static void Process_Received_Byte(uint8_t byte)
 }
 
 
-volatile uint8_t rx_rearm_pending = 0;
+/* HAL_UART_RxCpltCallback now lives in transport.c, which owns every
+   link's receive path and funnels bytes into Process_Received_Byte via
+   the handler registered in main(). Defining it here too would be a
+   duplicate symbol at link time. */
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    if (huart->Instance == USART2)
-    {
-        Process_Received_Byte(rx_byte);
-        if (HAL_UART_Receive_IT(&huart2, &rx_byte, 1) != HAL_OK)
-        {
-            rx_rearm_pending = 1;
-        }
-    }
-}
 
-static uint8_t Button_Is_Pressed(const button_t *b)
-{
-    GPIO_PinState state = HAL_GPIO_ReadPin(b->port, b->pin);
-    if (b->active_low)
-        return (state == GPIO_PIN_RESET);
-    else
-        return (state == GPIO_PIN_SET);
-}
 
 
 uint16_t ADC_Read_Channel(uint32_t channel)
@@ -424,14 +502,6 @@ static uint8_t Get_Menu_Index(void)
     return 0;
 }
 
-static void Update_Menu_LEDs(void)
-{
-    uint8_t LED_number = Get_Menu_Index();
-
-    ws2812_pixel_all(0, 0, 0);              /* clear all pixels first */
-    ws2812_pixel(LED_number, 255, 255, 255); /* light the active menu's pixel */
-    ws2812_send_spi();                       /* nothing shows until this is called */
-}
 
 
 void onARM_Button_Press(void)
@@ -446,7 +516,7 @@ void onUpMenuSelect_Button_Press(void)
     if (menu_register & (1 << 6)) menu_register = 0b000001;
     else                          menu_register = menu_register << 1;
 
-    Update_Menu_LEDs();
+
 }
 
 void onDownMenuSelect_Button_Press(void)
@@ -454,7 +524,7 @@ void onDownMenuSelect_Button_Press(void)
 
     if (menu_register & (1 << 0)) menu_register = 0b100000;
     else                          menu_register = menu_register >> 1;
-    Update_Menu_LEDs();
+
 }
 /*
 void onManual_Button_Press(void)
@@ -677,6 +747,144 @@ static inline void Set_LED_Off(uint8_t led_idx)
 
 
 
+/* ── The state machine ────────────────────────────────────────────────────
+   One function, called every main-loop iteration. This is the only place
+   `fsm` is written.
+
+   Test mode is checked first and is reachable from every state, because a
+   physical hold on the panel should work whether or not the PC is there
+   — that's the point of a test mode. */
+static void Fsm_Enter(fsm_state_t next, uint32_t now)
+{
+    if (fsm == next) return;
+    fsm = next;
+    fsm_entered_tick = now;
+}
+
+static void Fsm_Tick(uint32_t now)
+{
+    /* --- user button hold, any state ---------------------------------- */
+    uint8_t held = Debounced_Is_Pressed(&user_btn_db, user_button.active_low);
+    if (held)
+    {
+        if (user_btn_down_tick == 0)
+        {
+            user_btn_down_tick = now;
+            user_btn_consumed  = 0;
+        }
+        else if (!user_btn_consumed && (now - user_btn_down_tick) >= TEST_HOLD_MS)
+        {
+            /* One toggle per hold — without this latch it would flip
+               every iteration for as long as the button stayed down. */
+            user_btn_consumed = 1;
+            Fsm_Enter((fsm == FSM_TESTING) ? FSM_WAITING : FSM_TESTING, now);
+        }
+    }
+    else
+    {
+        user_btn_down_tick = 0;
+    }
+
+    /* Test mode ignores the protocol entirely, so drop any events that
+       arrived while in it rather than letting them queue up and fire the
+       moment it exits. */
+    if (fsm == FSM_TESTING)
+    {
+        ev_hello = ev_goodbye = ev_heartbeat = 0;
+        return;
+    }
+
+    /* --- protocol events ---------------------------------------------- */
+    if (ev_goodbye)
+    {
+        ev_goodbye = 0;
+        ev_hello = ev_heartbeat = 0;   /* a clean exit outranks the rest */
+        Fsm_Enter(FSM_WAITING, now);
+        return;
+    }
+
+    if (ev_hello)
+    {
+        ev_hello = 0;
+        last_beat_tick = now;
+
+        /* A fresh hello restarts the handshake from wherever we were,
+           including LOST — that's what "a new connection request" means. */
+        USB_MESSAGE     = 0;
+        PAYLOAD_MESSAGE = 0;
+        menu_register   = 0b000001;
+
+
+        Fsm_Enter(FSM_SYNCED, now);
+    }
+
+    if (ev_heartbeat)
+    {
+        ev_heartbeat = 0;
+        last_beat_tick = now;
+
+        /* From SYNCED this is the first beat and completes the handshake.
+           From LOST it's the beat coming back, which resumes without a
+           new handshake. From WAITING it's ignored: a heartbeat with no
+           hello behind it is a PC we never agreed to talk to. */
+        if (fsm == FSM_SYNCED || fsm == FSM_LOST)
+        {
+            Fsm_Enter(FSM_CONNECTED, now);
+        }
+    }
+
+    /* --- heartbeat timeout -------------------------------------------- */
+    if ((fsm == FSM_CONNECTED || fsm == FSM_SYNCED) &&
+        (now - last_beat_tick) >= HEARTBEAT_TIMEOUT_MS)
+    {
+        /* SYNCED times out too: hello arrived and then Python died before
+           its first beat. Without this it would sit green forever. */
+        Fsm_Enter(FSM_LOST, now);
+    }
+}
+
+/* ── Status indicator ─────────────────────────────────────────────────────
+   Reports the FSM and nothing else. Every rate and colour lives in
+   fastLed_SPI.h — this only picks which pattern is showing. */
+static void Fsm_Apply_Led(uint32_t now)
+{
+    switch (fsm)
+    {
+    case FSM_WAITING:
+        ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_BREATHE_SLOW, WS2812_AMBER);
+        break;
+
+    case FSM_SYNCED:
+        ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_DOUBLE_FLASH, WS2812_GREEN);
+        break;
+
+    case FSM_CONNECTED:
+
+        if ((now - fsm_entered_tick) < CONNECT_FLASH_MS)
+            ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_DOUBLE_FLASH, WS2812_GREEN);
+        else
+            ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_SOLID, WS2812_WHITE);
+        break;
+
+    case FSM_LOST:
+        ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_BLINK_SLOW, WS2812_RED);
+        break;
+
+    case FSM_TESTING:
+        ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_BLINK_SLOW, WS2812_BLUE);
+        break;
+    }
+
+    ws2812_animate(now);
+}
+
+/* True when button frames should be going out. */
+static inline uint8_t Fsm_Should_Transmit(void)
+{
+    return (fsm == FSM_CONNECTED) || (fsm == FSM_TESTING);
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -715,14 +923,21 @@ int main(void)
   MX_ADC3_Init();
   MX_USART2_UART_Init();
   MX_SPI1_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+  /* Route received bytes into the frame parser, then bring up whichever
+     link transport.h selects. Changing TRANSPORT_ACTIVE and rebuilding
+     is the entire switch between UART and USB. */
+  transport_set_rx_handler(Process_Received_Byte);
+  transport_init();
+
   ws2812_init();
   uint16_t pot1 = 0, pot2 = 0, pot3 = 0, pot4 = 0;
-  Update_Menu_LEDs();
+
 
   static uint32_t last_usb_send = 0;
+  static uint32_t last_led_render = 0;
   static uint16_t avg1 = 0;
   static uint16_t avg2 = 0;
   static uint16_t avg3 = 0;
@@ -738,24 +953,26 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-
-	    if (reset_requested)
-	    {
-	        HAL_Delay(10);   /* let any in-flight UART transmit finish before resetting */
-	        NVIC_SystemReset();
-	    }
-
-	    if (rx_rearm_pending)
-	    {
-	        if (HAL_UART_Receive_IT(&huart2, &rx_byte, 1) == HAL_OK)
-	        {
-	            rx_rearm_pending = 0;
-	        }
-	    }
+	    /* Nearly a no-op for both current links; here so a polled
+	       transport added later needs no change above this layer. */
+	    transport_poll();
 
 	    uint32_t now = HAL_GetTick();
         Debounce_Sample_All(now);   /* samples every physical pin, every iteration, no matter the menu */
+        Debounce_Update(user_button.port, user_button.pin, &user_btn_db, now);
+
+        /* The FSM runs on freshly sampled buttons — the test-mode hold is
+           read from the same debounced state as everything else. */
+        Fsm_Tick(now);
+
+        /* Periodic, not on-change: the patterns animate, so the strip has
+           to be re-rendered continuously. Never from an ISR — the SPI
+           push blocks. */
+        if ((now - last_led_render) >= LED_RENDER_PERIOD_MS)
+        {
+            last_led_render = now;
+            Fsm_Apply_Led(now);
+        }
 
 
 
@@ -846,7 +1063,11 @@ int main(void)
             pot3 = 0;
             pot4 = 0;
         }
-        if ((HAL_GetTick() - last_usb_send) >= 10)
+        /* Silent unless connected or under test. In WAITING, SYNCED and
+           LOST nothing is listening — or nothing has completed the
+           handshake — so there is no reason to fill the link. */
+        if (Fsm_Should_Transmit() &&
+            (HAL_GetTick() - last_usb_send) >= BUTTON_FRAME_PERIOD_MS)
         {
             uint8_t btn_payload[4] = {
                 (uint8_t)(USB_MESSAGE & 0xFF), (uint8_t)((USB_MESSAGE >> 8) & 0xFF),
@@ -896,12 +1117,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
   RCC_OscInitStruct.PLL.PLLN = 216;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 9;
@@ -931,6 +1151,10 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
+  /** Enables the Clock Security System
+  */
+  HAL_RCC_EnableCSS();
 }
 
 /**
@@ -956,14 +1180,14 @@ static void MX_ADC3_Init(void)
   hadc3.Instance = ADC3;
   hadc3.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc3.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc3.Init.ContinuousConvMode = DISABLE;
+  hadc3.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc3.Init.ContinuousConvMode = ENABLE;
   hadc3.Init.DiscontinuousConvMode = DISABLE;
   hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc3.Init.NbrOfConversion = 1;
-  hadc3.Init.DMAContinuousRequests = DISABLE;
+  hadc3.Init.NbrOfConversion = 4;
+  hadc3.Init.DMAContinuousRequests = ENABLE;
   hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc3) != HAL_OK)
   {
@@ -1117,6 +1341,7 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
@@ -1170,15 +1395,15 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE10 PE12 PE14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12|GPIO_PIN_14|GPIO_PIN_11;
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12|GPIO_PIN_14;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD11 PD12 PD13 */
   GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD14 PD15 */
@@ -1187,10 +1412,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC7 PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_13;
+  /*Configure GPIO pin : PC7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PG9 PG14 */
@@ -1199,7 +1424,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

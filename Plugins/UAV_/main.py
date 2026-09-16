@@ -29,13 +29,16 @@ class Controller:
         self.SerialHandler = SerialHandler(self.state, self.translator, self.watchdog)
         self.panel_sync = PanelStateSync(self.state)
         self.app = None   # This the Front end object. It it set in the start function
-        self._shutdown = threading.Event
+        self._shutdown = threading.Event()   # was missing its call — this bound the class, not an instance
+        self._shutdown_done = False
 
 
     def start(self):
         signal.signal(signal.SIGINT, self._on_shutdown)
         signal.signal(signal.SIGTERM, self._on_shutdown)
-        self.SerialHandler.connect()
+        # start(), not connect(): keeps reconnecting if the panel is
+        # unplugged, power-cycled, or comes back on a different port.
+        self.SerialHandler.start()
         self.Mavlink_controller.connect()
         self.panel_sync.start()
         self.watchdog.start()
@@ -48,13 +51,24 @@ class Controller:
 
         self.app.exec()
 
+      
         logger.info("Shutting down.")
+        self._shutdown_once()
+
+    def _shutdown_once(self):
+        """Safe to call twice — a SIGINT arriving during window close
+        would otherwise disconnect an already-disconnected handler."""
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
+
+        self.SerialHandler.shutdown()
+        self.Mavlink_controller.disconnect()
+        self.panel_sync.stop()
 
     def _on_shutdown(self, sig, frame):
         logger.info("Shutdown signal received.")
-        self.SerialHandler.disconnect()
-        self.Mavlink_controller.disconnect()
-        self.panel_sync.stop()
+        self._shutdown_once()
         self._shutdown.set()
         if self.app is not None:
             self.app.quit()   # unblocks app.exec() in start()

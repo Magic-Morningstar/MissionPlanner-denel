@@ -1,5 +1,6 @@
 # serial_controller/serial_handler.py
 
+import time
 import serial
 import serial.tools.list_ports
 import queue
@@ -11,9 +12,84 @@ from utils.connection_manager import ConnectionManager
 from serial_controller.protocol.registry import get_decoder, MessageType
 from serial_controller.protocol.stream_parser import StreamParser
 from serial_controller.protocol.frame_builder import build_frame
-from serial_controller.protocol.messages import Hello
+from serial_controller.protocol.messages import Hello, Goodbye, Heartbeat
 from serial_controller.status_builder import StatusBuilder
 import state.system_config as system_config
+
+# How often to send HEARTBEAT once the session is open.
+#
+# This MUST stay comfortably inside main.c's HEARTBEAT_TIMEOUT_MS (500 ms
+# at the time of writing). At 100 ms the firmware tolerates four missed
+# beats before declaring the link lost; tighten either number and a
+# healthy but briefly busy link starts flickering red.
+#
+# Move this to system_config.py alongside the other timings if you'd
+# rather keep all the tunables in one place.
+HEARTBEAT_PERIOD_S = 0.1
+
+# How long to wait for a candidate port to prove it's the panel.
+#
+# Bluetooth needs the longer window: SPP link setup happens on open and
+# can take a second or more, and the first bytes after that are often
+# slow. USB CDC answers almost immediately.
+PROBE_TIMEOUT_USB_S = 1.0
+PROBE_TIMEOUT_BT_S  = 3.0
+
+# Reconnect backoff, in seconds. Starts quick because most drops are
+# transient (a replug, a brief stall), then backs off so a genuinely
+# absent panel doesn't burn CPU — and, more to the point, doesn't spend
+# 3 s probing every phantom Bluetooth port once per second.
+RECONNECT_BACKOFF_S = (1.0, 2.0, 5.0, 10.0)
+
+
+def _is_usb_cdc(port):
+    """STM32 native USB CDC — the Nucleo enumerating directly."""
+    return port.vid == 0x0483 and port.pid == 0x5740
+
+
+def _is_dfrobot(port):
+    """CH340 USB-serial bridge, as used by the DFRobot adapter."""
+    if port.vid == 0x1A86 and port.pid == 0x7523:
+        return True
+    return "USB-Enhanced-SERIAL-D" in (port.description or "")
+
+
+def _is_bluetooth(port):
+    """Bluetooth SPP, across the three host platforms.
+
+    There is no VID:PID to match on — the host synthesises these ports, so
+    identification is by name only:
+
+      Windows  hwid starts with BTHENUM, description is usually
+               "Standard Serial over Bluetooth link"
+      Linux    /dev/rfcomm0 and friends, created by rfcomm bind
+      macOS    /dev/cu.<device-name>-SPP or -SerialPort
+
+    Windows creates TWO ports per paired SPP device, one incoming and one
+    outgoing, and only the outgoing one connects. Both match here, which
+    is exactly why every candidate gets probed rather than trusted."""
+    device = (port.device or "")
+    desc = (port.description or "")
+    hwid = (port.hwid or "")
+
+    if hwid.upper().startswith("BTHENUM"):
+        return True
+    if "bluetooth" in desc.lower():
+        return True
+    if device.startswith("/dev/rfcomm"):
+        return True
+    if device.startswith("/dev/cu.") and ("SPP" in device or "SerialPort" in device):
+        return True
+    return False
+
+
+# Priority order. USB first because it's faster and can't be a phantom;
+# Bluetooth last because probing it is the expensive case.
+PORT_MATCHERS = (
+    ("usb_cdc",   _is_usb_cdc,   PROBE_TIMEOUT_USB_S),
+    ("dfrobot",   _is_dfrobot,   PROBE_TIMEOUT_USB_S),
+    ("bluetooth", _is_bluetooth, PROBE_TIMEOUT_BT_S),
+)
 
 
 class SerialHandler(ConnectionManager):
@@ -38,11 +114,88 @@ class SerialHandler(ConnectionManager):
         self._frame_queue = queue.Queue()
         self._reader_stop = threading.Event()
         self._processor_stop = threading.Event()
+        self._heartbeat_stop = threading.Event()
+
+        # Supervision. _want_connected separates "the link dropped, get it
+        # back" from "we are shutting down, stay down" — without it the
+        # supervisor would race the shutdown path and immediately
+        # reconnect a port we just said GOODBYE to.
+        self._supervisor_stop = threading.Event()
+        self._want_connected = False
         # Testing hook only: if set, _do_connect() uses this object
         # directly instead of scanning for real hardware and opening a
         # real serial.Serial. Must support .read(n), .write(data),
         # .is_open, .close() — see testing/fake_serial.py.
         self._serial_override = serial_override
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    def start(self):
+        """Connect, and keep reconnecting for as long as the app runs.
+
+        Use this instead of connect() from application code. connect() is
+        still the single-shot attempt; this is the thing that survives the
+        panel being unplugged and plugged back in."""
+        self._want_connected = True
+        self._supervisor_stop.clear()
+        threading.Thread(
+            target=self._supervisor_loop,
+            daemon=True,
+            name="SerialSupervisor"
+        ).start()
+
+    def shutdown(self):
+        """Stop supervising, then disconnect cleanly (which sends GOODBYE).
+
+        Call this at exit rather than disconnect(), or the supervisor will
+        helpfully undo the disconnect a second later."""
+        self._want_connected = False
+        self._supervisor_stop.set()
+        self.disconnect()
+
+    def is_connected(self) -> bool:
+        ser = self.ser
+        return ser is not None and ser.is_open
+
+    def _supervisor_loop(self):
+        """Reconnects whenever the link is down.
+
+        Deliberately dumb: it doesn't try to diagnose why the link
+        dropped, it just re-runs discovery. That covers a replug landing
+        on a different COM port, the panel being power-cycled, and a
+        Bluetooth module coming back into range — all of which change
+        which port is correct."""
+        logger.info("SerialSupervisor: started.")
+        attempt = 0
+
+        while not self._supervisor_stop.is_set():
+            if self.is_connected():
+                attempt = 0
+                self._supervisor_stop.wait(1.0)
+                continue
+
+            if attempt == 0:
+                logger.info("SerialSupervisor: connecting...")
+            else:
+                logger.info(f"SerialSupervisor: reconnect attempt {attempt + 1}...")
+
+            try:
+                ok = self.connect()
+            except Exception:
+                logger.exception("SerialSupervisor: connect raised")
+                ok = False
+
+            if ok and self.is_connected():
+                logger.info("SerialSupervisor: connected.")
+                attempt = 0
+                continue
+
+            delay = RECONNECT_BACKOFF_S[min(attempt, len(RECONNECT_BACKOFF_S) - 1)]
+            attempt += 1
+            logger.info(f"SerialSupervisor: no panel — retrying in {delay}s.")
+            self._supervisor_stop.wait(delay)
+
+        logger.info("SerialSupervisor: stopped.")
 
     # ── ConnectionManager interface ───────────────────────────────────────────
 
@@ -54,21 +207,20 @@ class SerialHandler(ConnectionManager):
             new_ser = self._serial_override
             logger.info("SerialHandler: using injected test link (no real hardware).")
         else:
-            detected_port = self.find_stm_port()
+            # find_stm_port() returns an ALREADY-OPEN port, not a name.
+            # Reopening would mean a second Bluetooth link setup and would
+            # drop the session the probe just established.
+            new_ser = self.find_stm_port()
 
             if self.is_cancelled():
+                if new_ser:
+                    new_ser.close()
                 logger.warning("Serial connection cancelled.")
                 return False
 
-            if detected_port is None:
+            if new_ser is None:
                 self.state.update_Serial_connection(False, None)
                 return False
-
-            new_ser = serial.Serial(
-                port=detected_port,
-                baudrate=system_config.BAUDRATE,
-                timeout=system_config.SERIAL_TIMEOUT
-            )
 
         if self.is_cancelled():
             new_ser.close()
@@ -77,25 +229,36 @@ class SerialHandler(ConnectionManager):
 
         self.ser = new_ser
         self.state.update_Serial_connection(True, self.ser)
-        if self._serial_override is None:
-            logger.info(f"STM32 connected on {detected_port}.")
-        else:
-            logger.info("STM32 connected (test link).")
+        logger.info(
+            f"STM32 connected on {new_ser.port}." if self._serial_override is None
+            else "STM32 connected (test link)."
+        )
 
-        # Tells the STM32 to reset, so it always starts from a
-        # known-clean state in sync with this freshly launched Python
-        # process rather than potentially carrying over stale
-        # menu_register/USB_MESSAGE/PAYLOAD_MESSAGE state from before.
-        # Sent here (not compile_Send/the outgoing STATUS path) since
-        # it's a one-time connect-time action, not a recurring update.
+        # Opens the session. The STM32 clears its stale
+        # menu_register/USB_MESSAGE/PAYLOAD_MESSAGE state and moves from
+        # WAITING to SYNCED — but it does NOT start sending button frames
+        # yet. That needs the first heartbeat, which the thread below
+        # provides. Until then the panel shows green.
+        #
+        # Sent again even though the probe already sent one: a second
+        # HELLO simply restarts the handshake, which is harmless, and it
+        # keeps this path identical whether the port came from discovery
+        # or from an injected test link.
         self.send(build_frame(MessageType.HELLO, Hello()))
-        logger.info("PC -> STM32: HELLO (requesting reset)")
+        logger.info("PC -> STM32: HELLO (session open)")
 
         if self.watchdog:
             self.watchdog.watchSerialThread()
 
         self._reader_stop.clear()
         self._processor_stop.clear()
+        self._heartbeat_stop.clear()
+
+        threading.Thread(
+            target=self._heartbeat_loop,
+            daemon=True,
+            name="SerialHeartbeat"
+        ).start()
 
         threading.Thread(
             target=self._reader_loop,
@@ -112,6 +275,12 @@ class SerialHandler(ConnectionManager):
         return True
 
     def _do_disconnect(self):
+        # Stop the heartbeat before saying goodbye, so a beat can't slip
+        # out after the farewell and leave the STM32 thinking the session
+        # is still live.
+        self._heartbeat_stop.set()
+        self._send_goodbye()
+
         self._reader_stop.set()
         self._processor_stop.set()
 
@@ -120,9 +289,53 @@ class SerialHandler(ConnectionManager):
 
         self.ser = None
         self.state.update_Serial_connection(False, None)
+
+        # Stop the watchdog watching a thread that no longer exists —
+        # otherwise it logs "serial thread appears frozen" five seconds
+        # after every ordinary disconnect. _do_connect re-arms it.
+        if self.watchdog:
+            self.watchdog.stopWatchingSerial()
+
         logger.info("STM32 disconnected.")
 
+    def _send_goodbye(self):
+        """Best-effort, and deliberately NOT via self.send(): that calls
+        self.disconnect() on failure and we are already inside the
+        disconnect path, so it would recurse.
+
+        Failing is normal and not worth a loud log line — the usual reason
+        for reaching _do_disconnect is that the link already died, in
+        which case there is nothing left to say goodbye to."""
+        if not (self.ser and self.ser.is_open):
+            return
+        try:
+            self.ser.write(build_frame(MessageType.GOODBYE, Goodbye()))
+            self.ser.flush()
+            logger.info("PC -> STM32: GOODBYE (session closed)")
+        except Exception:
+            logger.debug("GOODBYE not sent — link already gone.")
+
     # ── Background threads ────────────────────────────────────────────────────
+
+    def _heartbeat_loop(self):
+        """Sends HEARTBEAT every HEARTBEAT_PERIOD_S for as long as the
+        session is up.
+
+        The first one completes the STM32's handshake and starts button
+        frames flowing; every one after that is the only evidence the
+        firmware has that this process is still alive. Stop sending and
+        the panel goes red within HEARTBEAT_TIMEOUT_MS.
+
+        Uses Event.wait() rather than sleep() so disconnect takes effect
+        immediately instead of after the remainder of the current period."""
+        logger.info("SerialHeartbeat: started.")
+        frame = build_frame(MessageType.HEARTBEAT, Heartbeat())
+
+        while not self._heartbeat_stop.is_set():
+            self.send(frame)
+            self._heartbeat_stop.wait(HEARTBEAT_PERIOD_S)
+
+        logger.info("SerialHeartbeat: stopped.")
 
     def _reader_loop(self):
         """
@@ -189,30 +402,125 @@ class SerialHandler(ConnectionManager):
 
     # ── Port detection ────────────────────────────────────────────────────────
 
-    def find_stm_port(self):
-        logger.info("Scanning for STM32 on COM ports...")
+    def find_stm_candidates(self):
+        """Every port that could be the panel, best guess first.
+
+        Returns a list of (device, kind, probe_timeout) rather than a
+        single port, because Bluetooth makes the old "first match wins"
+        approach unsafe: the host shows an SPP port whether or not the
+        module is powered, and Windows shows two per paired device.
+        """
+        candidates = []
+        seen = set()
+
         ports = serial.tools.list_ports.comports()
 
-        for port in ports:
-            if port.vid == 0x0483 and port.pid == 0x5740:
-                logger.info(f"Found STM32 (USB CDC) on {port.device} "
-                            f"(VID:PID {port.vid:04X}:{port.pid:04X})")
-                return port.device
+        # An explicit SERIAL_PORT in system_config always goes first, so
+        # you can pin a specific port and skip discovery entirely.
+        forced = getattr(system_config, "SERIAL_PORT", None)
+        if forced:
+            for port in ports:
+                if port.device == forced:
+                    candidates.append((port.device, "configured", PROBE_TIMEOUT_BT_S))
+                    seen.add(port.device)
 
-        for port in ports:
-            if port.vid == 0x1A86 and port.pid == 0x7523:
-                logger.info(f"Found STM32 (DFRobot CH340) on {port.device} "
-                            f"(VID:PID {port.vid:04X}:{port.pid:04X})")
-                return port.device
-            
+        for kind, matches, timeout in PORT_MATCHERS:
+            for port in ports:
+                if port.device in seen:
+                    continue
+                try:
+                    hit = matches(port)
+                except Exception:
+                    hit = False
+                if hit:
+                    candidates.append((port.device, kind, timeout))
+                    seen.add(port.device)
+                    logger.info(f"Candidate: {port.device} ({kind}) — '{port.description}'")
 
-            if "USB-Enhanced-SERIAL-D" in port.description:
-                logger.info(f"Found STM32 (DFRobot CH340, matched by description) "
-                            f"on {port.device} — '{port.description}'")
-                return port.device
+        if not candidates:
+            logger.info("No candidate ports found.")
+        return candidates
 
-        logger.info("No STM32 device found on any COM port.")
+    def _probe(self, ser, timeout_s) -> bool:
+        """True if this port is really the panel.
+
+        Opening a port proves nothing, especially over Bluetooth. So this
+        starts a session — HELLO then one HEARTBEAT — and waits for any
+        valid TLV frame to come back.
+
+        Sending is necessary rather than just listening: the firmware is
+        silent in WAITING and SYNCED, and only starts transmitting once a
+        heartbeat has moved it to CONNECTED. A port that stays quiet is
+        either not the panel or not powered, and both mean "try the next
+        one".
+        """
+        parser = StreamParser()
+        try:
+            ser.reset_input_buffer()
+            ser.write(build_frame(MessageType.HELLO, Hello()))
+            ser.write(build_frame(MessageType.HEARTBEAT, Heartbeat()))
+            ser.flush()
+        except Exception as e:
+            logger.debug(f"Probe write failed: {e}")
+            return False
+
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                chunk = ser.read(64)
+            except Exception as e:
+                logger.debug(f"Probe read failed: {e}")
+                return False
+
+            if chunk and parser.feed(chunk):
+                return True
+
+            # Keep the session alive across a slow link — the firmware
+            # times out in 500 ms and we may be waiting longer than that.
+            try:
+                ser.write(build_frame(MessageType.HEARTBEAT, Heartbeat()))
+            except Exception:
+                return False
+
+        return False
+
+    def find_stm_port(self):
+        """Opens and probes each candidate, returning the first live one.
+
+        Returns an already-open serial.Serial, not a port name — reopening
+        would mean a second Bluetooth link setup and would drop the
+        session the probe just established.
+        """
+        for device, kind, timeout in self.find_stm_candidates():
+            if self.is_cancelled():
+                return None
+
+            logger.info(f"Trying {device} ({kind})...")
+            try:
+                ser = serial.Serial(
+                    port=device,
+                    baudrate=system_config.BAUDRATE,
+                    timeout=system_config.SERIAL_TIMEOUT,
+                )
+            except Exception as e:
+                # Routine for Bluetooth: a paired-but-absent module
+                # refuses or times out on open.
+                logger.info(f"  {device}: could not open ({e})")
+                continue
+
+            if self._probe(ser, timeout):
+                logger.info(f"  {device}: panel responded — using this port.")
+                return ser
+
+            logger.info(f"  {device}: no response in {timeout}s.")
+            try:
+                ser.close()
+            except Exception:
+                pass
+
+        logger.info("No STM32 device responded on any port.")
         return None
+
     # ── Outgoing — STM32 receives this ───────────────────────────────────────
 
     def compile_Send(self):

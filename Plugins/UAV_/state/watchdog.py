@@ -34,6 +34,13 @@ class Watchdog:
     def watchSerialThread(self):
         self.watchSerial = True
 
+    def stopWatchingSerial(self):
+        """Called on a deliberate disconnect. Without this the monitor
+        keeps checking a thread that was shut down on purpose and reports
+        it as frozen one timeout later."""
+        self.watchSerial = False
+        self.serial_pet()
+
     def watchStateUpdateThread(self):
         self.watchStateUpdate = True
 

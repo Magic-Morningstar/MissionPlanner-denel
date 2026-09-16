@@ -1,0 +1,12 @@
+../Core/Src/fastLed_SPI.c:46:6:ws2812_init	16	static
+../Core/Src/fastLed_SPI.c:62:6:ws2812_send_spi	8	static
+../Core/Src/fastLed_SPI.c:82:6:ws2812_pixel	24	static
+../Core/Src/fastLed_SPI.c:90:6:ws2812_pixel_all	32	static
+../Core/Src/fastLed_SPI.c:112:16:ws2812_breathe_level	24	static
+../Core/Src/fastLed_SPI.c:120:16:ws2812_blink_level	24	static
+../Core/Src/fastLed_SPI.c:125:16:ws2812_double_flash_level	24	static
+../Core/Src/fastLed_SPI.c:137:9:ws2812_pattern_level	16	static
+../Core/Src/fastLed_SPI.c:165:6:ws2812_set_dim	16	static
+../Core/Src/fastLed_SPI.c:173:6:ws2812_set	16	static
+../Core/Src/fastLed_SPI.c:177:6:ws2812_off	16	static
+../Core/Src/fastLed_SPI.c:181:6:ws2812_animate	32	static
