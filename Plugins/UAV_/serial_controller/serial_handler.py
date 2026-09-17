@@ -14,6 +14,7 @@ from serial_controller.protocol.stream_parser import StreamParser
 from serial_controller.protocol.frame_builder import build_frame
 from serial_controller.protocol.messages import Hello, Goodbye, Heartbeat
 from serial_controller.status_builder import StatusBuilder
+from serial_controller import link_health
 import state.system_config as system_config
 
 # How often to send HEARTBEAT once the session is open.
@@ -298,6 +299,25 @@ class SerialHandler(ConnectionManager):
 
         logger.info("STM32 disconnected.")
 
+    def _build_heartbeat(self) -> Heartbeat:
+        """Snapshots the state of the chain beyond this PC.
+
+        The two percentages cover different segments and fail
+        independently: telemetry_health is the radio hop (Herelink ground
+        unit to air unit), uav_health is the autopilot's own view of its
+        serial hop to the air unit. Reporting one combined figure would
+        hide which half is broken.
+
+        The derivation lives in link_health.py because it's the only
+        heuristic in this path — everything else here is a faithful
+        translation between representations, whereas "what counts as
+        healthy" is a judgement to tune against real flights."""
+        return Heartbeat(
+            uav_connected    = bool(self.state.is_UAV_State_Connection_Available),
+            telemetry_health = link_health.telemetry_health(self.state),
+            uav_health       = link_health.uav_health(self.state),
+        )
+
     def _send_goodbye(self):
         """Best-effort, and deliberately NOT via self.send(): that calls
         self.disconnect() on failure and we are already inside the
@@ -329,10 +349,13 @@ class SerialHandler(ConnectionManager):
         Uses Event.wait() rather than sleep() so disconnect takes effect
         immediately instead of after the remainder of the current period."""
         logger.info("SerialHeartbeat: started.")
-        frame = build_frame(MessageType.HEARTBEAT, Heartbeat())
 
         while not self._heartbeat_stop.is_set():
-            self.send(frame)
+            # Rebuilt every beat, not hoisted out of the loop: the whole
+            # point of the flags is that they change while the session is
+            # up. A cached frame would report the health at connect time
+            # forever.
+            self.send(build_frame(MessageType.HEARTBEAT, self._build_heartbeat()))
             self._heartbeat_stop.wait(HEARTBEAT_PERIOD_S)
 
         logger.info("SerialHeartbeat: stopped.")

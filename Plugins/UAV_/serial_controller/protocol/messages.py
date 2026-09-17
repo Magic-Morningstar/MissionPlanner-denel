@@ -216,26 +216,55 @@ register(GoodbyeDecoder())
 
 @dataclass
 class Heartbeat:
-    """No fields. Sent at a fixed rate for as long as the session is up.
+    """Sent at a fixed rate for as long as the session is up, carrying the
+    UAV-connected flag and two health percentages.
 
-    Two jobs. The first one completes the handshake — the STM32 stays in
-    SYNCED after HELLO and only reaches CONNECTED (and starts sending
+    Three jobs. The first beat completes the handshake — the STM32 stays
+    in SYNCED after HELLO and only reaches CONNECTED (and starts sending
     button frames) once a beat arrives. After that, its absence is the
-    only evidence the firmware has that this process is gone.
+    only evidence the firmware has that this process is gone. And the
+    payload reports the state of the chain beyond the PC, which the panel
+    has no way to observe for itself.
 
-    The rate must stay comfortably inside main.c's HEARTBEAT_TIMEOUT_MS
-    or a healthy link will flicker red — see HEARTBEAT_PERIOD_S in
-    serial_handler.py."""
-    pass
+    Everything defaults to zero so Heartbeat() still works in the connect
+    probe, where no state is available yet. Note that 0 % is also a
+    legitimate reading, so the firmware cannot distinguish "link is dead"
+    from "nothing has told us yet" — uav_connected is the flag to gate on.
+
+    The send rate must stay comfortably inside main.c's
+    HEARTBEAT_TIMEOUT_MS or a healthy link will flicker red — see
+    HEARTBEAT_PERIOD_S in serial_handler.py."""
+    uav_connected: bool = False
+    telemetry_health: int = 0    # 0-100 %, Herelink ground + air units
+    uav_health: int = 0          # 0-100 %, the vehicle's own reported health
 
 
 class HeartbeatDecoder(Decoder):
     TYPE = MessageType.HEARTBEAT
 
-    def encode(self, obj: Heartbeat) -> bytes:
-        return b''
+    @staticmethod
+    def _clamp(pct: int) -> int:
+        """Both health fields are 7 bits. Clamping rather than masking
+        matters: a value of 130 masked to 7 bits becomes 2, which reads as
+        a near-dead link instead of an obviously wrong one."""
+        return max(0, min(int(pct), HB_HEALTH_MAX))
 
-    # No decode(): HEARTBEAT is PC -> STM32 only.
+    def encode(self, obj: Heartbeat) -> bytes:
+        value = 0
+        value |= (int(obj.uav_connected) << HB_UAV_CONNECTED_BIT)
+        value |= (self._clamp(obj.telemetry_health) << HB_TELEM_HEALTH_SHIFT)
+        value |= (self._clamp(obj.uav_health) << HB_UAV_HEALTH_SHIFT)
+        return struct.pack('<H', value)
+
+    def decode(self, payload: bytes) -> Heartbeat:
+        # The PC never receives this. Kept so a round-trip test can assert
+        # encode -> decode without a second code path.
+        value = struct.unpack('<H', payload)[0]
+        return Heartbeat(
+            uav_connected    = bool((value >> HB_UAV_CONNECTED_BIT) & 1),
+            telemetry_health = (value >> HB_TELEM_HEALTH_SHIFT) & HB_HEALTH_MASK,
+            uav_health       = (value >> HB_UAV_HEALTH_SHIFT) & HB_HEALTH_MASK,
+        )
 
 
 register(HeartbeatDecoder())

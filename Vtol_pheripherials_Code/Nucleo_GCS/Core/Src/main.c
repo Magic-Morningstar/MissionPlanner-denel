@@ -217,6 +217,35 @@ static debounce_state_t btn_db[10] = {
 
 /* Which ws2812 pixel is the status indicator. */
 #define STATUS_LED_INDEX         0
+
+/* LED 2 — telemetry health between the Herelink ground unit and the air
+   unit. The percentage arrives from the PC in the heartbeat payload; the
+   thresholds and what each band looks like are decided here.
+
+   Set equal to STATUS_LED_INDEX to disable it — the status pattern will
+   simply overwrite it each frame. */
+#define TELEM_LED_INDEX          2
+
+/* HEARTBEAT payload layout, PC -> STM32. Two bytes, little-endian
+   uint16, mirroring bit_definitions.py:
+     bit  0     UAV connected flag
+     bits 1-7   telemetry health, 0-100 %
+     bits 8-14  UAV health, 0-100 %
+     bit  15    spare */
+#define HB_UAV_CONNECTED_BIT     0
+#define HB_TELEM_HEALTH_SHIFT    1
+#define HB_UAV_HEALTH_SHIFT      8
+#define HB_HEALTH_MASK           0x7F
+
+/* Telemetry health bands — lower bound of each, checked high to low.
+   0 is its own case: a dead link is solid red rather than the bottom of
+   the "barely alive" band, because that distinction matters. */
+#define TELEM_PERFECT_MIN        86   /* solid green        */
+#define TELEM_GOOD_MIN           70   /* breathe slow green */
+#define TELEM_FAIR_MIN           51   /* breathe slow amber */
+#define TELEM_CONCERNING_MIN     31   /* blink slow amber   */
+#define TELEM_BAD_MIN            16   /* blink slow red     */
+#define TELEM_TERRIBLE_MIN        1   /* blink fast red     */
 /* ── Top-level firmware state ─────────────────────────────────────────────
    Five states. Only Fsm_Tick() and the event flags below move between
    them; nothing else in this file writes `fsm`.
@@ -264,6 +293,18 @@ static uint8_t  user_btn_consumed  = 0; /* one toggle per hold */
 volatile uint8_t ev_hello     = 0;
 volatile uint8_t ev_goodbye   = 0;
 volatile uint8_t ev_heartbeat = 0;
+
+/* Last heartbeat payload. Written in interrupt context, read in the main
+   loop — single bytes, so no torn read is possible on this core.
+
+   hb_valid stays 0 until a heartbeat carrying a payload actually
+   arrives. It's needed because 0 % is a legitimate reading: without it
+   the panel could not tell "the link is dead" from "the PC has not said
+   anything yet", and both would show solid red. */
+volatile uint8_t hb_uav_connected = 0;
+volatile uint8_t hb_telem_health  = 0;
+volatile uint8_t hb_uav_health    = 0;
+volatile uint8_t hb_valid         = 0;
 
 uint32_t USB_MESSAGE = 0x00;
 uint32_t PAYLOAD_MESSAGE = 0x00;
@@ -400,6 +441,20 @@ static void Process_Received_Byte(uint8_t byte)
             else if (rx_type == TLV_TYPE_HEARTBEAT)
             {
                 ev_heartbeat = 1;
+
+                /* Length-checked rather than assumed: an older PC build
+                   sends a zero-length heartbeat, and that must still
+                   drive the FSM even though it carries no health data. */
+                if (rx_len >= 2)
+                {
+                    uint16_t hb = (uint16_t)rx_payload[0]
+                                | ((uint16_t)rx_payload[1] << 8);
+
+                    hb_uav_connected = (hb >> HB_UAV_CONNECTED_BIT) & 1;
+                    hb_telem_health  = (hb >> HB_TELEM_HEALTH_SHIFT) & HB_HEALTH_MASK;
+                    hb_uav_health    = (hb >> HB_UAV_HEALTH_SHIFT) & HB_HEALTH_MASK;
+                    hb_valid = 1;
+                }
             }
         }
         /* Bad CRC or bad end byte — silently drop and resync, same as
@@ -846,6 +901,64 @@ static void Fsm_Tick(uint32_t now)
 /* ── Status indicator ─────────────────────────────────────────────────────
    Reports the FSM and nothing else. Every rate and colour lives in
    fastLed_SPI.h — this only picks which pattern is showing. */
+/* ── LED 2: telemetry health ──────────────────────────────────────────────
+   Air unit to ground unit.
+
+        solid   white            UAV not connected
+        solid   green   86-100   perfect
+        breathe green   70-85    good
+        breathe amber   51-69    not so good
+        blink   amber   31-50    concerning
+        blink   red     16-30    bad, still usable
+        fast    red     1-15     barely there
+        solid   red     0        nothing getting through
+
+   Colour carries severity, pattern carries urgency. Both extremes are
+   solid and everything between them moves, faster as it degrades — which
+   reads from across a room without reading a number.
+
+   ORDER MATTERS. The connected flag is checked before the percentage,
+   because link_health.py reports 0 % whenever the UAV link is down. Test
+   the percentage first and a disconnected UAV shows solid red — "zero
+   telemetry" — when the truth is that there is no vehicle to have
+   telemetry with. White and red mean genuinely different things here.
+
+   Off when there is no PC session at all: the panel cannot measure any
+   of this itself, so showing the last known figures would be a lie that
+   looks like data. */
+static void Telem_Apply_Led(void)
+{
+    if (fsm != FSM_CONNECTED || !hb_valid)
+    {
+        ws2812_off(TELEM_LED_INDEX);
+        return;
+    }
+
+    if (!hb_uav_connected)
+    {
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_SOLID, WS2812_WHITE);
+        return;
+    }
+
+    uint8_t pct = hb_telem_health;
+
+    if (pct >= TELEM_PERFECT_MIN)
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_SOLID, WS2812_GREEN);
+    else if (pct >= TELEM_GOOD_MIN)
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BREATHE_SLOW, WS2812_GREEN);
+    else if (pct >= TELEM_FAIR_MIN)
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BREATHE_SLOW, WS2812_AMBER);
+    else if (pct >= TELEM_CONCERNING_MIN)
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BLINK_SLOW, WS2812_AMBER);
+    else if (pct >= TELEM_BAD_MIN)
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BLINK_SLOW, WS2812_RED);
+    else if (pct >= TELEM_TERRIBLE_MIN)
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BLINK_FAST, WS2812_RED);
+    else
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_SOLID, WS2812_RED);
+}
+
+
 static void Fsm_Apply_Led(uint32_t now)
 {
     switch (fsm)
@@ -874,6 +987,8 @@ static void Fsm_Apply_Led(uint32_t now)
         ws2812_set(STATUS_LED_INDEX, WS2812_PATTERN_BLINK_SLOW, WS2812_BLUE);
         break;
     }
+
+    Telem_Apply_Led();
 
     ws2812_animate(now);
 }

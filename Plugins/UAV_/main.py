@@ -73,7 +73,6 @@ class Controller:
         if self.app is not None:
             self.app.quit()   # unblocks app.exec() in start()
 
-
 if __name__ == "__main__":
     setup_logging()   # must run before any other module logs anything
     app = Controller()
