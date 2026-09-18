@@ -218,13 +218,7 @@ static debounce_state_t btn_db[10] = {
 /* Which ws2812 pixel is the status indicator. */
 #define STATUS_LED_INDEX         0
 
-/* LED 2 — telemetry health between the Herelink ground unit and the air
-   unit. The percentage arrives from the PC in the heartbeat payload; the
-   thresholds and what each band looks like are decided here.
-
-   Set equal to STATUS_LED_INDEX to disable it — the status pattern will
-   simply overwrite it each frame. */
-#define TELEM_LED_INDEX          2
+#define TELEM_LED_INDEX          1
 
 /* HEARTBEAT payload layout, PC -> STM32. Two bytes, little-endian
    uint16, mirroring bit_definitions.py:
@@ -904,7 +898,7 @@ static void Fsm_Tick(uint32_t now)
 /* ── LED 2: telemetry health ──────────────────────────────────────────────
    Air unit to ground unit.
 
-        solid   white            UAV not connected
+        breathe white            UAV not connected
         solid   green   86-100   perfect
         breathe green   70-85    good
         breathe amber   51-69    not so good
@@ -936,7 +930,7 @@ static void Telem_Apply_Led(void)
 
     if (!hb_uav_connected)
     {
-        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_SOLID, WS2812_WHITE);
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BREATHE_SLOW, WS2812_WHITE);
         return;
     }
 

@@ -2880,7 +2880,7 @@ static void Telem_Apply_Led(void)
  800152a:	d103      	bne.n	8001534 <Telem_Apply_Led+0x20>
     {
         ws2812_off(TELEM_LED_INDEX);
- 800152c:	2002      	movs	r0, #2
+ 800152c:	2001      	movs	r0, #1
  800152e:	f7ff fa51 	bl	80009d4 <ws2812_off>
         return;
  8001532:	e0a0      	b.n	8001676 <Telem_Apply_Led+0x162>
@@ -2893,7 +2893,7 @@ static void Telem_Apply_Led(void)
  800153a:	2b00      	cmp	r3, #0
  800153c:	d110      	bne.n	8001560 <Telem_Apply_Led+0x4c>
     {
-        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_SOLID, WS2812_WHITE);
+        ws2812_set(TELEM_LED_INDEX, WS2812_PATTERN_BREATHE_SLOW, WS2812_WHITE);
  800153e:	4b52      	ldr	r3, [pc, #328]	@ (8001688 <Telem_Apply_Led+0x174>)
  8001540:	781a      	ldrb	r2, [r3, #0]
  8001542:	7859      	ldrb	r1, [r3, #1]
@@ -2905,8 +2905,8 @@ static void Telem_Apply_Led(void)
  800154e:	2300      	movs	r3, #0
  8001550:	f362 0317 	bfi	r3, r2, #0, #24
  8001554:	461a      	mov	r2, r3
- 8001556:	2102      	movs	r1, #2
- 8001558:	2002      	movs	r0, #2
+ 8001556:	2103      	movs	r1, #3
+ 8001558:	2001      	movs	r0, #1
  800155a:	f7ff fa29 	bl	80009b0 <ws2812_set>
         return;
  800155e:	e08a      	b.n	8001676 <Telem_Apply_Led+0x162>
@@ -2934,7 +2934,7 @@ static void Telem_Apply_Led(void)
  800157e:	f362 0317 	bfi	r3, r2, #0, #24
  8001582:	461a      	mov	r2, r3
  8001584:	2102      	movs	r1, #2
- 8001586:	2002      	movs	r0, #2
+ 8001586:	2001      	movs	r0, #1
  8001588:	f7ff fa12 	bl	80009b0 <ws2812_set>
  800158c:	e073      	b.n	8001676 <Telem_Apply_Led+0x162>
     else if (pct >= TELEM_GOOD_MIN)
@@ -2954,7 +2954,7 @@ static void Telem_Apply_Led(void)
  80015a6:	f362 0317 	bfi	r3, r2, #0, #24
  80015aa:	461a      	mov	r2, r3
  80015ac:	2103      	movs	r1, #3
- 80015ae:	2002      	movs	r0, #2
+ 80015ae:	2001      	movs	r0, #1
  80015b0:	f7ff f9fe 	bl	80009b0 <ws2812_set>
  80015b4:	e05f      	b.n	8001676 <Telem_Apply_Led+0x162>
     else if (pct >= TELEM_FAIR_MIN)
@@ -2974,7 +2974,7 @@ static void Telem_Apply_Led(void)
  80015ce:	f362 0317 	bfi	r3, r2, #0, #24
  80015d2:	461a      	mov	r2, r3
  80015d4:	2103      	movs	r1, #3
- 80015d6:	2002      	movs	r0, #2
+ 80015d6:	2001      	movs	r0, #1
  80015d8:	f7ff f9ea 	bl	80009b0 <ws2812_set>
  80015dc:	e04b      	b.n	8001676 <Telem_Apply_Led+0x162>
     else if (pct >= TELEM_CONCERNING_MIN)
@@ -2994,7 +2994,7 @@ static void Telem_Apply_Led(void)
  80015f6:	f362 0317 	bfi	r3, r2, #0, #24
  80015fa:	461a      	mov	r2, r3
  80015fc:	2105      	movs	r1, #5
- 80015fe:	2002      	movs	r0, #2
+ 80015fe:	2001      	movs	r0, #1
  8001600:	f7ff f9d6 	bl	80009b0 <ws2812_set>
  8001604:	e037      	b.n	8001676 <Telem_Apply_Led+0x162>
     else if (pct >= TELEM_BAD_MIN)
@@ -3014,7 +3014,7 @@ static void Telem_Apply_Led(void)
  800161e:	f362 0317 	bfi	r3, r2, #0, #24
  8001622:	461a      	mov	r2, r3
  8001624:	2105      	movs	r1, #5
- 8001626:	2002      	movs	r0, #2
+ 8001626:	2001      	movs	r0, #1
  8001628:	f7ff f9c2 	bl	80009b0 <ws2812_set>
  800162c:	e023      	b.n	8001676 <Telem_Apply_Led+0x162>
     else if (pct >= TELEM_TERRIBLE_MIN)
@@ -3034,7 +3034,7 @@ static void Telem_Apply_Led(void)
  8001646:	f362 0317 	bfi	r3, r2, #0, #24
  800164a:	461a      	mov	r2, r3
  800164c:	2106      	movs	r1, #6
- 800164e:	2002      	movs	r0, #2
+ 800164e:	2001      	movs	r0, #1
  8001650:	f7ff f9ae 	bl	80009b0 <ws2812_set>
  8001654:	e00f      	b.n	8001676 <Telem_Apply_Led+0x162>
     else
@@ -3051,7 +3051,7 @@ static void Telem_Apply_Led(void)
  8001668:	f362 0317 	bfi	r3, r2, #0, #24
  800166c:	461a      	mov	r2, r3
  800166e:	2102      	movs	r1, #2
- 8001670:	2002      	movs	r0, #2
+ 8001670:	2001      	movs	r0, #1
  8001672:	f7ff f99d 	bl	80009b0 <ws2812_set>
 }
  8001676:	3708      	adds	r7, #8
