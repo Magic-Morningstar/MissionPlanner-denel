@@ -11,7 +11,17 @@ class MessageType:
     JOYSTICK2        = 0x03   # NEW — second stick
     PAYLOAD_COMMAND  = 0x04   # NEW — payload/gimbal/camera buttons, own 32-bit register
     STATUS           = 0x10
+
+    # ── Session control ──────────────────────────────────────────────────
+    # The three messages the STM32's top-level FSM runs on. HELLO opens a
+    # session, HEARTBEAT keeps it alive, GOODBYE closes it cleanly.
+    #
+    # The heartbeat is what makes "connection lost" detectable at all: the
+    # firmware times out against its arrival, because a PC that has
+    # crashed cannot send a message saying so.
     HELLO            = 0x20
+    GOODBYE          = 0x21
+    HEARTBEAT        = 0x22
 
 
 class Decoder:

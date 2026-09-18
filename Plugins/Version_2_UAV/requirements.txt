@@ -1,0 +1,6 @@
+# Python dependencies for the STM32/joystick bridge (plugins/UAV_/main.py).
+# Install on each target machine before running the GCS:
+#   pip install -r requirements.txt
+pymavlink==2.4.49
+pyserial==3.5
+PySide6==6.11.2

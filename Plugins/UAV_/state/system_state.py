@@ -11,6 +11,7 @@
 #      instead of living here.
 
 import threading
+import time
 
 
 class SystemState:
@@ -22,6 +23,39 @@ class SystemState:
         self._UAV_STATE_CONNECTION_STATUS = False
         self._UAV_COMMAND_CONNECTION_STATUS = False
         self.UAV_HEARTBEAT = None
+
+        # ── Radio link health ─────────────────────────────────────────────────
+        # Facts about the link, written by whatever reads telemetry. No
+        # thresholds and no colour logic live here — those are decisions,
+        # and this class holds facts. Whatever computes the verdict writes
+        # the result into _UAV_LINK_STATE.
+        #
+        # Heartbeat AGE is deliberately NOT stored. A stored age goes stale
+        # at exactly the moment it matters, because when the link dies
+        # nothing is left running to keep updating it — the LED would sit
+        # on the last good value forever. Only the timestamp is kept here;
+        # age is derived on read (see get_UAV_Heartbeat_Age).
+        self._UAV_LAST_HEARTBEAT_TIME = None
+        self._UAV_LINK_STATE = "RED"        # "GREEN" | "AMBER" | "RED"
+        self._UAV_LINK_PACKET_LOSS = 0.0    # rolling %, from MAVLink seq gaps
+
+        # From RADIO_STATUS (msg 109), if the air unit emits it at all —
+        # it's a SiK-radio convention and not every digital link sends it.
+        # _UAV_RADIO_STATUS_SEEN distinguishes "real readings" from "still
+        # the initial zeros", so the LED logic knows whether to trust these.
+        self._UAV_RADIO_STATUS_SEEN = False
+        self._UAV_LINK_RSSI = 0             # this end
+        self._UAV_LINK_REMRSSI = 0          # vehicle end
+        self._UAV_LINK_NOISE = 0
+        self._UAV_LINK_REMNOISE = 0
+        self._UAV_LINK_RXERRORS = 0         # cumulative, never resets
+        self._UAV_LINK_TXBUF = 100          # % buffer free; low = congested
+
+        # From SYS_STATUS. Note this is the autopilot's view of ITS OWN
+        # link — the FC-to-air-unit serial hop — not the radio hop. Useful
+        # as a second opinion, not as the primary signal.
+        self._UAV_DROP_RATE_COMM = 0.0      # percent (SYS_STATUS sends c%)
+        self._UAV_ERRORS_COMM = 0
 
         # ── Serial connection ─────────────────────────────────────────────────
         self._SERIAL_CONNECTION = None
@@ -216,6 +250,64 @@ class SystemState:
     def is_UAV_Command_Connection_Available(self):
         return self._UAV_COMMAND_CONNECTION_STATUS
 
+    # ── Radio link health properties ──────────────────────────────────────────
+
+    @property
+    def get_UAV_Heartbeat_Age(self):
+        """Seconds since the last HEARTBEAT, or None if none has arrived.
+        Derived on every read rather than stored — see the note in
+        __init__ about why a stored age is a trap."""
+        if self._UAV_LAST_HEARTBEAT_TIME is None:
+            return None
+        return time.time() - self._UAV_LAST_HEARTBEAT_TIME
+
+    @property
+    def get_UAV_Link_State(self):
+        return self._UAV_LINK_STATE
+
+    @property
+    def is_UAV_Link_Healthy(self):
+        return self._UAV_LINK_STATE == "GREEN"
+
+    @property
+    def get_UAV_Link_Packet_Loss(self):
+        return self._UAV_LINK_PACKET_LOSS
+
+    @property
+    def is_Radio_Status_Available(self):
+        """False means the link never sent RADIO_STATUS, so every RSSI
+        field below is still its initial zero and must not be displayed
+        as a real reading."""
+        return self._UAV_RADIO_STATUS_SEEN
+
+    @property
+    def get_UAV_Link_RSSI(self):
+        return self._UAV_LINK_RSSI
+
+    @property
+    def get_UAV_Link_Remote_RSSI(self):
+        return self._UAV_LINK_REMRSSI
+
+    @property
+    def get_UAV_Link_Noise(self):
+        return self._UAV_LINK_NOISE
+
+    @property
+    def get_UAV_Link_Remote_Noise(self):
+        return self._UAV_LINK_REMNOISE
+
+    @property
+    def get_UAV_Link_TX_Buffer(self):
+        return self._UAV_LINK_TXBUF
+
+    @property
+    def get_UAV_Drop_Rate_Comm(self):
+        return self._UAV_DROP_RATE_COMM
+
+    @property
+    def get_UAV_Comm_Errors(self):
+        return self._UAV_ERRORS_COMM
+
     # ── Serial update methods ─────────────────────────────────────────────────
 
     def update_Serial_connection(self, connected=False, connection=None):
@@ -234,6 +326,45 @@ class SystemState:
         with self._lock:
             self._UAV_COMMAND_CONNECTION = connection
             self._UAV_COMMAND_CONNECTION_STATUS = connected
+
+    # ── Radio link health update methods ──────────────────────────────────────
+
+    def update_UAV_Heartbeat_Received(self, timestamp=None):
+        """Call on EVERY HEARTBEAT received, before any other processing.
+        Defaults to now; pass a timestamp only if you captured one earlier
+        in the receive path."""
+        with self._lock:
+            self._UAV_LAST_HEARTBEAT_TIME = (
+                time.time() if timestamp is None else timestamp)
+
+    def update_UAV_Link_State(self, state, packet_loss=None):
+        """state is "GREEN" | "AMBER" | "RED", already decided elsewhere.
+        This class does not own the thresholds."""
+        with self._lock:
+            self._UAV_LINK_STATE = state
+            if packet_loss is not None:
+                self._UAV_LINK_PACKET_LOSS = packet_loss
+
+    def update_UAV_Radio_Status(self, rssi=0, remrssi=0, noise=0,
+                                remnoise=0, rxerrors=0, txbuf=100):
+        """Call with the fields of a RADIO_STATUS message. Setting the
+        seen-flag here is what tells readers these values are real."""
+        with self._lock:
+            self._UAV_RADIO_STATUS_SEEN = True
+            self._UAV_LINK_RSSI = rssi
+            self._UAV_LINK_REMRSSI = remrssi
+            self._UAV_LINK_NOISE = noise
+            self._UAV_LINK_REMNOISE = remnoise
+            self._UAV_LINK_RXERRORS = rxerrors
+            self._UAV_LINK_TXBUF = txbuf
+
+    def update_UAV_Comm_Errors(self, drop_rate_comm=0, errors_comm=0):
+        """From SYS_STATUS. drop_rate_comm arrives as centi-percent on
+        the wire, so it is converted to plain percent here — do not
+        pre-divide at the call site."""
+        with self._lock:
+            self._UAV_DROP_RATE_COMM = drop_rate_comm / 100.0
+            self._UAV_ERRORS_COMM = errors_comm
 
     # ── UAV state update methods ──────────────────────────────────────────────
 
