@@ -87,6 +87,34 @@ AUTO_LAND_STATUS_BIT   = 7
 STATUS_IS_FLYING_BIT   = 20
 
 # ─────────────────────────────────────────────────────────────────────────────
+# HEARTBEAT payload (message type 0x22), PC -> STM32
+#
+# Two bytes, little-endian uint16:
+#
+#   bit  0     UAV connected flag
+#   bits 1-7   telemetry health, 0-100 %  (Herelink ground + air units)
+#   bits 8-14  UAV health,       0-100 %
+#   bit  15    spare
+#
+# Seven bits holds 0-127, so 0-100 fits with room to spare. Values are
+# clamped on encode — a health figure above 100 would otherwise overflow
+# into the neighbouring field rather than just looking wrong.
+#
+# Deliberately NOT part of STATUS: that carries UAV flight state (armed,
+# mode, flying) and is sent on change, whereas these are link-health
+# facts only meaningful while the heartbeat is flowing. Riding along here
+# costs no extra frame and refreshes at the beat rate.
+# ─────────────────────────────────────────────────────────────────────────────
+
+HB_UAV_CONNECTED_BIT   = 0
+
+HB_TELEM_HEALTH_SHIFT  = 1
+HB_UAV_HEALTH_SHIFT    = 8
+HB_HEALTH_MASK         = 0x7F   # 7 bits, 0-127
+
+HB_HEALTH_MAX          = 100    # clamp ceiling for both fields
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PAYLOAD_COMMAND register (message type 0x04), STM32 -> PC
 #
 # Own, independent bit numbering — deliberately NOT reusing names like
