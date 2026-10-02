@@ -1,0 +1,17 @@
+../Core/Src/transport.c:27:23:is_enabled	16	static
+../Core/Src/transport.c:32:20:deliver	16	static
+../Core/Src/transport.c:58:16:uart_init	8	static
+../Core/Src/transport.c:64:16:uart_send	16	static
+../Core/Src/transport.c:70:13:uart_poll	8	static
+../Core/Src/transport.c:82:6:HAL_UART_RxCpltCallback	24	static
+../Core/Src/transport.c:118:6:HAL_UART_ErrorCallback	16	static
+../Core/Src/transport.c:150:16:usb_init	4	static
+../Core/Src/transport.c:157:16:usb_send	24	static
+../Core/Src/transport.c:182:13:usb_poll	4	static
+../Core/Src/transport.c:193:6:transport_usb_on_rx	24	static
+../Core/Src/transport.c:215:6:transport_set_rx_handler	16	static
+../Core/Src/transport.c:220:9:transport_init	24	static
+../Core/Src/transport.c:237:9:transport_send	24	static
+../Core/Src/transport.c:249:6:transport_poll	16	static
+../Core/Src/transport.c:257:9:transport_enabled_mask	4	static
+../Core/Src/transport.c:262:9:transport_usb_ready	4	static

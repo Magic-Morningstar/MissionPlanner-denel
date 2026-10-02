@@ -36,6 +36,20 @@ HEARTBEAT_PERIOD_S = 0.1
 PROBE_TIMEOUT_USB_S = 1.0
 PROBE_TIMEOUT_BT_S  = 3.0
 
+# How long the supervisor waits for a connect attempt to actually finish
+# before treating it as failed.
+#
+# ConnectionManager.connect() can return before _do_connect() has run to
+# completion on its own thread. Without this wait the supervisor saw
+# is_connected() still False, counted a failure, and started a SECOND
+# attempt while the first was still probing — two threads then fought
+# over the same COM port, and on Windows the second serial.Serial() on an
+# already-open port simply fails.
+#
+# Must exceed the slowest probe: Bluetooth candidates take
+# PROBE_TIMEOUT_BT_S each, and discovery may try several ports in turn.
+CONNECT_SETTLE_S = 8.0
+
 # Reconnect backoff, in seconds. Starts quick because most drops are
 # transient (a replug, a brief stall), then backs off so a genuinely
 # absent panel doesn't burn CPU — and, more to the point, doesn't spend
@@ -185,6 +199,15 @@ class SerialHandler(ConnectionManager):
             except Exception:
                 logger.exception("SerialSupervisor: connect raised")
                 ok = False
+
+            # connect() may be asynchronous — wait for the attempt to
+            # settle rather than immediately declaring failure and
+            # launching another one onto the same port.
+            if ok:
+                deadline = time.monotonic() + CONNECT_SETTLE_S
+                while time.monotonic() < deadline and not self.is_connected():
+                    if self._supervisor_stop.wait(0.1):
+                        return
 
             if ok and self.is_connected():
                 logger.info("SerialSupervisor: connected.")

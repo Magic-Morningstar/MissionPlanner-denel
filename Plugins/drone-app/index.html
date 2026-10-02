@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Drone Digital Twin – Starter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #23272e;
+      color: #dfe3e8;
+      font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    }
+
+    /* Control panel in the top-left corner */
+    #panel {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      width: 270px;
+      padding: 16px;
+      background: rgba(30, 34, 41, 0.92);
+      border: 1px solid #3a414c;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    #panel h1 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+
+    button {
+      width: 100%;
+      padding: 9px;
+      border: 0;
+      border-radius: 4px;
+      background: #4a7fb5;
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.off { background: #4a515c; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #f0b34a; outline-offset: 2px; }
+
+    label { display: block; margin-top: 14px; }
+    input[type="range"] { width: 100%; margin-top: 4px; }
+
+    .box {
+      margin-top: 12px;
+      padding: 9px 10px;
+      background: #1a1d22;
+      border-radius: 4px;
+      font-size: 13px;
+      white-space: pre-line;
+    }
+    .error { color: #ff8a80; }
+    .hot   { color: #f0b34a; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <div id="panel">
+    <h1>Drone digital twin</h1>
+
+    <button id="spinBtn">Propellers spinning</button>
+
+    <label>
+      Motor 3 temperature: <span id="tempValue">45</span> °C
+      <input type="range" id="tempSlider" min="20" max="120" value="45">
+    </label>
+
+    <div class="box" id="selectedBox">Click a part of the drone to select it.</div>
+    <div class="box" id="statusBox">Loading model…</div>
+  </div>
+
+  <!-- Tells the browser where to download Three.js from (no install needed) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // =========================================================
+    // 1. SETTINGS — change these to match your model
+    // =========================================================
+    const MODEL_FILE = './drone_ready.glb'; // must be in the same folder as this file
+    const SPIN_AXIS  = 'y';  // if propellers wobble instead of spinning, try 'z' or 'x'
+    const SPIN_SPEED = 25;   // radians per second
+
+    // Spin direction of each propeller: 1 = one way, -1 = the other way
+    const PROP_DIRECTIONS = { prop_1: 1, prop_2: 1, prop_3: -1, prop_4: -1 };
+
+    // The part names we expect (the names you gave them in Blender)
+    const EXPECTED_PARTS = [
+      'prop_1', 'prop_2', 'prop_3', 'prop_4',
+      'motor_1', 'motor_2', 'motor_3', 'motor_4'
+    ];
+
+    // Colors used for highlighting
+    const SELECT_COLOR = 0x4a7fb5; // blue = selected by you
+    const ALERT_COLOR  = 0xff3b30; // red  = warning from a rule
+
+    // =========================================================
+    // 2. SCENE SETUP — the 3D world, camera, lights
+    // =========================================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x23272e);
+
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
+    camera.position.set(3, 2, 4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    // Mouse controls: left-drag = rotate, right-drag = pan, scroll = zoom
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5));
+    const sun = new THREE.DirectionalLight(0xffffff, 2);
+    sun.position.set(5, 10, 7);
+    scene.add(sun);
+    scene.add(new THREE.GridHelper(10, 20, 0x555b66, 0x363b44));
+
+    // =========================================================
+    // 3. APP STATE
+    // =========================================================
+    const parts = {};        // parts['motor_3'] → the 3D object for motor 3
+    let spinning = true;
+    let selected = null;     // the part the user clicked
+    let motor3Alert = false; // is the motor 3 rule currently active?
+
+    // Fake telemetry. Later, this object will be filled with real data from the drone.
+    const telemetry = { motor3Temp: 45 };
+
+    const statusBox   = document.getElementById('statusBox');
+    const selectedBox = document.getElementById('selectedBox');
+
+    // =========================================================
+    // 4. LOAD THE MODEL
+    // =========================================================
+    new GLTFLoader().load(
+      MODEL_FILE,
+
+      // Success
+      (gltf) => {
+        const model = gltf.scene;
+
+        // CAD models are often in millimetres, so they load huge or tiny.
+        // This scales the drone to about 3 units wide and centers it on the grid.
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        model.scale.setScalar(3 / Math.max(size.x, size.y, size.z));
+        box.setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+        model.position.y += (box.max.y - box.min.y) / 2; // sit on the grid
+
+        model.traverse((obj) => {
+          // Give every mesh its own copy of its material.
+          // CAD exports often share one material across all parts, so without this,
+          // highlighting one motor would color the entire drone.
+          if (obj.isMesh) {
+            obj.material = Array.isArray(obj.material)
+              ? obj.material.map((m) => m.clone())
+              : obj.material.clone();
+          }
+          // Remember the parts we care about, by name
+          if (EXPECTED_PARTS.includes(obj.name)) parts[obj.name] = obj;
+        });
+
+        scene.add(model);
+
+        // Report which parts were found, to help you check your renaming in Blender
+        const found   = EXPECTED_PARTS.filter((n) => parts[n]);
+        const missing = EXPECTED_PARTS.filter((n) => !parts[n]);
+        statusBox.textContent =
+          'Model loaded.\nFound: ' + (found.join(', ') || 'none') +
+          (missing.length ? '\nNot found: ' + missing.join(', ') : '');
+      },
+
+      // Progress (not used)
+      undefined,
+
+      // Error
+      (err) => {
+        console.error(err);
+        statusBox.classList.add('error');
+        statusBox.textContent =
+          'Could not load ' + MODEL_FILE + '.\n' +
+          'Check that the file is in the same folder as index.html, ' +
+          'that the name matches exactly, and that you opened this page with Live Server.';
+      }
+    );
+
+    // =========================================================
+    // 5. HIGHLIGHT HELPERS — make a part glow a color
+    // =========================================================
+    function setGlow(object, color, intensity) {
+      object.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m) => {
+          if (m.emissive) {
+            m.emissive.set(color);
+            m.emissiveIntensity = intensity;
+          }
+        });
+      });
+    }
+
+    function clearGlow(object) {
+      setGlow(object, 0x000000, 1);
+    }
+
+    // =========================================================
+    // 6. CLICK TO SELECT A PART (raycasting)
+    // =========================================================
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let downPos = null;
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      downPos = { x: e.clientX, y: e.clientY };
+    });
+
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      // Ignore it if the mouse moved — that was a drag to rotate, not a click
+      if (!downPos || Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 5) return;
+
+      // Convert the mouse position to the -1…1 range Three.js expects
+      pointer.x = (e.clientX / innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+
+      const hits = raycaster.intersectObjects(scene.children, true).filter((h) => h.object.isMesh);
+
+      if (selected) clearGlow(selected);
+      selected = null;
+
+      if (hits.length === 0) {
+        selectedBox.textContent = 'Click a part of the drone to select it.';
+        return;
+      }
+
+      // Walk up from the clicked mesh to see if it belongs to one of our named parts
+      const mesh = hits[0].object;
+      let part = mesh;
+      while (part && !parts[part.name]) part = part.parent;
+
+      selected = part || mesh;
+      setGlow(selected, SELECT_COLOR, 0.8);
+
+      selectedBox.textContent = part
+        ? 'Selected: ' + part.name
+        : 'Selected: ' + (mesh.name || '(no name)') +
+          '\nNot renamed yet. Find this name in the Blender Outliner to rename it.';
+    });
+
+    // =========================================================
+    // 7. UI CONTROLS
+    // =========================================================
+    const spinBtn = document.getElementById('spinBtn');
+    spinBtn.addEventListener('click', () => {
+      spinning = !spinning;
+      spinBtn.textContent = spinning ? 'Propellers spinning' : 'Propellers stopped';
+      spinBtn.classList.toggle('off', !spinning);
+    });
+
+    const tempSlider = document.getElementById('tempSlider');
+    const tempValue  = document.getElementById('tempValue');
+    tempSlider.addEventListener('input', () => {
+      telemetry.motor3Temp = Number(tempSlider.value);
+      tempValue.textContent = tempSlider.value;
+      tempValue.classList.toggle('hot', telemetry.motor3Temp > 80);
+    });
+
+    // =========================================================
+    // 8. ANIMATION LOOP — runs about 60 times per second
+    // =========================================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();     // seconds since last frame
+      const t  = clock.elapsedTime;    // seconds since start
+
+      // Animation 1: spin the propellers
+      if (spinning) {
+        for (const name in PROP_DIRECTIONS) {
+          const prop = parts[name];
+          if (prop) prop.rotation[SPIN_AXIS] += PROP_DIRECTIONS[name] * SPIN_SPEED * dt;
+        }
+      }
+
+      // Animation 2: a condition-based rule
+      // RULE: if motor 3 is hotter than 80 °C, make it pulse red
+      const motor3 = parts.motor_3;
+      if (motor3) {
+        if (telemetry.motor3Temp > 80) {
+          motor3Alert = true;
+          const pulse = 0.5 + 0.5 * Math.sin(t * 8); // goes 0 → 1 → 0 smoothly
+          setGlow(motor3, ALERT_COLOR, pulse * 1.5);
+        } else if (motor3Alert) {
+          // Rule just switched off: go back to normal (or blue if it's selected)
+          motor3Alert = false;
+          if (selected === motor3) setGlow(motor3, SELECT_COLOR, 0.8);
+          else clearGlow(motor3);
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Keep the view correct when the window is resized
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
