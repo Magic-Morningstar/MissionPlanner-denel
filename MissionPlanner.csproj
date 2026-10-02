@@ -741,10 +741,13 @@
     <None Include="plugins\DenelPythonLauncher.cs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="plugins\UAV_\**\*.py">
+    <None Include="plugins\UAV_\**\*.py" Exclude="plugins\UAV_\**\tests\**\*.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="plugins\UAV_\requirements.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="plugins\UAV_\mqtt_bridge\requirements.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="plugins\Misson_PlannerScripts\Heart.py">
