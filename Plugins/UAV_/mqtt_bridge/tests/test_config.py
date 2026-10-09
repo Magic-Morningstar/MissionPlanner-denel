@@ -230,3 +230,17 @@ def test_stdin_shutdown_is_off_by_default():
     assert DEFAULTS["STDIN_SHUTDOWN"] is False
     assert build_config().STDIN_SHUTDOWN is False
     assert build_config(cli={"STDIN_SHUTDOWN": True}).STDIN_SHUTDOWN is True
+
+
+def test_to_vehicle_expiry_is_the_value_the_team_chose():
+    """30 s, raised from 3 s after Phase 1c. Pinned so it cannot drift back.
+
+    3 s intermittently discarded legitimate commands on a stalling link, with
+    silence as the only symptom. 30 s is an interim bench/simulator setting, NOT
+    a flight setting: until the receive-side dwell check exists, this value is
+    the only bound on how stale a command can be when it reaches the aircraft.
+    Change it together with TO_VEHICLE_FAIL_OPEN, not on its own.
+    """
+    assert DEFAULTS["TO_VEHICLE_EXPIRY"] == 30
+    # Still overridable, which is how the A/B comparison was run.
+    assert build_config(env={ENV_PREFIX + "TO_VEHICLE_EXPIRY": "3"}).TO_VEHICLE_EXPIRY == 3

@@ -212,7 +212,7 @@ Settings worth understanding rather than just reading:
 | `CLEAN_START` / `SESSION_EXPIRY` | `True` / `0` | The primary stale-command defence: with no persistent session, the broker has nowhere to queue commands while the aircraft is offline. |
 | `MAX_QUEUED_MESSAGES` | `256` | paho's own default is `0`, meaning **unlimited**. On `to_vehicle` that is an unbounded backlog of stale commands. |
 | `KEEPALIVE` | `20` | An *ungraceful* drop is only noticed after roughly 1.5 × keepalive, so this is effectively the link-loss detection time (~30 s). Lower it for faster detection at the cost of more PINGREQ traffic on a metered link. Logged at startup. |
-| `TO_VEHICLE_EXPIRY` | `3` | Short, so a command that sat at the broker expires rather than arriving late. |
+| `TO_VEHICLE_EXPIRY` | `30` | Raised from 3 s after Phase 1c: 3 s intermittently discarded legitimate commands on a stalling link. Interim bench setting — until the dwell check exists this is the only bound on how stale a delivered command can be. |
 
 Credentials go in `secrets.env` next to `bridge_config.py` (gitignored, see
 `secrets.env.example`) or in the environment. Never commit a credential, key or
@@ -316,9 +316,19 @@ last-peer policy and logs peer changes.
   over real LTE before optimising.
 - **No TLS and no authentication.** The dev broker runs the Allow-All extension:
   any client may connect and publish or subscribe to anything. Dev machines only.
-- **Untested under latency.** Everything above runs at loopback speed, which
-  cannot show how Mission Planner's parameter and mission protocols behave at
-  150 ms+ round trips with jitter and loss.
+- **Mission upload breaks around 800 ms RTT**, with
+  `MAV_MISSION_INVALID_SEQUENCE` — ArduPilot re-requests an item before the reply
+  arrives and the transfer desynchronises. Comfortable to ~400 ms. Budget roughly
+  1.1 x RTT per waypoint. See `LINK-TESTING.md`.
+- **`TO_VEHICLE_EXPIRY` is 30 s, an interim setting.** 3 s intermittently
+  discarded legitimate commands on a stalling link (silence, not an error), so it
+  was raised. The cost: until the receive-side dwell check is built, a command
+  delayed by up to 30 s can still execute. Fine for bench and simulator work, not
+  a flight setting. See `LINK-TESTING.md` finding 3.
+- **Packet loss is tolerated well; latency is the real constraint.** Tested with
+  `tc netem` up to 5 % loss with no failures -- TCP absorbs it. The cost of loss
+  scales with RTT: 3 % loss at 200 ms made the parameter download 11x slower,
+  while 5 % loss at 25 ms barely registered. See `LINK-TESTING.md`.
 
 ## Open questions carried from the brief
 

@@ -64,9 +64,24 @@ DEFAULTS = {
     "QOS_TO_VEHICLE": 1,      # commands, params, missions must not be lost
     "QOS_STATUS": 1,
 
-    # Message expiry, seconds. Short by design -- see staleness handling.
+    # Message expiry, seconds.
     "FROM_VEHICLE_EXPIRY": 5,
-    "TO_VEHICLE_EXPIRY": 3,
+
+    # 30 s, raised from 3 s on 2026-10-09 (Taariq's call, interim).
+    #
+    # 3 s was too tight for cellular: Phase 1c found commands intermittently
+    # discarded at the broker on a stalling link, and the symptom was silence
+    # rather than an error -- the vehicle simply never received the request. See
+    # LINK-TESTING.md finding 3.
+    #
+    # Understand the trade before changing it. This value is the ONLY thing
+    # currently bounding how stale a command can be when it reaches the aircraft,
+    # because the receive-side dwell check (staleness layer 6) is not built yet.
+    # At 30 s a command delayed by up to half a minute can still execute. That is
+    # acceptable for simulator and bench work; it is NOT a flight setting, and it
+    # should be revisited together with TO_VEHICLE_FAIL_OPEN once the dwell check
+    # exists and can reject on measured age instead of on a blunt timeout.
+    "TO_VEHICLE_EXPIRY": 30,
 
     # Session. clean_start + session expiry 0 on the aircraft is the primary
     # stale-command defence: with no session there is nothing for the broker to

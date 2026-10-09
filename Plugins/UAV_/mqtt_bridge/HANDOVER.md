@@ -110,7 +110,7 @@ Each was found by testing, not by review — worth knowing they existed:
 
 | # | Question | Why it is not mine to decide |
 |---|---|---|
-| 1 | `TO_VEHICLE_FAIL_OPEN` default | A command of unknown age reaching an aircraft, versus one broker quirk disabling the whole command path. Both implemented; it is a config flag, logged at startup. **Team decision.** |
+| 1 | `TO_VEHICLE_FAIL_OPEN` default | A command of unknown age reaching an aircraft, versus one broker quirk disabling the whole command path. Both implemented; it is a config flag, logged at startup. **Team decision, still open.** Related: `TO_VEHICLE_EXPIRY` was raised 3 s -> 30 s on 2026-10-09 as an interim measure, which makes this decision more pressing rather than less — expiry is currently the only bound on delivered command age. |
 | 2 | Brief §9 Q1 — where the aircraft bridge runs | Decides the systemd unit's `After=`. Code assumes nothing: any pymavlink connection string works. |
 | 3 | Brief §9 Q2/Q3 — HiveMQ edition, hosting, sovereignty | Phase 3. |
 | 4 | Brief §9 Q4 — two GCS paths to one FC | Partly answered with data: the STM32 bridge presents `(255, 0)` and MP `(255, 190)`, and neither sends its own HEARTBEAT. The bridge counts frames per `(sysid, compid)`. |
