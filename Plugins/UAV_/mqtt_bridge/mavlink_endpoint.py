@@ -220,6 +220,11 @@ class UdpPeerEndpoint:
                     "to learn the peer)", self.name, self.host, self.port)
         return True
 
+    def fileno(self):
+        """Expose the socket so LocalHub can select across several peers."""
+        sock = self._sock
+        return sock.fileno() if sock is not None else -1
+
     def select(self, timeout):
         sock = self._sock
         if sock is None:

@@ -22,7 +22,14 @@ configuration, how to run the end-to-end test, and the known limitations.
  | aircraft_bridge |<---------->|  HiveMQ   |<---------->|   gcs_bridge    |
  | pub from_vehicle|            | topic     |            | pub to_vehicle  |
  | sub to_vehicle  |            | routing   |            | sub from_vehicle|
- +-----------------+            +-----------+            +-----------------+
+ +-----------------+            +-----------+            +--------+--------+
+                                                                   |
+                                             LocalHub fans out to every
+                                             local consumer, and merges
+                                             their commands back up:
+                                                      |            |
+                                            Mission Planner   main.py
+                                            (UDPCl 14570)     (STM32 panel)
 ```
 
 ---
@@ -212,6 +219,7 @@ Settings worth understanding rather than just reading:
 | `CLEAN_START` / `SESSION_EXPIRY` | `True` / `0` | The primary stale-command defence: with no persistent session, the broker has nowhere to queue commands while the aircraft is offline. |
 | `MAX_QUEUED_MESSAGES` | `256` | paho's own default is `0`, meaning **unlimited**. On `to_vehicle` that is an unbounded backlog of stale commands. |
 | `KEEPALIVE` | `20` | An *ungraceful* drop is only noticed after roughly 1.5 × keepalive, so this is effectively the link-loss detection time (~30 s). Lower it for faster detection at the cost of more PINGREQ traffic on a metered link. Logged at startup. |
+| `GCS_LOCAL_PEERS` | `bind:127.0.0.1:14570,send:127.0.0.1:14551` | Local consumers. `bind` = we listen (Mission Planner dials in); `send` = the peer listens (the STM32 panel is a `udpin:` server). Telemetry goes to all of them, commands from any of them merge upward. |
 | `TO_VEHICLE_EXPIRY` | `30` | Raised from 3 s after Phase 1c: 3 s intermittently discarded legitimate commands on a stalling link. Interim bench setting — until the dwell check exists this is the only bound on how stale a delivered command can be. |
 
 Credentials go in `secrets.env` next to `bridge_config.py` (gitignored, see
@@ -297,13 +305,16 @@ last-peer policy and logs peer changes.
   TCP retransmission over LTE, are not visible to any MQTT property. Measuring
   true end-to-end age needs clock synchronisation between aircraft and GCS, which
   is not available. The queue is bounded instead.
-- **The STM32 bridge is not fed.** `main.py` is a second MAVLink consumer on the
-  GCS and it currently gets nothing from this path. It needs telemetry *and*
-  commands, not either alone: `UAVCommandSender._do_connect()` blocks in
-  `_heartbeat()` until a vehicle HEARTBEAT arrives, and because its connection is
-  `udpin:`, `mavudp.write()` only sends to peers learned in `recv()` — so with no
-  inbound traffic its commands vanish into an empty client set with no error and
-  no log. Local fan-out is the next piece of work.
+- **The STM32 panel is fed on 14551**, verified end to end with the real
+  `main.py` (`UAVCommandSender connected.` with telemetry arriving only through
+  the tunnel, then commands flowing back up it). 14550 is deliberately avoided:
+  Mission Planner's AutoConnect binds it and does no heartbeat validation, so
+  telemetry sent there could promote its socket into a phantom second vehicle
+  link. Override with `--local-peers` to target a different port.
+- **Re-enabling `UAVStatePoller` needs a second port.** `MAVLINK_STATE_PORT` and
+  `MAVLINK_COMMAND_PORT` currently name the same one, which is only safe because
+  the poller's `connect()` is commented out. Two live workers on one port would
+  double-bind and split the datagrams silently.
 - **A dead tunnel is invisible to the Python side.** Its watchdog monitors thread
   liveness, not MAVLink liveness (`MavlinkWorker._loop` pets it unconditionally),
   so `is_UAV_Command_Connection_Available` stays `True` while nothing flows.

@@ -136,13 +136,17 @@ Each was found by testing, not by review — worth knowing they existed:
 
 ## 6. Next steps, in order
 
-1. **Phase 1b — STM32 fan-out** (`local_hub.py`). The Python panel bridge is a
-   second MAVLink consumer on the GCS and currently gets nothing. It needs
-   telemetry **and** commands, not either alone: `UAVCommandSender._do_connect()`
-   blocks in `_heartbeat()` until a vehicle HEARTBEAT arrives, and because its
-   connection is `udpin:`, `mavudp.write()` only sends to peers learned in
-   `recv()` — so with no inbound traffic its commands vanish silently. "MP works"
-   is not "the Denel GCS works".
+1. ~~**Phase 1b — STM32 fan-out**~~ **DONE 2026-10-09** (`local_hub.py`).
+   Verified against the real `main.py`: it logged `UAVCommandSender heartbeat
+   received — system 1 component 1` and `UAVCommandSender connected.` with
+   telemetry arriving only through the tunnel, then sent 296 commands up it while
+   a Mission Planner stand-in ran concurrently
+   (`sources[255/0=296 255/190=5]`, `inbound_dropped=0`, `write_failures=0`).
+   **One thing outstanding:** the fan-out targets 14551 (the reserved port) while
+   `state/system_config.py` still binds 14550, so the panel will not receive until
+   that one line changes. 14550 is avoided on purpose — AutoConnect binds it with
+   no heartbeat validation, so feeding it risks a phantom second vehicle link in
+   Mission Planner.
 2. **Phase 1c — LTE conditions.** `tc netem` on WSL `eth0`, aircraft bridge
    pointed at the host IP so only that hop degrades. Re-run the three MP tests at
    ~25/75/200 ms with jitter and loss. Deliverable: the latency at which each

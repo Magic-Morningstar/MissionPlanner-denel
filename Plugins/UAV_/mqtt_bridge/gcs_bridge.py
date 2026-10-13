@@ -27,8 +27,10 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mqtt_bridge import cli  # noqa: E402
+from mqtt_bridge.bridge_config import warn_about_contested_port  # noqa: E402
 from mqtt_bridge.bridge_core import BridgeBase  # noqa: E402
-from mqtt_bridge.mavlink_endpoint import EndpointClosed, UdpPeerEndpoint  # noqa: E402
+from mqtt_bridge.local_hub import LocalHub, parse_peer_specs  # noqa: E402
+from mqtt_bridge.mavlink_endpoint import EndpointClosed  # noqa: E402
 from mqtt_bridge.mqtt_link import MqttLink  # noqa: E402
 from mqtt_bridge.topics import TopicSet  # noqa: E402
 
@@ -52,8 +54,10 @@ class GcsBridge(BridgeBase):
 
     def __init__(self, cfg):
         topics = TopicSet(cfg.VEHICLE_ID, cfg.TOPIC_PREFIX)
-        host, port = cfg.gcs_bind_address()
-        endpoint = UdpPeerEndpoint(host, port, name="mp")
+        # One hub covering every local consumer, not just Mission Planner. The
+        # STM32 panel (main.py) is a second MAVLink client on this machine and
+        # needs telemetry as well as a command path -- see local_hub.py.
+        endpoint = LocalHub(parse_peer_specs(cfg.GCS_LOCAL_PEERS), name="local")
 
         super().__init__(
             cfg=cfg,
@@ -83,6 +87,11 @@ def build_parser():
     p.add_argument("--udp-bind", dest="GCS_UDP_BIND",
                    help="host:port to bind for Mission Planner (default "
                         "127.0.0.1:14570; avoid 14550-14559)")
+    p.add_argument("--local-peers", dest="GCS_LOCAL_PEERS",
+                   help="comma-separated kind:host:port list of local consumers, "
+                        "e.g. bind:127.0.0.1:14570,send:127.0.0.1:14551. "
+                        "'bind' = we listen (Mission Planner), 'send' = the peer "
+                        "listens (the STM32 panel)")
     return p
 
 
@@ -92,9 +101,21 @@ def main(argv=None):
     if cfg is None:
         return 2
 
-    host, port = cfg.gcs_bind_address()
-    logger.info("Mission Planner should connect with UDPCl to %s:%d "
-                "(start this bridge before MP)", host, port)
+    try:
+        peers = parse_peer_specs(cfg.GCS_LOCAL_PEERS)
+    except ValueError as exc:
+        logger.error("GCS_LOCAL_PEERS is invalid: %s", exc)
+        return 2
+
+    for kind, host, port in peers:
+        if kind == "bind":
+            logger.info("Mission Planner should connect with UDPCl to %s:%d "
+                        "(start this bridge before MP)", host, port)
+            warn_about_contested_port(port, what="the GCS bridge")
+        else:
+            logger.info("will fan telemetry out to %s:%d and accept its commands "
+                        "(the STM32 panel listens there)", host, port)
+
     try:
         GcsBridge(cfg).run_forever()
     except EndpointClosed as exc:

@@ -111,6 +111,22 @@ DEFAULTS = {
     # LAN-facing MAVLink injection surface.
     "GCS_UDP_BIND": "127.0.0.1:14570",
 
+    # Local consumers the GCS bridge fans telemetry out to, and merges commands
+    # from. Comma-separated "kind:host:port":
+    #   bind:  we listen, the peer dials in      (Mission Planner, UDPCl)
+    #   send:  the peer listens, we dial out     (main.py, a udpin: server)
+    #
+    # The panel peer targets 14551, NOT 14550, deliberately. 14550 is bound at
+    # startup by Mission Planner's AutoConnect, whose UDP inbound path does no
+    # heartbeat validation -- so telemetry sent there could promote AutoConnect's
+    # socket into a phantom second vehicle link. 14551 is the port CLAUDE.md
+    # reserves for the STM32 bridge and AutoConnect leaves free.
+    #
+    # For the panel to actually receive, state/system_config.py must point at the
+    # same port (it currently says 14550). That file belongs to the UAV_ author;
+    # until it changes, this peer sends into a closed port, which is harmless.
+    "GCS_LOCAL_PEERS": "bind:127.0.0.1:14570,send:127.0.0.1:14551",
+
     # Behaviour ------------------------------------------------------------
     # Re-frame each received payload to assert it is exactly one whole frame.
     # Costs microseconds and turns transport corruption into a counter instead
@@ -175,6 +191,7 @@ class BridgeConfig:
     MAX_INFLIGHT_MESSAGES: int
     AIRCRAFT_MAVLINK: str
     GCS_UDP_BIND: str
+    GCS_LOCAL_PEERS: str
     VERIFY_INBOUND_FRAMES: bool
     STDIN_SHUTDOWN: bool
     RECONNECT_MIN_DELAY: int

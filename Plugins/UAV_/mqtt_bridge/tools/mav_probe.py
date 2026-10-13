@@ -39,7 +39,12 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     print(f"connecting {args.connect}")
-    conn = mavutil.mavlink_connection(args.connect)
+    # Identify as Mission Planner does (255/190), not as pymavlink defaults
+    # (255/0) -- which are the STM32 panel's IDs. Sharing them makes the two
+    # indistinguishable in the bridge's per-(sysid, compid) counter, which is
+    # the evidence for the brief's open question 4.
+    conn = mavutil.mavlink_connection(args.connect, source_system=255,
+                                      source_component=190)
 
     # The bridge learns our address from the first datagram, so announce
     # ourselves rather than waiting silently. A GCS-role heartbeat is the
