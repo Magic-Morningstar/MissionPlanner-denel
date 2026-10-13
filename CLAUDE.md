@@ -212,7 +212,9 @@ STM32 → COM7 (binary serial packets) → main.py → udpin:0.0.0.0:14551 (stat
 ```
 As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_PORT` in `state/system_config.py` both point at the same shared UDP endpoint (`udpin:0.0.0.0:14551`) instead of the previous two separate TCP ports (`5762`/`5763`) — an intentional architecture change (enables Herelink digital-link compatibility). `SERIAL_PORT` (STM32 COM port) also now lives in `state/system_config.py` rather than being set elsewhere.
 
-**Startup ordering / connection resilience:** `DenelPythonLauncher.cs` auto-starts `main.py` as soon as the GCS plugin loads — this is typically *before* the operator has manually connected MissionPlanner to the vehicle, so nothing may be listening on `MAVLINK_CONNECTION` yet. `Mavlink_controller.initiate_Connection()` (`plugins/UAV_/mavlink/mavlink_contoller.py`) wraps `mavutil.mavlink_connection()` in a `try`/`except` retry loop (1s interval, `system_Print`-logged) instead of letting a refused connection raise uncaught — matching the existing STM32 serial-retry pattern in `main.py`'s read loop. There is no process-level watchdog (`DenelPythonLauncher.cs` does not restart `main.py` if it exits), so this in-script retry is the only thing standing between a cold-boot race and a permanently-dead bridge for the rest of the GCS session — do not remove it without adding an equivalent safeguard.
+**Startup ordering / connection resilience:** `DenelPythonLauncher.cs` auto-starts `main.py` as soon as the GCS plugin loads — typically *before* the operator has connected MissionPlanner to the vehicle, so nothing may be listening yet. The retry loop lives in `MavlinkWorker._connect_with_retry()` (`plugins/UAV_/mavlink/mavlink_worker.py`), which wraps `mavutil.mavlink_connection()` in `try`/`except` rather than letting a refused connection raise uncaught. (`mavlink/mavlink_contoller.py` no longer exists; `Mavlink_controller` is now a thin orchestrator in `mavlink/mavlink_handler.py` with no connection logic.) There is no process-level watchdog — `DenelPythonLauncher.cs` does not restart `main.py` if it exits — so this in-script retry is the only thing standing between a cold-boot race and a permanently-dead bridge for the rest of the session. Do not remove it without an equivalent safeguard.
+
+**The watchdog does not detect a dead link.** `state/watchdog.py` monitors *thread* liveness, not MAVLink liveness, and `MavlinkWorker._loop` pets it once per iteration regardless of whether any bytes arrived. So a severed MAVLink link leaves `is_UAV_Command_Connection_Available` reading `True` while commands go nowhere. Known gap, not yet addressed.
 
 **Files:**
 
@@ -226,7 +228,7 @@ As of the `hardware` branch merge, `MAVLINK_STATE_PORT` and `MAVLINK_COMMAND_POR
 | `plugins/UAV_/commands/` | Input translation: `intents.py`, `registry.py`, `translator.py` |
 | `plugins/UAV_/requirements.txt` | Pinned Python dependencies — ships in the release ZIP |
 | `plugins/UAV_/mavlink/` | Flight controllers: arms, RTL, auto-takeoff, manual, speed control (`mavlink/Services/Pre_Flight_Checks/` holds battery/flight/GPS pre-flight checks) |
-| `plugins/UAV_/serial_controller/` | Binary packet protocol: `serial_handler.py`, `packet_Parser.py`, `packet_builder.py` |
+| `plugins/UAV_/serial_controller/` | Binary packet protocol: `serial_handler.py`, plus `protocol/stream_parser.py`, `protocol/frame_builder.py`, `protocol/messages.py`, `protocol/registry.py` |
 | `plugins/UAV_/serial_controller/protocol/bit_definitions.py` | Centralised bitmask definitions |
 | `plugins/UAV_/state/system_state.py` | SystemState class — tracks all vehicle flags and computed properties |
 | `plugins/Misson_PlannerScripts/` | Legacy scripts (Heart.py) — kept for reference, no longer launched |
@@ -297,10 +299,58 @@ Get-Content -Path "C:\ProgramData\Denel GCS\denel_python.log" -Wait   # PowerShe
 writable regardless of where the ZIP was extracted, and it survives replacing the app folder on an
 upgrade. Do not "simplify" it back to the exe directory.
 
-**Known wart:** `controller.log` (Python's own `logging_config.py` output) does *not* follow this.
-`utils/logging_config.py` uses a bare relative `DEFAULT_LOG_FILE = "controller.log"`, so it lands in
-the working directory — `plugins\UAV_\` — and gets committed by accident. Owned by the UAV_ Python
-author; left alone deliberately.
+`controller.log` (Python's own output from `plugins/UAV_/logging_config.py` — package root, not
+`utils/`) lands in `plugins\UAV_\`. It used to be a bare relative `DEFAULT_LOG_FILE =
+"controller.log"`, resolved against whatever the working directory happened to be — fine under
+`DenelPythonLauncher` (it sets `WorkingDirectory`) but liable to land somewhere unwritable such as
+`System32` under any other launcher, killing the process with nothing logged to say why. It is now
+anchored to the module's own directory, with a `DENEL_LOG_DIR` override. `.gitignore` covers it.
+
+---
+
+### MAVLink-over-MQTT bridge (`plugins/UAV_/mqtt_bridge/`)
+
+A long-range / BVLOS **backup** link carrying raw MAVLink through an MQTT broker
+over the aircraft's LTE uplink. It does not replace Herelink. Two mirrored
+processes; MQTT payloads are raw MAVLink frame bytes, so nothing decodes or
+re-encodes and v2 signing survives end to end. Mission Planner needs no changes.
+
+Full docs live beside the code: `mqtt_bridge/README.md` (usage, config),
+`mqtt_bridge/HANDOVER.md` (state, decisions, open questions),
+`mqtt_bridge/LINK-TESTING.md` (behaviour under latency and loss).
+
+| Port | Owner | Notes |
+|---|---|---|
+| 1883 | HiveMQ broker | 8883 with TLS in Phase 3 |
+| **14550** | Mission Planner `AutoConnect` | **Contested — do not use.** Bound at MP startup and never released. Its UDP inbound path does *no* heartbeat validation, so anything sent there can promote the socket into a phantom extra vehicle. |
+| **14551** | STM32 panel (`main.py`) | Reserved. `AutoConnect.cs` disables MP's own 14551 entry to keep it free, and `state/system_config.py` binds it. |
+| 14552-14559 | nobody | Avoid: `MavlinkWorker._connect_with_retry` walks this range. |
+| **14570** | MQTT GCS bridge | Mission Planner connects here with **UDPCl** (not UDP). |
+
+Both .NET's `UdpClient` and pymavlink's `mavudp` set `SO_REUSEADDR`, so on Windows
+a second bind on a taken UDP port **succeeds** while datagrams reach only one
+socket, arbitrarily and with no error. That is why port ownership above is
+explicit, and why `UdpPeerEndpoint` deliberately does *not* set `SO_REUSEADDR`.
+
+**Local fan-out:** the GCS bridge feeds every local MAVLink consumer, not just
+Mission Planner (`mqtt_bridge/local_hub.py`). The STM32 panel needs telemetry
+*and* a command path, not either alone: `UAVCommandSender._do_connect()` blocks in
+`_heartbeat()` until a vehicle HEARTBEAT arrives, and because its connection is
+`udpin:`, `mavudp.write()` only sends to peers learned in `recv()` — with nothing
+inbound its commands vanish into an empty client set, silently.
+
+Run it (Mission Planner must be started *after* the GCS bridge):
+```powershell
+cd C:\MissionPlanner-denel\Plugins\UAV_
+python -u -m mqtt_bridge.aircraft_bridge --mavlink tcp:127.0.0.1:5760 --broker-host localhost --vehicle-id uav01
+python -u -m mqtt_bridge.gcs_bridge --broker-host localhost --vehicle-id uav01
+```
+Tests: `cd Plugins/UAV_ && python -m pytest`. Dependencies:
+`pip install -r plugins\UAV_\mqtt_bridge\requirements.txt` (adds `paho-mqtt`).
+
+**Not flight-ready.** No TLS, no broker authentication (the dev broker runs the
+Allow-All extension), and no receive-side staleness rejection. Mission upload
+desynchronises above ~800 ms RTT. See `LINK-TESTING.md`.
 
 ---
 
