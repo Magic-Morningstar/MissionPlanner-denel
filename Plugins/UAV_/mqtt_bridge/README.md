@@ -36,6 +36,24 @@ configuration, how to run the end-to-end test, and the known limitations.
 
 ## Status
 
+**Phase 2 acceptance passed 2026-10-13** (robustness):
+
+| Brief §7 Phase 2 | Result |
+|---|---|
+| 1. Kill/restart the broker, both bridges reconnect | pass — `docker restart hivemq`, both reconnected, traffic resumed |
+| 2. Drop/restore the FC, bridge recovers without restart | pass — **after fixing a real bug**, see below |
+| 3. Kill the aircraft bridge, `status/link` goes `offline` via Last Will | pass, retained |
+| 4. Stale command must NOT be delivered after reconnect | pass, with a positive control proving the path works |
+| 5. Clean shutdown publishes `offline`; metrics logged | pass |
+| 6. systemd unit + GCS launcher integration | done, both verified to compile/validate |
+
+Test 2 initially failed and exposed a genuine defect: a closed TCP socket reads
+as *readable* forever while pymavlink's `recv()` returns `b""` rather than
+raising, so the reader loop span at full speed and never noticed the flight
+controller had gone — nor reconnected when it returned. Fixed by treating
+"readable but empty" on a **stream** endpoint as EOF (never on a datagram one,
+where an empty read is unremarkable). Pinned by `test_eof_detection.py`.
+
 Phase 1 acceptance passed against ArduCopter SITL on 2026-10-02, with Mission
 Planner unmodified:
 
@@ -49,9 +67,8 @@ Planner unmodified:
 - SITL emitted `msgid11030`, which is in no dialect either side knows, and the
   tunnel carried all of it — the no-CRC-validation design working as intended.
 
-**Not yet implemented** (designed, deferred on purpose): Last Will / `status/*`
-topics, broker-dwell staleness rejection, the local fan-out that feeds the STM32
-bridge, TLS and broker authentication, and the Mission Planner launcher plugin.
+**Not yet implemented**: TLS and broker authentication (Phase 3), and the
+optional semantic JSON fan-out (Phase 4).
 
 **This is not flight-ready.** Everything above ran at loopback latency against a
 simulator, through a broker with the Allow-All extension enabled — any client on

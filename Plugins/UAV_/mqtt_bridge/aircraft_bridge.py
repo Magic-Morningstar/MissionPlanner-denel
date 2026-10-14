@@ -44,6 +44,8 @@ class AircraftBridge(BridgeBase):
     reader_thread_name = "FcReader"
     writer_thread_name = "FcWriter"
     endpoint_label = "aircraft"
+    # This side receives commands, so it is the side that checks their age.
+    check_staleness = True
 
     def __init__(self, cfg):
         topics = TopicSet(cfg.VEHICLE_ID, cfg.TOPIC_PREFIX)
@@ -58,6 +60,7 @@ class AircraftBridge(BridgeBase):
                 client_id=f"aircraft-bridge-{cfg.VEHICLE_ID}",
                 subscriptions=subscriptions,
                 on_frame=on_frame,
+                status_topic=topics.status_link,
             ),
             publish_topic=topics.from_vehicle,
             publish_qos=cfg.QOS_FROM_VEHICLE,

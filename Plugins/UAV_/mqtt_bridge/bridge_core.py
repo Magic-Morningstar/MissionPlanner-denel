@@ -22,9 +22,12 @@ import queue
 import signal
 import sys
 import threading
+import time
 
 from mqtt_bridge.framing import MavlinkFramer, frame_header
 from mqtt_bridge.mavlink_endpoint import EndpointClosed
+from mqtt_bridge.mqtt_link import original_expiry, remaining_expiry
+from mqtt_bridge.staleness import is_stale
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,9 @@ def _msgid_name(msgid):
 _SELECT_TIMEOUT = 0.1
 # How long a writer blocks on an empty queue before re-checking the stop flag.
 _QUEUE_TIMEOUT = 0.2
+# How long a stream endpoint may read empty-but-readable before we call it EOF.
+# Long enough not to trip on a momentary stall, short enough to reconnect fast.
+_EOF_GRACE = 2.0
 
 
 def put_drop_oldest(q, item, on_drop=None):
@@ -131,6 +137,8 @@ class BridgeBase:
         self.inbound_dropped = 0
         self.inbound_malformed = 0
         self.dropped_no_peer = 0
+        self.dropped_stale = 0
+        self.age_unknown = 0
         self.write_failures = 0
         self.publish_failures = 0
         # (sysid, compid) -> count. Dialect-free header arithmetic, diagnostics
@@ -268,14 +276,37 @@ class BridgeBase:
                 return
 
         datagram_mode = getattr(self.endpoint, "is_datagram", False)
+        empty_since = None
 
         while not self._stop.is_set():
             try:
                 if not self.endpoint.select(_SELECT_TIMEOUT):
+                    empty_since = None
                     continue
                 data = self.endpoint.recv()
                 if not data:
+                    # On a STREAM transport, "select says readable but there is
+                    # nothing to read" is EOF -- the far end closed. pymavlink
+                    # returns b"" rather than raising, and a closed socket reads
+                    # as readable forever, so without this the loop spins at full
+                    # speed and never notices the flight controller is gone.
+                    # Found by Phase 2 acceptance test 2, which this breaks.
+                    #
+                    # On a datagram transport an empty read is unremarkable, so
+                    # this must not apply there.
+                    if not datagram_mode:
+                        now = time.monotonic()
+                        if empty_since is None:
+                            empty_since = now
+                        elif now - empty_since > _EOF_GRACE:
+                            logger.warning("%s: endpoint at EOF for %.0fs "
+                                           "(the far end closed the connection)",
+                                           self.endpoint_label, _EOF_GRACE)
+                            empty_since = None
+                            if not self._recover_endpoint():
+                                return
                     continue
+                empty_since = None
 
                 # Datagram transports never split a frame across datagrams, so
                 # leftover bytes mean corruption and must not be carried into the
@@ -340,10 +371,30 @@ class BridgeBase:
 
     # ---- MQTT -> endpoint ------------------------------------------------
 
+    # Subclasses set this: only the side receiving COMMANDS checks staleness.
+    # Applying it to telemetry would drop perfectly useful late position reports.
+    check_staleness = False
+
     def _on_mqtt_frame(self, topic, payload, properties):
         """paho's network thread. One enqueue, then return. Never block here."""
         if self.cfg.VERIFY_INBOUND_FRAMES and not self._verify(topic, payload):
             return
+
+        if self.check_staleness:
+            stale, age, reason = is_stale(
+                original_expiry(properties), remaining_expiry(properties),
+                self.cfg.TO_VEHICLE_MAX_AGE, self.cfg.TO_VEHICLE_FAIL_OPEN)
+            if age is None:
+                self.age_unknown += 1
+                if self.age_unknown in (1, 10, 100, 1000):
+                    # Rate-limited: if the broker never forwards the property
+                    # this would otherwise log on every single command.
+                    logger.warning("command age not determinable (%s); "
+                                   "%d so far", reason, self.age_unknown)
+            if stale:
+                self.dropped_stale += 1
+                logger.warning("DROPPED a stale command: %s", reason)
+                return
         if not put_drop_oldest(self._inbound, payload, self._note_inbound_drop):
             pass   # counted in _note_inbound_drop
 
@@ -430,6 +481,8 @@ class BridgeBase:
             "inbound_dropped": self.inbound_dropped,
             "inbound_malformed": self.inbound_malformed,
             "dropped_no_peer": self.dropped_no_peer,
+            "dropped_stale": self.dropped_stale,
+            "age_unknown": self.age_unknown,
             "write_failures": self.write_failures,
             "publish_failures": self.publish_failures,
         }

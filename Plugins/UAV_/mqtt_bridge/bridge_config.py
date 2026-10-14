@@ -83,6 +83,30 @@ DEFAULTS = {
     # exists and can reject on measured age instead of on a blunt timeout.
     "TO_VEHICLE_EXPIRY": 30,
 
+    # Stale-command posture. Chosen 2026-10-13: availability-first.
+    #
+    #   MAX_AGE 30s   -- reject a command the broker held longer than this
+    #   FAIL_OPEN     -- if age cannot be measured at all, DELIVER it and log
+    #   REQUIRE_LINK  -- off: send commands even when the aircraft is known down
+    #
+    # This is the least protective of the three postures that were on the table,
+    # chosen deliberately so a degraded link does not silently swallow commands.
+    # The protection that remains is layer 1 (clean_start below), which is what
+    # actually stops a command queued during a dropout from arriving late.
+    #
+    # NOTE the dwell check measures BROKER DWELL ONLY -- not time in our own
+    # out-queue, and not network delay. See staleness.py.
+    "TO_VEHICLE_MAX_AGE": 30,
+    "TO_VEHICLE_FAIL_OPEN": True,
+    "REQUIRE_LINK_ONLINE_FOR_COMMANDS": False,
+
+    # Retained status topics, so a GCS connecting later immediately learns
+    # whether the aircraft bridge is up. Published 'online' on connect, and
+    # 'offline' both by the Last Will (ungraceful) and explicitly on clean
+    # shutdown -- a graceful DISCONNECT SUPPRESSES the Will, so without the
+    # explicit publish a clean exit would leave the status reading 'online'.
+    "PUBLISH_STATUS": True,
+
     # Session. clean_start + session expiry 0 on the aircraft is the primary
     # stale-command defence: with no session there is nothing for the broker to
     # queue commands into while the aircraft is offline.
@@ -185,6 +209,10 @@ class BridgeConfig:
     QOS_STATUS: int
     FROM_VEHICLE_EXPIRY: int
     TO_VEHICLE_EXPIRY: int
+    TO_VEHICLE_MAX_AGE: int
+    TO_VEHICLE_FAIL_OPEN: bool
+    REQUIRE_LINK_ONLINE_FOR_COMMANDS: bool
+    PUBLISH_STATUS: bool
     CLEAN_START: bool
     SESSION_EXPIRY: int
     MAX_QUEUED_MESSAGES: int

@@ -68,6 +68,7 @@ class GcsBridge(BridgeBase):
                 client_id=cli.gcs_client_id(cfg.VEHICLE_ID),
                 subscriptions=subscriptions,
                 on_frame=on_frame,
+                status_topic=topics.status_gcs,
             ),
             publish_topic=topics.to_vehicle,
             publish_qos=cfg.QOS_TO_VEHICLE,

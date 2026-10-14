@@ -13,6 +13,7 @@ from logging_config import setup_logging  # noqa: E402  (UAV_ package root)
 from mqtt_bridge.bridge_config import (  # noqa: E402
     load_config, resolve_log_path, warn_about_contested_port,
 )
+from mqtt_bridge.staleness import describe_posture  # noqa: E402
 from mqtt_bridge.topics import InvalidVehicleId, TopicSet  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,13 @@ def bootstrap(args, log_filename, role):
     logger.info("vehicle=%s broker=%s:%d keepalive=%ds (link loss detected in ~%ds)",
                 cfg.VEHICLE_ID, cfg.BROKER_HOST, cfg.BROKER_PORT,
                 cfg.KEEPALIVE, cfg.link_loss_detect_seconds)
+
+    # On the record at every start: the stale-command posture is a safety
+    # decision, so which way it is set must never have to be inferred.
+    if role == "aircraft":
+        logger.info("%s", describe_posture(cfg.TO_VEHICLE_MAX_AGE,
+                                           cfg.TO_VEHICLE_FAIL_OPEN,
+                                           cfg.REQUIRE_LINK_ONLINE_FOR_COMMANDS))
 
     if role == "gcs":
         _, port = cfg.gcs_bind_address()

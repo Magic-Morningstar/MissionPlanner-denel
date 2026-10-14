@@ -51,9 +51,11 @@ class MqttLink:
     MUST return immediately.
     """
 
-    def __init__(self, cfg, client_id, subscriptions, on_frame, on_connected=None):
+    def __init__(self, cfg, client_id, subscriptions, on_frame, on_connected=None,
+                 status_topic=None):
         self.cfg = cfg
         self.client_id = client_id
+        self.status_topic = status_topic
         self._subs = list(subscriptions)        # [(topic, qos), ...]
         self._on_frame = on_frame
         self._on_connected = on_connected
@@ -85,6 +87,13 @@ class MqttLink:
 
         if cfg.MQTT_USERNAME:
             self.client.username_pw_set(cfg.MQTT_USERNAME, cfg.MQTT_PASSWORD or None)
+
+        if status_topic and cfg.PUBLISH_STATUS:
+            # Retained, so a GCS connecting later immediately learns the state
+            # instead of waiting for the next change. No WillDelayInterval: the
+            # flip to offline should be immediate.
+            self.client.will_set(status_topic, b"offline",
+                                 qos=cfg.QOS_STATUS, retain=True)
 
         self._connect_props = Properties(PacketTypes.CONNECT)
         self._connect_props.SessionExpiryInterval = cfg.SESSION_EXPIRY
@@ -123,7 +132,23 @@ class MqttLink:
         self.client.loop_start()
 
     def stop(self):
-        """Disconnect cleanly and stop the network thread."""
+        """Disconnect cleanly and stop the network thread.
+
+        Publishes 'offline' explicitly first. This is NOT redundant with the Last
+        Will: MQTT suppresses the Will on a GRACEFUL disconnect, by design -- the
+        Will exists for the ungraceful case. Without this, a clean shutdown would
+        leave the retained status reading 'online' forever, which is exactly
+        backwards. wait_for_publish before disconnecting, or the DISCONNECT races
+        the PUBLISH and wins.
+        """
+        if self.status_topic and self.cfg.PUBLISH_STATUS and self._connected.is_set():
+            try:
+                info = self.client.publish(self.status_topic, b"offline",
+                                           qos=self.cfg.QOS_STATUS, retain=True)
+                info.wait_for_publish(timeout=2.0)
+                logger.info("published retained 'offline' to %s", self.status_topic)
+            except Exception:
+                logger.exception("could not publish 'offline' status")
         try:
             self.client.disconnect()
         except Exception:
@@ -167,6 +192,11 @@ class MqttLink:
                 logger.error("MQTT subscribe to %s failed: %s", topic, result)
             else:
                 logger.info("MQTT subscribed to %s (QoS %d)", topic, qos)
+
+        if self.status_topic and self.cfg.PUBLISH_STATUS:
+            client.publish(self.status_topic, b"online",
+                           qos=self.cfg.QOS_STATUS, retain=True)
+            logger.info("published retained 'online' to %s", self.status_topic)
 
         if self._on_connected:
             try:
