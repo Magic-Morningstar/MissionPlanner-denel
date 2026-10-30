@@ -36,6 +36,8 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 from paho.mqtt.subscribeoptions import SubscribeOptions
 
+from mqtt_bridge.tls import build_ssl_context, describe_transport
+
 logger = logging.getLogger(__name__)
 
 # Carries the publisher's original MessageExpiryInterval alongside the value the
@@ -74,6 +76,8 @@ class MqttLink:
         self.publish_refused_queue_full = 0
         self.received = 0
         self.callback_errors = 0
+        self.connect_failures = 0
+        self._consecutive_connect_failures = 0
 
         self.client = mqtt.Client(
             CallbackAPIVersion.VERSION2,
@@ -88,6 +92,16 @@ class MqttLink:
         if cfg.MQTT_USERNAME:
             self.client.username_pw_set(cfg.MQTT_USERNAME, cfg.MQTT_PASSWORD or None)
 
+        # TLS. None when TLS is off. When it is on, server certificate and
+        # hostname verification are always on -- there is deliberately no
+        # insecure mode (see tls.py). File paths were already checked in
+        # cli.bootstrap, so an exception here means a malformed file; it
+        # propagates on purpose, because not starting beats starting in
+        # plaintext.
+        ssl_context = build_ssl_context(cfg)
+        if ssl_context is not None:
+            self.client.tls_set_context(ssl_context)
+
         if status_topic and cfg.PUBLISH_STATUS:
             # Retained, so a GCS connecting later immediately learns the state
             # instead of waiting for the next change. No WillDelayInterval: the
@@ -99,6 +113,7 @@ class MqttLink:
         self._connect_props.SessionExpiryInterval = cfg.SESSION_EXPIRY
 
         self.client.on_connect = self._cb_connect
+        self.client.on_connect_fail = self._cb_connect_fail
         self.client.on_disconnect = self._cb_disconnect
         self.client.on_message = self._cb_message
 
@@ -116,9 +131,10 @@ class MqttLink:
         self._started = True
 
         logger.info("MQTT connecting to %s:%d as %s (MQTT 5, keepalive %ds -> "
-                    "ungraceful link loss detected in ~%ds)",
+                    "ungraceful link loss detected in ~%ds) over %s",
                     self.cfg.BROKER_HOST, self.cfg.BROKER_PORT, self.client_id,
-                    self.cfg.KEEPALIVE, self.cfg.link_loss_detect_seconds)
+                    self.cfg.KEEPALIVE, self.cfg.link_loss_detect_seconds,
+                    describe_transport(self.cfg))
 
         self.client.connect_async(
             self.cfg.BROKER_HOST,
@@ -177,6 +193,7 @@ class MqttLink:
             return
 
         self.connects += 1
+        self._consecutive_connect_failures = 0
         self._connected.set()
         logger.info("MQTT connected as %s (session_present=%s)",
                     self.client_id, connect_flags.session_present)
@@ -204,6 +221,35 @@ class MqttLink:
             except Exception:
                 self.callback_errors += 1
                 logger.exception("on_connected hook raised")
+
+    def _cb_connect_fail(self, client, userdata):
+        """A connection attempt failed before any CONNACK: TCP or TLS level.
+
+        paho catches these (ssl.SSLError is an OSError) inside its network
+        thread, logs them at DEBUG and retries forever, so without this a
+        certificate problem presents as a bridge that silently never connects.
+        paho does not pass the exception, so this names the likely causes and
+        points at mqtt_smoke, which connects synchronously and prints the exact
+        error. Logged on the 1st, 10th, 20th... consecutive failure so a long
+        outage does not flood the log.
+        """
+        self.connect_failures += 1
+        self._consecutive_connect_failures += 1
+        n = self._consecutive_connect_failures
+        if n != 1 and n % 10 != 0:
+            return
+        if self.cfg.TLS_ENABLED:
+            hint = ("With TLS on, the usual causes are: the wrong port (TLS is "
+                    "normally 8883), a broker certificate the configured CA does "
+                    "not trust, a hostname that does not match the certificate, "
+                    "or a wrong system clock (a Pi has no RTC).")
+        else:
+            hint = ("Usual causes: broker not running, wrong host or port, a "
+                    "firewall, or no network route.")
+        logger.warning("MQTT could not reach %s:%d (%d consecutive failed "
+                       "attempt(s), no CONNACK). %s Run mqtt_smoke with the same "
+                       "settings to see the exact error.",
+                       self.cfg.BROKER_HOST, self.cfg.BROKER_PORT, n, hint)
 
     def _cb_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         self._connected.clear()
@@ -285,6 +331,7 @@ class MqttLink:
     def counters(self):
         return {
             "mqtt_connects": self.connects,
+            "mqtt_connect_failures": self.connect_failures,
             "mqtt_disconnects": self.disconnects,
             "mqtt_published": self.published,
             "mqtt_received": self.received,

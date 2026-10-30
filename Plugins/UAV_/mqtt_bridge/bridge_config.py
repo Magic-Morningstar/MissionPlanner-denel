@@ -74,13 +74,14 @@ DEFAULTS = {
     # rather than an error -- the vehicle simply never received the request. See
     # LINK-TESTING.md finding 3.
     #
-    # Understand the trade before changing it. This value is the ONLY thing
-    # currently bounding how stale a command can be when it reaches the aircraft,
-    # because the receive-side dwell check (staleness layer 6) is not built yet.
+    # Understand the trade before changing it. In practice this value bounds how
+    # stale a command can be when it reaches the aircraft: the receive-side dwell
+    # check (staleness layer 6, Phase 2) exists, but TO_VEHICLE_MAX_AGE is also
+    # 30 and fails open, so it never rejects anything this expiry would not.
     # At 30 s a command delayed by up to half a minute can still execute. That is
     # acceptable for simulator and bench work; it is NOT a flight setting, and it
-    # should be revisited together with TO_VEHICLE_FAIL_OPEN once the dwell check
-    # exists and can reject on measured age instead of on a blunt timeout.
+    # should be revisited together with TO_VEHICLE_MAX_AGE and
+    # TO_VEHICLE_FAIL_OPEN.
     "TO_VEHICLE_EXPIRY": 30,
 
     # Stale-command posture. Chosen 2026-10-13: availability-first.
@@ -176,7 +177,9 @@ DEFAULTS = {
     "LOG_LEVEL": "INFO",
     "LOG_DIR": "",            # empty = resolve_log_path() decides
 
-    # TLS. Declared now so Phase 3 adds no new keys, but unused until then.
+    # TLS and broker credentials. Rules and validation live in tls.py: TLS on
+    # never falls back to plaintext, and verification cannot be disabled.
+    # TLS_CA_FILE empty = the system trust store (right for HiveMQ Cloud).
     "TLS_ENABLED": False,
     "TLS_CA_FILE": "",
     "TLS_CERT_FILE": "",

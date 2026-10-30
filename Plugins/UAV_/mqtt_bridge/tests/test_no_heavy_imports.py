@@ -35,6 +35,7 @@ print(",".join(leaked))
     "mqtt_bridge.framing",
     "mqtt_bridge.topics",
     "mqtt_bridge.bridge_config",
+    "mqtt_bridge.tls",
     "mqtt_bridge.mqtt_link",
     "mqtt_bridge.mavlink_endpoint",
     "mqtt_bridge.bridge_core",
@@ -52,7 +53,7 @@ def test_module_pulls_in_nothing_heavy(module):
 
 
 def test_pure_modules_import_without_paho_or_pymavlink():
-    """framing, topics and bridge_config must not need the third-party deps.
+    """framing, topics, bridge_config and tls must not need the third-party deps.
 
     Keeps the unit-testable core testable on a machine with nothing installed,
     and keeps the dependency boundary where the plan put it.
@@ -62,6 +63,7 @@ def test_pure_modules_import_without_paho_or_pymavlink():
         "for name in ('paho', 'pymavlink'):\n"
         "    sys.modules[name] = None\n"   # any import of these will now fail
         "import mqtt_bridge.framing, mqtt_bridge.topics, mqtt_bridge.bridge_config\n"
+        "import mqtt_bridge.tls\n"
         "print('ok')\n"
     )
     result = subprocess.run([sys.executable, "-c", probe], cwd=str(UAV_ROOT),

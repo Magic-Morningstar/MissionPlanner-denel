@@ -315,13 +315,25 @@ over the aircraft's LTE uplink. It does not replace Herelink. Two mirrored
 processes; MQTT payloads are raw MAVLink frame bytes, so nothing decodes or
 re-encodes and v2 signing survives end to end. Mission Planner needs no changes.
 
-Full docs live beside the code: `mqtt_bridge/README.md` (usage, config),
+Full docs live beside the code: `mqtt_bridge/README.md` (usage, config, TLS),
 `mqtt_bridge/HANDOVER.md` (state, decisions, open questions),
-`mqtt_bridge/LINK-TESTING.md` (behaviour under latency and loss).
+`mqtt_bridge/LINK-TESTING.md` (behaviour under latency and loss),
+`mqtt_bridge/broker/azure/README.md` (secured test broker on Azure).
+
+**Status (2026-10-30):** Phases 1-2 done. Phase 3 in progress: client-side TLS
+and credentials done (`tls.py`; flags `--tls`, `--tls-ca-file`, `--username`;
+password only from `secrets.env` or `DENEL_MQTT_MQTT_PASSWORD`, never a flag).
+A TLS-only HiveMQ with File RBAC users runs on Azure
+(`hivemq-broker.southafricanorth.cloudapp.azure.com:8883`), test data only. The
+bridge runs on the XBLink's Raspberry Pi (`/opt/denel-mqtt`, dependencies in a
+private `lib/` via `PYTHONPATH`, never system-wide) and has done a TLS round trip
+over LTE. How it receives the flight controller's MAVLink on the aircraft is
+still open.
 
 | Port | Owner | Notes |
 |---|---|---|
-| 1883 | HiveMQ broker | 8883 with TLS in Phase 3 |
+| 1883 | HiveMQ local dev broker | plaintext, Allow-All, dev only |
+| 8883 | HiveMQ Azure test broker | TLS only, File RBAC logins |
 | **14550** | Mission Planner `AutoConnect` | **Contested — do not use.** Bound at MP startup and never released. Its UDP inbound path does *no* heartbeat validation, so anything sent there can promote the socket into a phantom extra vehicle. |
 | **14551** | STM32 panel (`main.py`) | Reserved. `AutoConnect.cs` disables MP's own 14551 entry to keep it free, and `state/system_config.py` binds it. |
 | 14552-14559 | nobody | Avoid: `MavlinkWorker._connect_with_retry` walks this range. |
@@ -348,9 +360,10 @@ python -u -m mqtt_bridge.gcs_bridge --broker-host localhost --vehicle-id uav01
 Tests: `cd Plugins/UAV_ && python -m pytest`. Dependencies:
 `pip install -r plugins\UAV_\mqtt_bridge\requirements.txt` (adds `paho-mqtt`).
 
-**Not flight-ready.** No TLS, no broker authentication (the dev broker runs the
-Allow-All extension), and no receive-side staleness rejection. Mission upload
-desynchronises above ~800 ms RTT. See `LINK-TESTING.md`.
+**Not flight-ready.** Phase 3 negative tests incomplete; the local dev broker is
+open (Allow-All); stale-command settings (30 s expiry, fail-open) are interim;
+no real flight controller tested yet. Mission upload desynchronises above
+~800 ms RTT. See `LINK-TESTING.md` and `mqtt_bridge/HANDOVER.md`.
 
 ---
 

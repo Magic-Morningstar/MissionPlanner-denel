@@ -97,10 +97,12 @@ at the worst profiles. No surprises, which is itself worth knowing.
 1. **The link is comfortable to ~400 ms RTT** and unusable for missions beyond
    roughly 800 ms. Typical LTE (50–150 ms RTT) has ample margin.
 2. **`TO_VEHICLE_EXPIRY` raised 3 s -> 30 s** on 2026-10-09, interim. 3 s was
-   tight for cellular. This is a bench/simulator setting: with the dwell check
-   still unbuilt, expiry is the only bound on delivered command age, so 30 s
-   means a half-minute-old command can execute. Revisit alongside
-   `TO_VEHICLE_FAIL_OPEN` once the dwell check can reject on measured age.
+   tight for cellular. This is a bench/simulator setting: at the time the dwell
+   check was unbuilt, so expiry was the only bound on delivered command age, and
+   30 s means a half-minute-old command can execute. *(Update 2026-10-30: the
+   dwell check was added in Phase 2, but `TO_VEHICLE_MAX_AGE` is also 30 s and it
+   fails open, so the effective bound is unchanged.)* Revisit alongside
+   `TO_VEHICLE_FAIL_OPEN`.
 3. **Upload missions before relying on a degraded link**, or expect to retry.
    Mission transfer is the fragile protocol, not telemetry or parameters.
 4. **MQTT framing overhead is ~190 % on small frames** — a 36-byte topic plus
@@ -152,6 +154,13 @@ already round-trip bound and the retransmits hide inside the existing waits.
 The tunnel tolerates realistic cellular loss comfortably. **Latency, not loss,
 is the thing to design against** — and the one hard limit found anywhere in this
 work remains mission upload desynchronising at around 800 ms RTT.
+
+## Real LTE
+
+Everything above is emulated. The first real LTE use, on 2026-10-29, was an
+MQTT smoke test from the XBLink to the Azure broker (TLS, authenticated); no
+MAVLink yet. Real round-trip times and data usage are to be measured on the
+bench.
 
 ## What this did NOT test
 

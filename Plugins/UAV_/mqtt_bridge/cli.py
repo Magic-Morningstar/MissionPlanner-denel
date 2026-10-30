@@ -14,6 +14,9 @@ from mqtt_bridge.bridge_config import (  # noqa: E402
     load_config, resolve_log_path, warn_about_contested_port,
 )
 from mqtt_bridge.staleness import describe_posture  # noqa: E402
+from mqtt_bridge.tls import (  # noqa: E402
+    describe_transport, tls_config_problems, tls_config_warnings,
+)
 from mqtt_bridge.topics import InvalidVehicleId, TopicSet  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,26 @@ def add_common_arguments(parser):
                              "holds our stdin open (the Mission Planner launcher). "
                              "Do NOT use under systemd, which supplies /dev/null "
                              "and would make the bridge exit immediately.")
+    # TLS and credentials. There is deliberately NO --password flag: a command
+    # line is visible to every user via ps / Task Manager and lands in shell
+    # history. The password comes from secrets.env or DENEL_MQTT_MQTT_PASSWORD.
+    parser.add_argument("--tls", dest="TLS_ENABLED", action="store_true",
+                        default=None,
+                        help="connect with TLS (server certificate and hostname "
+                             "always verified). Normally used with "
+                             "--broker-port 8883")
+    parser.add_argument("--tls-ca-file", dest="TLS_CA_FILE",
+                        help="CA certificate (PEM) to verify the broker against. "
+                             "Default: the system trust store, which is what a "
+                             "public broker such as HiveMQ Cloud needs")
+    parser.add_argument("--tls-cert-file", dest="TLS_CERT_FILE",
+                        help="client certificate (PEM), for mutual TLS")
+    parser.add_argument("--tls-key-file", dest="TLS_KEY_FILE",
+                        help="client private key (PEM), for mutual TLS")
+    parser.add_argument("--username", dest="MQTT_USERNAME",
+                        help="broker username. The password is read from "
+                             "secrets.env or DENEL_MQTT_MQTT_PASSWORD, never "
+                             "from the command line")
     parser.add_argument("--log-level", dest="LOG_LEVEL",
                         choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--log-dir", dest="LOG_DIR")
@@ -82,9 +105,20 @@ def bootstrap(args, log_filename, role):
 
     for key, value in sorted(cfg.loggable().items()):
         logger.debug("config %s=%r", key, value)
+
+    # TLS problems stop the bridge: it never falls back to plaintext.
+    problems = tls_config_problems(cfg)
+    if problems:
+        for problem in problems:
+            logger.error("TLS configuration: %s", problem)
+        logger.error("refusing to start until the TLS settings above are fixed")
+        return None
+    for warning in tls_config_warnings(cfg):
+        logger.warning("%s", warning)
     logger.info("vehicle=%s broker=%s:%d keepalive=%ds (link loss detected in ~%ds)",
                 cfg.VEHICLE_ID, cfg.BROKER_HOST, cfg.BROKER_PORT,
                 cfg.KEEPALIVE, cfg.link_loss_detect_seconds)
+    logger.info("broker transport: %s", describe_transport(cfg))
 
     # On the record at every start: the stale-command posture is a safety
     # decision, so which way it is set must never have to be inferred.
