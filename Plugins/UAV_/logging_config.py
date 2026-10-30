@@ -22,9 +22,32 @@
 
 import logging
 import logging.handlers
+import os
 import sys
+from pathlib import Path
 
-DEFAULT_LOG_FILE = "controller.log"
+# Anchored to this file's directory, NOT a bare relative name.
+#
+# A bare "controller.log" lands in whatever the working directory happens to be.
+# That is fine when DenelPythonLauncher starts main.py (it sets
+# WorkingDirectory), but anything else -- a service, a scheduled task, a shortcut
+# -- can leave the CWD somewhere unwritable such as C:\Windows\System32, and the
+# process then dies on startup with nothing logged anywhere to say why.
+#
+# Resolving it here keeps the file exactly where it already appears in practice
+# (plugins/UAV_/controller.log, which .gitignore already covers) while removing
+# the dependence on who launched us. Override with DENEL_LOG_DIR if needed.
+def _default_log_file():
+    override = os.environ.get("DENEL_LOG_DIR")
+    directory = Path(override) if override else Path(__file__).resolve().parent
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        directory = Path(__file__).resolve().parent
+    return str(directory / "controller.log")
+
+
+DEFAULT_LOG_FILE = _default_log_file()
 
 # ── Level guidance (document this for your own future call sites) ─────────
 #   DEBUG    raw frames/packets, joystick & pot values, per-tick internals
