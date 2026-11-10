@@ -119,7 +119,15 @@ DEFAULTS = {
     # to_vehicle that is an unbounded stale-command backlog, so this is set from
     # the very first commit rather than left for a robustness phase.
     "MAX_QUEUED_MESSAGES": 256,
-    "MAX_INFLIGHT_MESSAGES": 20,
+    # QoS 1 publishes allowed on the wire without a PUBACK yet. MUST NOT exceed
+    # the broker's Receive Maximum (sent in CONNACK): a client that exceeds it is
+    # disconnected with "Receive maximum exceeded". HiveMQ's default is 10, and
+    # paho 2.1 does NOT read the broker's value, so this is set to match. 20 was
+    # harmless at loopback latency (PUBACKs came back instantly) but over the
+    # internet a burst of commands broke the GCS link in a reconnect loop
+    # (found 2026-11-10, first desk test through the Azure broker). MqttLink
+    # logs an ERROR at connect if the broker announces a lower value.
+    "MAX_INFLIGHT_MESSAGES": 10,
 
     # MAVLink endpoints ----------------------------------------------------
     # Any pymavlink connection string: serial:, udpin:, udpout:, tcp:. The

@@ -195,6 +195,7 @@ class MqttLink:
         self.connects += 1
         self._consecutive_connect_failures = 0
         self._connected.set()
+        self._check_receive_maximum(properties)
         logger.info("MQTT connected as %s (session_present=%s)",
                     self.client_id, connect_flags.session_present)
 
@@ -221,6 +222,27 @@ class MqttLink:
             except Exception:
                 self.callback_errors += 1
                 logger.exception("on_connected hook raised")
+
+    def _check_receive_maximum(self, properties):
+        """Warn if the broker allows fewer in-flight QoS 1 messages than we send.
+
+        paho 2.1 ignores the broker's Receive Maximum (CONNACK property) and
+        cannot change max_inflight_messages on an open connection. Exceeding
+        the broker's value gets this client disconnected with "Receive maximum
+        exceeded", and the reconnect loop that follows looks like a flaky
+        network. Returns True when the setting is safe.
+        """
+        server_max = getattr(properties, "ReceiveMaximum", None) if properties else None
+        if server_max is None:
+            return True     # not sent: the MQTT 5 default is 65535
+        if self.cfg.MAX_INFLIGHT_MESSAGES == 0 or self.cfg.MAX_INFLIGHT_MESSAGES > server_max:
+            logger.error(
+                "broker Receive Maximum is %d but MAX_INFLIGHT_MESSAGES is %d. "
+                "A burst of QoS 1 messages will get this client disconnected "
+                "('Receive maximum exceeded'). Set DENEL_MQTT_MAX_INFLIGHT_MESSAGES=%d "
+                "or lower.", server_max, self.cfg.MAX_INFLIGHT_MESSAGES, server_max)
+            return False
+        return True
 
     def _cb_connect_fail(self, client, userdata):
         """A connection attempt failed before any CONNACK: TCP or TLS level.

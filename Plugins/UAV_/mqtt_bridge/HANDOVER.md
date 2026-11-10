@@ -102,7 +102,8 @@ telemetry after every reconnect.
 
 Its default `max_queued_messages` is **0, meaning unlimited**. On `to_vehicle`
 (QoS 1) that is an unbounded backlog of stale commands. Set to 256 queued and
-20 in-flight from the first commit.
+10 in-flight (lowered from 20 on 2026-11-10: HiveMQ's Receive Maximum is 10,
+paho 2.1 ignores it, and exceeding it disconnects the client).
 
 ### The stdin shutdown watcher is opt-in
 

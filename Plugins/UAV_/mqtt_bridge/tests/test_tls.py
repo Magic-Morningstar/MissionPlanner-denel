@@ -216,3 +216,25 @@ def test_connect_failures_are_counted_and_logged_sparingly(caplog):
     assert len(lines) == 3                       # attempts 1, 10 and 20
     assert "certificate" in lines[0].getMessage()
     assert link.counters()["mqtt_connect_failures"] == 25
+
+
+# ---- broker Receive Maximum (found on the first desk test via Azure) -----
+
+class _Props:
+    def __init__(self, receive_maximum=None):
+        if receive_maximum is not None:
+            self.ReceiveMaximum = receive_maximum
+
+
+def test_default_inflight_fits_hivemq_receive_maximum():
+    assert 0 < cfg().MAX_INFLIGHT_MESSAGES <= 10
+
+
+def test_receive_maximum_check(caplog):
+    link = _link(cfg())
+    assert link._check_receive_maximum(None) is True
+    assert link._check_receive_maximum(_Props()) is True
+    assert link._check_receive_maximum(_Props(10)) is True
+    with caplog.at_level(logging.ERROR, logger="mqtt_bridge.mqtt_link"):
+        assert _link(cfg(MAX_INFLIGHT_MESSAGES=20))._check_receive_maximum(_Props(10)) is False
+    assert any("Receive Maximum" in r.getMessage() for r in caplog.records)
