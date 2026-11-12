@@ -1,11 +1,12 @@
 # MAVLink-over-MQTT bridge — handoff
 
-**Date:** 2026-10-30 · **Branch:** `MQTT` · **Head:** `b381d162a` plus uncommitted Phase 3 work
-**Status:** Phases 0, 1, 1b, 1c, 2 complete and committed. **Phase 3 (security) in progress:**
-client-side TLS/credentials done, secured test broker running on Azure, 2 of 5 negative tests passed.
-Bridge installed and tested on the real XBLink. **Uncommitted:** `tls.py`, `tests/test_tls.py`,
-changes to `mqtt_link.py`, `cli.py`, `bridge_config.py`, `tools/mqtt_smoke.py`, docs, and `broker/azure/`.
-**Tests:** 186 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
+**Date:** 2026-11-12 · **Branch:** `MQTT`
+**Status:** Phases 0, 1, 1b, 1c, 2 complete. **Phase 3 (security) in progress:** client-side
+TLS/credentials done, secured test broker running on Azure, 2 of 5 negative tests passed.
+**End to end with real hardware since 2026-11-11:** Cube Orange+ -> XBLink (our prototype
+aircraft computer, UART) -> LTE -> Azure -> GCS bridge -> Mission Planner + STM32 panel.
+**Direction (2026-11-10):** no XBStation cloud; own infrastructure (Azure for test, on-site later).
+**Tests:** 188 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
 
 Read `README.md` for day-to-day usage and the config reference, and
 `LINK-TESTING.md` for measured behaviour under latency and loss. This file is
@@ -431,6 +432,8 @@ Logs: `C:\ProgramData\Denel GCS\denel_mqtt_bridge_gcs.log` and
 | 1c — LTE characterisation | done, see `LINK-TESTING.md` |
 | 2 — robustness | done, all 6 acceptance tests |
 | 1d — first run on the XBLink | done 2026-10-28/29: smoke test and aircraft bridge on the Pi; TLS round trip over LTE to Azure |
+| 1e — desk test through Azure | done 2026-11-10: SITL + both bridges + Mission Planner over the TLS broker; found and fixed the Receive Maximum disconnect loop |
+| 1f — bench, real Cube | done 2026-11-11: Cube TELEM2 -> XBLink UART -> LTE -> Azure -> Mission Planner + STM32 panel; bridge runs as a boot service on the XBLink |
 | **3 — security (TLS, auth, ACLs)** | **in progress**: client side done; Azure broker with File RBAC done; 2 of 5 negative tests passed |
 | 4 — semantic JSON fan-out | optional, after 3 |
 
@@ -472,9 +475,10 @@ while a Mission Planner stand-in ran concurrently — `sources[255/0=296
 2. **Staleness protection is availability-first and interim.** With
    `TO_VEHICLE_EXPIRY=30` and fail-open, a command delayed up to 30 s can still
    execute. Deliberate, and flagged for the team to revisit.
-3. **No real flight controller yet.** MAVLink has only flowed with SITL. The
-   XBLink and real LTE have carried the smoke test and an idle aircraft bridge,
-   but not MAVLink from a Cube.
+3. **Bench only.** A real Cube has run end to end over LTE on the bench
+   (2026-11-11), but nothing has flown, the prototype aircraft computer is a
+   reused vendor unit with known security gaps, and LTE still depends on the
+   vendor's XBFirm.
 
 ### Phase 3 — the remaining work
 
@@ -499,13 +503,17 @@ complementary.
 ### Open questions — not for a Claude session to decide
 
 - `TO_VEHICLE_FAIL_OPEN` default (safety trade-off, team call).
-- Brief Q1: the bridge runs on the XBLink's Pi (verified). Still open: how it
-  receives the FC's MAVLink, since XBFirm most likely owns that link (local UDP
-  forward, mavlink-router, or replacing XBFirm's role). Needs XBStation. Decides
-  `--mavlink` and the systemd unit's `After=`.
-- XBLink: the vendor cellular service did not restart after a power cut on
-  2026-10-28 (reboot fixed it). Debian 11 past end of support, 243 pending
-  updates, own Wi-Fi hotspot on `wlan0`, root SSH. Raise with XBStation.
+- Brief Q1, prototype: the bridge runs on the XBLink's Pi and reads the Cube on
+  `/dev/serial0` (ttyS0) at 57600. XBFirm still runs, only to bring up LTE, with
+  its `serial_port` set to `ttyNONE` (backup `/root/general.ini.backup`). See
+  README *The XBLink as our prototype aircraft computer*. Production aircraft
+  computer not chosen.
+- Replacing XBFirm entirely needs our own LTE bring-up for the EG25-G at boot.
+- XBLink security: Wi-Fi hotspot on the vendor default password, vendor web page
+  gives a root terminal with no login, Debian 11 past end of support.
+- On-site infrastructure (management goal): a reachable endpoint for the
+  broker (public address or a private APN from the mobile operator), Denel's own
+  CA instead of Let's Encrypt, and a HiveMQ production licence.
 - Moving the broker off the personal student subscription for anything beyond
   test data.
 - Brief Q2/Q3: HiveMQ edition, hosting, and sovereignty/export-control

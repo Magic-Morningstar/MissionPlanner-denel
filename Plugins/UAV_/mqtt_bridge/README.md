@@ -51,8 +51,10 @@ configuration, how to run the end-to-end test, and the known limitations.
 **First run on real aircraft hardware, 2026-10-29:** the aircraft bridge and
 `mqtt_smoke` run on the XBLink's Raspberry Pi (Debian 11, aarch64, Python 3.9)
 and completed an authenticated TLS round trip to the Azure broker over LTE.
-No flight controller was attached: how the bridge gets MAVLink on the aircraft
-is still open (Q1 below).
+**Bench test with the real Cube Orange+, 2026-11-11:** Cube TELEM2 -> XBLink UART
+-> LTE -> Azure broker (TLS, File RBAC) -> GCS bridge -> Mission Planner and the
+STM32 panel. Telemetry, parameters and commands worked; about 65 frames/s from
+the Cube. Shown in an internal demo the same day.
 
 **Phase 2 acceptance passed 2026-10-13** (robustness):
 
@@ -97,8 +99,8 @@ and the optional semantic JSON fan-out (Phase 4).
 mostly through the local dev broker, which has the Allow-All extension enabled —
 any client that can reach it can send commands to the vehicle. The Azure test
 broker has TLS and per-user permissions, but the Phase 3 negative tests are not
-complete, nothing has run against a real flight controller, and the
-stale-command settings are interim. Passing Phase 1 proves the tunnel is
+complete, the real Cube has only been run on the bench (2026-11-11, not
+flown), and the stale-command settings are interim. Passing Phase 1 proves the tunnel is
 transparent; it does not make the link safe for an aircraft that can hurt
 someone.
 
@@ -120,6 +122,37 @@ Files the aircraft needs, and nothing else:
 ```
 mqtt_bridge/              logging_config.py        utils/connection_manager.py
 ```
+
+### The XBLink as our prototype aircraft computer (since 2026-11-10)
+
+Management decision 2026-11-10: the vendor's (XBStation) cloud will not be
+used; the programme builds its own infrastructure (Azure for testing, an
+on-site server later). The XBLink unit is reused as **our own prototype
+companion computer**. Current, bench-verified setup:
+
+| | |
+|---|---|
+| Cube link | TELEM2 wired to the Pi UART: `/dev/serial0` -> `/dev/ttyS0`, **57600** baud |
+| Bridge | systemd service `denel-mqtt-aircraft-bridge`, from `packaging/denel-mqtt-aircraft-bridge.xblink.service`; starts at boot, retries until LTE, clock and Cube are ready |
+| Credentials | `/opt/denel-mqtt/mqtt_bridge/secrets.env`, mode 600 |
+| XBFirm | **still running**, because it brings up LTE (stopping it took `wwan0` down). Told to release the UART: in `/var/snap/xbfirm/common/general.ini` both `serial_port=ttyS0` lines changed to `ttyNONE`. Backup: `/root/general.ini.backup`. Edit only with XBFirm stopped (`snap stop xbfirm`), as it rewrites the file on shutdown. |
+| Fallback | Cube on USB: `--mavlink /dev/ttyACM0,115200`, no XBFirm change needed |
+| Local access | Ethernet `192.168.144.100`, or the XBLink Wi-Fi hotspot at `10.0.0.1` (SSH key only) |
+
+Day-to-day:
+
+```
+systemctl status denel-mqtt-aircraft-bridge
+journalctl -u denel-mqtt-aircraft-bridge -f        # look for frames_out climbing
+systemctl restart denel-mqtt-aircraft-bridge
+```
+
+To undo the XBFirm change: `snap stop xbfirm`, copy the backup over
+`general.ini`, `snap start xbfirm`, and set the service back to USB.
+
+Known issues on the unit, for when it is fully taken over: the Wi-Fi hotspot
+uses the vendor's default password, and the vendor web page at port 80 opens a
+root terminal without a login. Debian 11 is past end of support.
 
 ### On the XBLink (aircraft side, tested 2026-10-28)
 
@@ -468,17 +501,16 @@ last-peer policy and logs peer changes.
 
 ## Open questions carried from the brief
 
-- **Q1, where the aircraft bridge runs:** partly answered. The XBLink itself is
-  a Raspberry Pi with an LTE modem, and the bridge runs on it (see *On the
-  XBLink*). Still open: how the bridge receives the flight controller's MAVLink,
-  since the vendor's XBFirm software most likely owns that link. Options are a
-  local UDP forward from XBFirm, sharing the link (e.g. mavlink-router), or the
-  bridge taking over XBFirm's role. Needs XBStation. `AIRCRAFT_MAVLINK` accepts
-  any pymavlink connection string, so the code does not depend on the answer;
-  only the systemd unit's `After=` does.
-- **XBLink after power loss:** on 2026-10-28 the vendor cellular service did not
-  restart by itself after a power cut (a reboot fixed it). A backup link must
-  survive a power cycle; raise with XBStation.
+- **Q1, where the aircraft bridge runs:** answered for the prototype. It runs
+  on the XBLink's Raspberry Pi and reads the Cube over the UART (see *The
+  XBLink as our prototype aircraft computer*). The production aircraft computer
+  is not yet chosen; the code does not depend on it.
+- **LTE without XBFirm:** XBFirm currently brings up the LTE connection. Fully
+  replacing it means bringing up the EG25-G data connection ourselves (for
+  example ModemManager or the Quectel connection manager) at boot.
+- **Power loss:** on 2026-10-28 cellular did not return after a power cut; on
+  2026-11-10 a reboot and a power pull both came back by themselves (LTE and
+  bridge). Keep testing it.
 - **Q4, two GCS paths to one flight controller:** partly answered already. The
   STM32 bridge presents `(sysid 255, compid 0)` and Mission Planner
   `(255, 190)` — pymavlink defaults, never overridden — and neither sends a

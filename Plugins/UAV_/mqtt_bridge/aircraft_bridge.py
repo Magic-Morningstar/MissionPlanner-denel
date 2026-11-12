@@ -78,7 +78,7 @@ def build_parser():
     cli.add_common_arguments(p)
     p.add_argument("--mavlink", dest="AIRCRAFT_MAVLINK",
                    help="pymavlink connection string for the flight controller "
-                        "(serial:/dev/ttyS1:57600, udpin:0.0.0.0:14571, tcp:host:5760)")
+                        "(/dev/ttyACM0,115200 for USB or /dev/ttyS1,57600 for serial, udpin:0.0.0.0:14571, tcp:host:5760; pymavlink has no 'serial:' prefix)")
     return p
 
 

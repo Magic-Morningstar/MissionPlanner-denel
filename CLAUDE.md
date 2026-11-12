@@ -320,15 +320,15 @@ Full docs live beside the code: `mqtt_bridge/README.md` (usage, config, TLS),
 `mqtt_bridge/LINK-TESTING.md` (behaviour under latency and loss),
 `mqtt_bridge/broker/azure/README.md` (secured test broker on Azure).
 
-**Status (2026-10-30):** Phases 1-2 done. Phase 3 in progress: client-side TLS
+**Status (2026-11-12):** Phases 1-2 done. Phase 3 in progress: client-side TLS
 and credentials done (`tls.py`; flags `--tls`, `--tls-ca-file`, `--username`;
 password only from `secrets.env` or `DENEL_MQTT_MQTT_PASSWORD`, never a flag).
 A TLS-only HiveMQ with File RBAC users runs on Azure
-(`hivemq-broker.southafricanorth.cloudapp.azure.com:8883`), test data only. The
-bridge runs on the XBLink's Raspberry Pi (`/opt/denel-mqtt`, dependencies in a
-private `lib/` via `PYTHONPATH`, never system-wide) and has done a TLS round trip
-over LTE. How it receives the flight controller's MAVLink on the aircraft is
-still open.
+(`hivemq-broker.southafricanorth.cloudapp.azure.com:8883`), test data only. No
+XBStation cloud; own infrastructure (on-site later). The XBLink unit is our
+prototype aircraft computer: the bridge runs there as a boot service
+(`/opt/denel-mqtt`, private `lib/` via `PYTHONPATH`) reading the Cube on the UART
+(`/dev/serial0`, 57600). Bench-verified end to end with a real Cube on 2026-11-11.
 
 | Port | Owner | Notes |
 |---|---|---|
@@ -362,7 +362,7 @@ Tests: `cd Plugins/UAV_ && python -m pytest`. Dependencies:
 
 **Not flight-ready.** Phase 3 negative tests incomplete; the local dev broker is
 open (Allow-All); stale-command settings (30 s expiry, fail-open) are interim;
-no real flight controller tested yet. Mission upload desynchronises above
+real Cube tested on the bench only, not flown. Mission upload desynchronises above
 ~800 ms RTT. See `LINK-TESTING.md` and `mqtt_bridge/HANDOVER.md`.
 
 ---

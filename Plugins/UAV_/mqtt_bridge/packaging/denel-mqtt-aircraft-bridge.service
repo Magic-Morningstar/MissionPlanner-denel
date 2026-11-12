@@ -42,7 +42,7 @@ WorkingDirectory=/opt/denel
 
 # Set --mavlink to match the variant chosen above. Examples:
 #   network: udpin:0.0.0.0:14571   udpout:192.168.1.10:14550   tcp:192.168.1.10:5760
-#   serial : serial:/dev/ttyS1:921600
+#   serial : /dev/ttyS1,921600   (device,baud -- pymavlink has no 'serial:' prefix)
 ExecStart=/opt/denel/venv/bin/python -u -m mqtt_bridge.aircraft_bridge \
     --mavlink udpin:0.0.0.0:14571 \
     --broker-host CHANGE-ME.example.com \
