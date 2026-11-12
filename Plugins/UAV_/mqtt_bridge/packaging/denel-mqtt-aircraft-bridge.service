@@ -1,0 +1,77 @@
+# Aircraft-side MAVLink-over-MQTT bridge.
+#
+# TEMPLATE -- two variants below, because where this runs is still an open
+# question (brief section 9, Q1): whether there is a companion computer at all,
+# and whether it reaches the flight controller over Ethernet or a serial port.
+# Pick one [Unit] block, set ExecStart, then:
+#
+#   sudo cp denel-mqtt-aircraft-bridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now denel-mqtt-aircraft-bridge
+#   journalctl -u denel-mqtt-aircraft-bridge -f
+#
+# Verify before installing:  systemd-analyze verify ./denel-mqtt-aircraft-bridge.service
+
+[Unit]
+Description=Denel MAVLink-over-MQTT aircraft bridge
+Documentation=file:/opt/denel/mqtt_bridge/README.md
+
+# Keep restarting indefinitely rather than giving up. A backup comms link that
+# stays dead after five bad starts is worse than one that keeps trying.
+# (This belongs in [Unit], not [Service] -- systemd-analyze verify catches it.)
+StartLimitIntervalSec=0
+
+# --- VARIANT A: the flight controller is reached over the network (udpin/udpout/tcp)
+After=network-online.target
+Wants=network-online.target
+
+# --- VARIANT B: the flight controller is on a serial port. Comment out variant A
+#     above and uncomment these. BindsTo stops the service when the device is
+#     unplugged, and starts it again when it returns.
+# After=dev-ttyS1.device
+# BindsTo=dev-ttyS1.device
+
+[Service]
+Type=simple
+User=denel
+Group=dialout
+
+WorkingDirectory=/opt/denel
+# Must be the directory CONTAINING mqtt_bridge/, so `-m mqtt_bridge...` resolves
+# and the bridge can import logging_config and utils/ alongside it.
+
+# Set --mavlink to match the variant chosen above. Examples:
+#   network: udpin:0.0.0.0:14571   udpout:192.168.1.10:14550   tcp:192.168.1.10:5760
+#   serial : /dev/ttyS1,921600   (device,baud -- pymavlink has no 'serial:' prefix)
+ExecStart=/opt/denel/venv/bin/python -u -m mqtt_bridge.aircraft_bridge \
+    --mavlink udpin:0.0.0.0:14571 \
+    --broker-host CHANGE-ME.example.com \
+    --broker-port 8883 \
+    --vehicle-id uav01
+
+# Do NOT add --stdin-shutdown here. systemd gives a service /dev/null on stdin,
+# which reads as immediate EOF, and the bridge would exit the instant it starts.
+# That flag exists only for the Mission Planner launcher, which holds the pipe
+# open. systemd stops the service with SIGTERM, which the bridge already handles.
+StandardInput=null
+
+Restart=always
+RestartSec=5
+
+# The bridge logs to its own rotating file as well; journal captures stdout.
+StandardOutput=journal
+StandardError=journal
+
+# Credentials come from an untracked file, never from this unit or the repo.
+EnvironmentFile=-/etc/denel/mqtt-bridge.env
+
+# Modest hardening. The bridge needs a network socket and possibly a serial
+# device, and nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/denel/mqtt_bridge/logs
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# Generated on the VM. Never commit.
+credentials.xml
+broker.env
+*.jks
+*.p12
+*.pem
+*.key

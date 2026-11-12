@@ -57,3 +57,10 @@ obj3/
 # RotatingFileHandler backups (controller.log.1 ... .5).
 controller.log
 controller.log.*
+
+# MAVLink-over-MQTT bridge (plugins/UAV_/mqtt_bridge/). Unlike controller.log
+# above, these paths ARE anchored: the bridge resolves its own log directory
+# (ProgramData on Windows, ./logs otherwise) instead of inheriting the CWD.
+/Plugins/UAV_/mqtt_bridge/logs/
+/Plugins/UAV_/mqtt_bridge/secrets.env
+/Plugins/UAV_/mqtt_bridge/packaging/offline-wheels/

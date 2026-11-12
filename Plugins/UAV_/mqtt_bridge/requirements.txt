@@ -1,0 +1,8 @@
+# Python dependencies for the MAVLink-over-MQTT bridge (plugins/UAV_/mqtt_bridge/).
+#   pip install -r requirements.txt
+#
+# Deliberately NOT a superset of ../requirements.txt: the aircraft-side bridge
+# runs headless, so PySide6 (needed by main.py's operator GUI) is not required
+# here. The GCS machine installs both files; the aircraft installs only this one.
+pymavlink==2.4.49
+paho-mqtt==2.1.0

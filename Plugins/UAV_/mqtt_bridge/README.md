@@ -1,0 +1,525 @@
+# MAVLink-over-MQTT bridge
+
+Carries MAVLink between the aircraft and the GCS through an MQTT broker, as a
+long-range / BVLOS **backup** path over the aircraft's LTE uplink. It does not
+replace the Herelink handheld link.
+
+The MQTT hop is meant to be invisible. To Mission Planner the GCS-side bridge is
+an ordinary MAVLink UDP peer; to the flight controller the aircraft-side bridge is
+an ordinary MAVLink link. MQTT payloads are **raw MAVLink frame bytes** — nothing
+here decodes or re-encodes, so MAVLink v2 signing survives end to end.
+
+Requirements are in `../mavlink-mqtt-bridge-brief.md`. This README covers setup,
+configuration, how to run the end-to-end test, and the known limitations.
+
+```
+ AIRCRAFT                        BROKER                        GCS
+
+ Flight controller                                      Mission Planner
+   |  ^                                                      ^  |
+   v  |  MAVLink (serial/UDP/TCP)              MAVLink (UDP, loopback) |  v
+ +-----------------+   MQTT 5   +-----------+   MQTT 5   +-----------------+
+ | aircraft_bridge |<---------->|  HiveMQ   |<---------->|   gcs_bridge    |
+ | pub from_vehicle|            | topic     |            | pub to_vehicle  |
+ | sub to_vehicle  |            | routing   |            | sub from_vehicle|
+ +-----------------+            +-----------+            +--------+--------+
+                                                                   |
+                                             LocalHub fans out to every
+                                             local consumer, and merges
+                                             their commands back up:
+                                                      |            |
+                                            Mission Planner   main.py
+                                            (UDPCl 14570)     (STM32 panel)
+```
+
+---
+
+## Status
+
+**Phase 3 in progress** (security), as of 2026-10-30:
+
+| Item | State |
+|---|---|
+| Client side: TLS, CA file, mutual TLS, username/password (`tls.py`) | done 2026-10-28, 26 new tests (186 total) |
+| Broker side: TLS-only HiveMQ with File RBAC users and topic ACLs | done 2026-10-29 on an Azure test VM, see `broker/azure/README.md` |
+| Negative test 1: wrong credentials refused | **pass** (from the XBLink over LTE) |
+| Negative test: a user cannot use topics outside its role | **pass** (aircraft user on the smoke topic) |
+| Negative tests 2-4: aircraft cannot publish `to_vehicle`, GCS cannot publish `from_vehicle`, vehicle A cannot reach vehicle B | not run; needs TLS options in `inject_command.py` and a second vehicle's users |
+| Negative test 5: untrusted CA refused | shown against a local test server; not yet repeated against the real broker |
+| Threat-model notes | not written |
+
+**First run on real aircraft hardware, 2026-10-29:** the aircraft bridge and
+`mqtt_smoke` run on the XBLink's Raspberry Pi (Debian 11, aarch64, Python 3.9)
+and completed an authenticated TLS round trip to the Azure broker over LTE.
+**Bench test with the real Cube Orange+, 2026-11-11:** Cube TELEM2 -> XBLink UART
+-> LTE -> Azure broker (TLS, File RBAC) -> GCS bridge -> Mission Planner and the
+STM32 panel. Telemetry, parameters and commands worked; about 65 frames/s from
+the Cube. Shown in an internal demo the same day.
+
+**Phase 2 acceptance passed 2026-10-13** (robustness):
+
+| Brief §7 Phase 2 | Result |
+|---|---|
+| 1. Kill/restart the broker, both bridges reconnect | pass — `docker restart hivemq`, both reconnected, traffic resumed |
+| 2. Drop/restore the FC, bridge recovers without restart | pass — **after fixing a real bug**, see below |
+| 3. Kill the aircraft bridge, `status/link` goes `offline` via Last Will | pass, retained |
+| 4. Stale command must NOT be delivered after reconnect | pass, with a positive control proving the path works |
+| 5. Clean shutdown publishes `offline`; metrics logged | pass |
+| 6. systemd unit + GCS launcher integration | done, both verified to compile/validate |
+
+Test 2 initially failed and exposed a genuine defect: a closed TCP socket reads
+as *readable* forever while pymavlink's `recv()` returns `b""` rather than
+raising, so the reader loop span at full speed and never noticed the flight
+controller had gone — nor reconnected when it returned. Fixed by treating
+"readable but empty" on a **stream** endpoint as EOF (never on a datagram one,
+where an empty read is unremarkable). Pinned by `test_eof_detection.py`.
+
+Phase 1 acceptance passed against ArduCopter SITL on 2026-10-02, with Mission
+Planner unmodified:
+
+- Telemetry, arm/disarm, mode changes, GUIDED takeoff, Fly-To-Here and RTL.
+- Mission **write, read-back and AUTO execution** — the strictest protocol the
+  tunnel carries, and the one that proves fidelity at the application level
+  rather than only at the frame level.
+- ~26,000 frames / 1 MB with `inbound_malformed=0`, `inbound_dropped=0` and
+  **zero BAD_DATA** reported by a pymavlink client, i.e. every frame arrived
+  byte-exact and CRC-valid.
+- SITL emitted `msgid11030`, which is in no dialect either side knows, and the
+  tunnel carried all of it — the no-CRC-validation design working as intended.
+
+**Phase 3, client side, implemented 2026-10-28**: TLS (`--tls`, verified
+against the system trust store or a CA file, optional mutual TLS) and
+username/password. See *TLS and broker credentials* below.
+
+**Not yet implemented**: the broker side of Phase 3 (replacing Allow-All with
+per-vehicle authentication and topic ACLs, plus the negative acceptance tests),
+and the optional semantic JSON fan-out (Phase 4).
+
+**This is not flight-ready.** The MAVLink tests above ran against a simulator,
+mostly through the local dev broker, which has the Allow-All extension enabled —
+any client that can reach it can send commands to the vehicle. The Azure test
+broker has TLS and per-user permissions, but the Phase 3 negative tests are not
+complete, the real Cube has only been run on the bench (2026-11-11, not
+flown), and the stale-command settings are interim. Passing Phase 1 proves the tunnel is
+transparent; it does not make the link safe for an aircraft that can hurt
+someone.
+
+---
+
+## Install
+
+```
+pip install -r requirements.txt
+```
+
+Needs `paho-mqtt` 2.x specifically — the code uses `CallbackAPIVersion.VERSION2`
+and MQTT 5 properties, neither of which exists in 1.x. The aircraft host does
+**not** need `../requirements.txt`: that pulls in PySide6 for the operator GUI,
+which a headless aircraft computer has no use for.
+
+Files the aircraft needs, and nothing else:
+
+```
+mqtt_bridge/              logging_config.py        utils/connection_manager.py
+```
+
+### The XBLink as our prototype aircraft computer (since 2026-11-10)
+
+Management decision 2026-11-10: the vendor's (XBStation) cloud will not be
+used; the programme builds its own infrastructure (Azure for testing, an
+on-site server later). The XBLink unit is reused as **our own prototype
+companion computer**. Current, bench-verified setup:
+
+| | |
+|---|---|
+| Cube link | TELEM2 wired to the Pi UART: `/dev/serial0` -> `/dev/ttyS0`, **57600** baud |
+| Bridge | systemd service `denel-mqtt-aircraft-bridge`, from `packaging/denel-mqtt-aircraft-bridge.xblink.service`; starts at boot, retries until LTE, clock and Cube are ready |
+| Credentials | `/opt/denel-mqtt/mqtt_bridge/secrets.env`, mode 600 |
+| XBFirm | **still running**, because it brings up LTE (stopping it took `wwan0` down). Told to release the UART: in `/var/snap/xbfirm/common/general.ini` both `serial_port=ttyS0` lines changed to `ttyNONE`. Backup: `/root/general.ini.backup`. Edit only with XBFirm stopped (`snap stop xbfirm`), as it rewrites the file on shutdown. |
+| Fallback | Cube on USB: `--mavlink /dev/ttyACM0,115200`, no XBFirm change needed |
+| Local access | Ethernet `192.168.144.100`, or the XBLink Wi-Fi hotspot at `10.0.0.1` (SSH key only) |
+
+Day-to-day:
+
+```
+systemctl status denel-mqtt-aircraft-bridge
+journalctl -u denel-mqtt-aircraft-bridge -f        # look for frames_out climbing
+systemctl restart denel-mqtt-aircraft-bridge
+```
+
+To undo the XBFirm change: `snap stop xbfirm`, copy the backup over
+`general.ini`, `snap start xbfirm`, and set the service back to USB.
+
+Known issues on the unit, for when it is fully taken over: the Wi-Fi hotspot
+uses the vendor's default password, and the vendor web page at port 80 opens a
+root terminal without a login. Debian 11 is past end of support.
+
+### On the XBLink (aircraft side, tested 2026-10-28)
+
+The XBLink is a vendor device (Raspberry Pi, Debian 11, aarch64, Python 3.9)
+whose own software uses the system Python. Do **not** `pip install` system-wide
+or `apt upgrade` there. Install the two dependencies into a private folder and
+point Python at it:
+
+```
+python3 -m pip install --target /opt/denel-mqtt/lib paho-mqtt==2.1.0 pymavlink==2.4.49
+# from the dev PC:
+scp -r mqtt_bridge root@192.168.144.100:/opt/denel-mqtt/
+scp ../logging_config.py root@192.168.144.100:/opt/denel-mqtt/
+# on the XBLink:
+cd /opt/denel-mqtt
+PYTHONPATH=/opt/denel-mqtt/lib python3 -m mqtt_bridge.tools.mqtt_smoke --host <broker> --tls --username <user>
+```
+
+Logs go to `/opt/denel-mqtt/mqtt_bridge/logs/`. Credentials go in
+`/opt/denel-mqtt/mqtt_bridge/secrets.env`, mode 600. Check the broker traffic
+really uses LTE with `ip route get <broker IP>` (expect `dev wwan0`): the XBLink
+also has the office cable on `eth0`.
+
+### Phase 0: check the target machine before relying on any of this
+
+A dependency probe tells you what is missing, not whether you are *allowed* to
+fix it. Run these on the real GCS machine, as the operator's own account, before
+building anything on top:
+
+1. `python --version` — must print a version. If it offers to open the Microsoft
+   Store, that is the Store stub, not a usable Python.
+2. `pip install -r requirements.txt` — and note whether it actually succeeds
+   under this machine's policies: outbound PyPI access, a proxy, TLS inspection,
+   admin rights, AppLocker, antivirus quarantining newly written `.pyd` files.
+3. `python -m mqtt_bridge.tools.mqtt_smoke --host <broker>` — proves an MQTT 5
+   CONNECT is accepted, that publish and subscribe are permitted, and that binary
+   payloads survive. A TCP port check proves none of those.
+4. Expect a Windows Firewall prompt the first time the GCS bridge binds its UDP
+   port. A non-admin operator may not be able to accept it.
+
+If step 2 is blocked, vendor the wheels instead:
+
+```
+pip download -r requirements.txt -d packaging/offline-wheels      # on a machine with access
+pip install --no-index --find-links packaging/offline-wheels -r requirements.txt
+```
+
+---
+
+## Running the end-to-end test
+
+Three terminals. **Start the GCS bridge before Mission Planner** — see the
+Mission Planner note below for why.
+
+```bash
+# 1. WSL: SITL, serving MAVLink on tcp:5760
+source ~/venv-ardupilot/bin/activate
+cd ~/ardupilot/ArduCopter && sim_vehicle.py -v ArduCopter --no-mavproxy
+
+# 2. WSL: aircraft bridge
+cd /mnt/c/MissionPlanner-denel/Plugins/UAV_
+~/venv-ardupilot/bin/python -u -m mqtt_bridge.aircraft_bridge \
+    --mavlink tcp:127.0.0.1:5760 --broker-host localhost --vehicle-id uav01
+```
+```powershell
+# 3. Windows: GCS bridge
+cd C:\MissionPlanner-denel\Plugins\UAV_
+python -u -m mqtt_bridge.gcs_bridge --broker-host localhost --vehicle-id uav01
+
+# 4. Windows: prove frames arrive (acceptance #1)
+python -m mqtt_bridge.tools.mav_probe --connect udpout:127.0.0.1:14570 --request-streams
+```
+
+`--request-streams` is what makes this a *bidirectional* test. A bare SITL emits
+only HEARTBEAT and TIMESYNC until something asks it for more, so without the flag
+you prove one direction. With it, the stream request travels GCS → broker →
+aircraft → SITL and the extra message types coming back are the vehicle's response
+to a command that crossed the tunnel. A healthy run looks like:
+
+```
+message types seen : 30
+sources (sysid/compid): 1/1=1511
+BAD_DATA frames    : 0
+```
+
+`BAD_DATA frames: 0` is the number that matters — it means every frame arrived
+byte-exact *and* CRC-valid, verified by pymavlink's parser rather than by us.
+
+### Two places a nonzero `bad_bytes` is expected, not a fault
+
+The counters are printed on clean shutdown. `out_bad_bytes` is normally 0, with
+two legitimate exceptions, both one-off at connect:
+
+- **A connect driven by `AutoConnect`** contributes exactly **1** — the lone
+  `0x00` NAT-punch byte that `AutoConnect.ProcessEntry()` sends on its outbound
+  paths. A *manual* UDPCl connect from the Mission Planner UI does **not** do
+  this: `UdpSerialConnect.Open()` sends no priming byte, so a hand-connected MP
+  leaves `out_bad_bytes` at 0 (confirmed in testing).
+- **Connecting to SITL over TCP** contributes a few dozen in a single
+  `bad_events=1` run (35 bytes in testing). Attaching to `tcp:5760` lands
+  mid-stream, so the partial frame in flight is discarded on resync. This is the
+  framer accounting for bytes it could not use, which is exactly its job.
+
+A `bad_events` count that keeps climbing during steady operation is the thing to
+investigate.
+
+### Shutting a bridge down
+
+`Ctrl+C`, or `SIGTERM`. **Not** stdin EOF unless you passed `--stdin-shutdown`:
+that is off by default on purpose, because "stdin is not a terminal" is equally
+true of a held-open pipe and of `/dev/null`. systemd supplies `/dev/null`, so an
+auto-arming stdin watcher makes the service exit the instant it starts — which is
+what happened the first time this was launched detached, with "launcher closed
+stdin" as the only clue. Only the Mission Planner launcher plugin, which holds the
+pipe open, should pass the flag.
+
+To use MAVProxy instead of a direct TCP connection, give it an output the bridge
+can bind against: `sim_vehicle.py -v ArduCopter --console --out=udpout:127.0.0.1:14571`
+and run the bridge with `--mavlink udpin:127.0.0.1:14571`.
+
+Broker health and message rates: HiveMQ Control Center at <http://localhost:8080>.
+
+### Connecting Mission Planner
+
+Use **UDPCl**, not UDP: host `127.0.0.1`, port `14570`.
+
+- `UDPCl` (`UdpSerialConnect`) dials out and returns immediately.
+- `UDP` (`UdpSerial`) *binds* a local port and blocks in a 500 ms poll loop until
+  a datagram arrives, so the Connect button hangs unless telemetry already flows.
+
+Connecting by hand, Mission Planner's first datagram is a real MAVLink frame, so
+`out_bad_bytes` stays at 0. (The single `0x00` priming byte belongs to
+`AutoConnect.ProcessEntry()`, not to the UI's connect path — so do not treat a 1
+there as expected, nor a 0 as a fault.)
+
+`UdpSerialConnect.Open()` never blocks **and never fails** (`VerifyConnected()` is
+an empty method), so pointing Mission Planner at a bridge that is not running
+produces a confidently "connected" MP with no data. Start the bridge first.
+
+---
+
+## Configuration
+
+Defaults live in `bridge_config.py` as plain `UPPER_SNAKE` constants. Precedence:
+
+```
+defaults  <  secrets.env  <  DENEL_MQTT_<KEY> environment  <  command-line flag
+```
+
+So `DENEL_MQTT_BROKER_HOST=10.0.0.5` overrides the default, and `--broker-host`
+overrides that. An unparseable value logs an ERROR naming the key and falls back
+to the default rather than refusing to start — one mistyped variable must not
+ground an aircraft bridge.
+
+Settings worth understanding rather than just reading:
+
+| Key | Default | Why it is set this way |
+|---|---|---|
+| `GCS_UDP_BIND` | `127.0.0.1:14570` | Loopback, never `0.0.0.0`: Mission Planner's UDP inbound paths do no heartbeat validation, so a wildcard bind on a ground station is a LAN-facing MAVLink injection surface. 14570 avoids the contested range below. |
+| `QOS_FROM_VEHICLE` | `0` | **Safety, not just bandwidth.** paho *discards* a QoS 0 publish while offline but *stores and re-sends* QoS ≥ 1 after reconnect. At QoS 1 every reconnect would deliver a burst of stale telemetry. |
+| `QOS_TO_VEHICLE` | `1` | Commands, parameters and mission items must not be silently lost. |
+| `CLEAN_START` / `SESSION_EXPIRY` | `True` / `0` | The primary stale-command defence: with no persistent session, the broker has nowhere to queue commands while the aircraft is offline. |
+| `MAX_QUEUED_MESSAGES` | `256` | paho's own default is `0`, meaning **unlimited**. On `to_vehicle` that is an unbounded backlog of stale commands. |
+| `KEEPALIVE` | `20` | An *ungraceful* drop is only noticed after roughly 1.5 × keepalive, so this is effectively the link-loss detection time (~30 s). Lower it for faster detection at the cost of more PINGREQ traffic on a metered link. Logged at startup. |
+| `GCS_LOCAL_PEERS` | `bind:127.0.0.1:14570,send:127.0.0.1:14551` | Local consumers. `bind` = we listen (Mission Planner dials in); `send` = the peer listens (the STM32 panel is a `udpin:` server). Telemetry goes to all of them, commands from any of them merge upward. |
+| `TO_VEHICLE_EXPIRY` | `30` | Raised from 3 s after Phase 1c: 3 s intermittently discarded legitimate commands on a stalling link. Interim bench setting. The receive-side dwell check exists (Phase 2), but with `TO_VEHICLE_MAX_AGE` also 30 it never fires, so in practice this expiry is the bound on how stale a delivered command can be. |
+
+Credentials go in `secrets.env` next to `bridge_config.py` (gitignored, see
+`secrets.env.example`) or in the environment. Never commit a credential, key or
+certificate.
+
+### TLS and broker credentials
+
+Both bridges and `mqtt_smoke` accept:
+
+| Flag | Config key | Notes |
+|---|---|---|
+| `--tls` | `TLS_ENABLED` | Server certificate **and** hostname are always verified. There is no insecure mode. TLS 1.2 minimum. |
+| `--tls-ca-file` | `TLS_CA_FILE` | Empty = the system trust store (right for HiveMQ Cloud). When set, it **replaces** the system store. |
+| `--tls-cert-file` / `--tls-key-file` | `TLS_CERT_FILE` / `TLS_KEY_FILE` | Mutual TLS. Optional. |
+| `--username` | `MQTT_USERNAME` | |
+| *(none)* | `MQTT_PASSWORD` | **Deliberately no flag**: command lines are visible to every user and land in shell history. Use `secrets.env` or `DENEL_MQTT_MQTT_PASSWORD`. `mqtt_smoke` prompts for it if neither is set. |
+
+`mqtt_smoke` uses `--ca-file`, `--cert-file`, `--key-file` and defaults the port
+to 8883 when `--tls` is given. The bridges do not change the port for you: pass
+`--broker-port 8883`.
+
+Startup rules:
+
+- A missing TLS file, or a key without a certificate, **refuses to start**. The
+  bridge never falls back to plaintext.
+- Certificate settings with TLS off also refuse to start -- almost certainly a
+  forgotten `--tls`.
+- Warnings, not refusals: TLS on port 1883, TLS off on 8883, a password with no
+  username, and a password sent without TLS to anything but loopback.
+- Every start logs one `broker transport:` line saying exactly what is in use.
+  It never contains the password.
+
+A bridge connects in the background and paho swallows TLS errors while
+retrying, so a certificate problem would otherwise look like a bridge that
+silently never connects. The bridges log `MQTT could not reach ...` on the 1st,
+10th, 20th... consecutive failure, with the likely causes. **For the exact
+error, run `mqtt_smoke` with the same settings** -- it connects synchronously
+and prints the precise reason (untrusted certificate, hostname mismatch, TLS
+into a plaintext port, refused credentials).
+
+Example, HiveMQ Cloud from the aircraft (password from the environment):
+
+```
+export DENEL_MQTT_MQTT_PASSWORD='...'
+python3 -m mqtt_bridge.tools.mqtt_smoke --host <cluster>.hivemq.cloud --tls --username xblink-test
+python3 -u -m mqtt_bridge.aircraft_bridge --broker-host <cluster>.hivemq.cloud \
+    --broker-port 8883 --tls --username xblink-test --vehicle-id uav01 --mavlink ...
+```
+
+Use the full cluster hostname, never an IP address: the certificate is issued
+for the name, so an IP fails hostname verification by design. On a Raspberry Pi,
+check `date` first if every handshake fails -- the Pi has no RTC, and a clock
+that has not been set by NTP makes every certificate look "not yet valid".
+
+### Ports: avoid 14550–14559 entirely
+
+| Port | Owner |
+|---|---|
+| 14550 | Mission Planner's `AutoConnect` binds it at startup and never releases it. Also what `state/system_config.py` currently asks the STM32 bridge to bind — a known conflict, tracked separately. |
+| 14551 | Reserved for the STM32 bridge (`AutoConnect` has a one-time migration that disables its own 14551 entry). |
+| 14552–14559 | Reachable by `MavlinkWorker._connect_with_retry`, which walks the whole range when a port is refused. |
+| **14570** | This bridge. |
+
+This matters more than it looks: both .NET's `UdpClient` and pymavlink's `mavudp`
+set `SO_REUSEADDR` before binding, so on Windows a **second bind succeeds** and
+unicast datagrams reach only one socket. The result is silently half-dead
+telemetry rather than a clean error. `UdpPeerEndpoint` deliberately does *not* set
+`SO_REUSEADDR`, so a clash here raises and is reported, and the bridge warns at
+startup if its configured port falls in the contested range.
+
+---
+
+## Tests
+
+```
+cd Plugins/UAV_ && python -m pytest
+```
+
+`test_framing.py` carries most of the weight. Framing is the only lossy component
+in the whole chain — MQTT payloads are opaque binary and a UDP datagram is atomic,
+so both hops preserve bytes by construction. Proving the framer byte-exact under
+arbitrary segmentation (chunk sizes 1, 2, 3, 7, 11, 64 and 4096 across a mixed
+corpus) therefore demonstrates tunnel integrity without needing a broker or SITL.
+
+Two tests exist specifically to stop someone "improving" the framer:
+`test_bad_crc_passes_through_unchanged` and `test_bad_crc_interop`, the latter
+showing pymavlink rejecting a frame that the tunnel must still carry.
+
+---
+
+## Design notes
+
+### Why the framer does not validate CRCs
+
+Verifying a MAVLink CRC requires `crc_extra` from the compiled dialect. If the
+flight controller's ArduPilot build and our pinned pymavlink disagree about any
+message's `crc_extra` — a routine consequence of upgrading one and not the other —
+every frame of that one message type would be silently discarded, permanently.
+
+A raw tunnel must have no opinion about payload semantics. The framer reads only
+the start byte, the length byte, and the incompat flags; it rejects reserved
+incompat bits (the one validity check that needs no dialect) and nothing else.
+Integrity is the endpoints' business, and authenticity is MAV_SIGNING's — both of
+which keep working precisely because the bytes are never touched.
+
+The cost: a garbage byte equal to `0xFD`/`0xFE` is read as a frame start and its
+bogus length can swallow the genuine frame behind it. That is self-correcting and
+visible in `bad_bytes`, whereas a dialect-mismatch drop is neither. On datagram
+transports `feed_datagram()` discards any leftover at the end of each datagram, so
+one bogus length cannot eat the following datagrams too.
+
+### Why not `mavudp` on the GCS side
+
+`mavudp.__init__` defaults `timeout=0` and `mavlink_connection()` never forwards a
+timeout, so `self.timeout` is always 0. In `mavudp.write()` the guard
+`self.timeout <= 0` is then permanently true: it sends to **every peer it has ever
+heard from**, and the stale-peer eviction branch below it is unreachable. Mission
+Planner reconnects on a fresh ephemeral port each time, so telemetry would be
+duplicated to every dead socket forever. `UdpPeerEndpoint` uses an explicit
+last-peer policy and logs peer changes.
+
+---
+
+## Known limitations
+
+- **Staleness protection is interim.** All three layers exist: `clean_start`
+  with no session (the main defence), message expiry on every command, and the
+  receive-side broker-dwell check (`staleness.py`). But expiry and
+  `TO_VEHICLE_MAX_AGE` are both 30 s and the check fails open, so a command up to
+  30 s old can still execute. A flight setting is a team decision.
+- **Measured age is not end-to-end age.** The dwell check measures broker dwell
+  only. Time spent in paho's own out-queue, and delay from
+  TCP retransmission over LTE, are not visible to any MQTT property. Measuring
+  true end-to-end age needs clock synchronisation between aircraft and GCS, which
+  is not available. The queue is bounded instead.
+- **The STM32 panel is fed on 14551**, verified end to end with the real
+  `main.py` (`UAVCommandSender connected.` with telemetry arriving only through
+  the tunnel, then commands flowing back up it). 14550 is deliberately avoided:
+  Mission Planner's AutoConnect binds it and does no heartbeat validation, so
+  telemetry sent there could promote its socket into a phantom second vehicle
+  link. Override with `--local-peers` to target a different port.
+- **Re-enabling `UAVStatePoller` needs a second port.** `MAVLINK_STATE_PORT` and
+  `MAVLINK_COMMAND_PORT` currently name the same one, which is only safe because
+  the poller's `connect()` is commented out. Two live workers on one port would
+  double-bind and split the datagrams silently.
+- **A dead tunnel is invisible to the Python side.** Its watchdog monitors thread
+  liveness, not MAVLink liveness (`MavlinkWorker._loop` pets it unconditionally),
+  so `is_UAV_Command_Connection_Available` stays `True` while nothing flows.
+- **QoS 1 can deliver duplicates.** Not deduplicated by design: a naive dedupe
+  drops legitimately repeated frames. QoS is configurable.
+- **MQTT framing costs ~190% on small frames.** The topic
+  `denel/uav/uav01/mavlink/from_vehicle` is 36 bytes; with the fixed header and
+  topic-length field that is 40 bytes of framing to carry a 21-byte HEARTBEAT.
+  MQTT 5 topic aliases reduce this to 4 bytes after the first publish. Measure
+  over real LTE before optimising.
+- **The local dev broker has no TLS and no authentication.** It runs the
+  Allow-All extension on plain 1883: any client that can reach it may connect
+  and publish or subscribe to anything, including `to_vehicle`, and it is
+  reachable from the whole dev network. Stop the container when not testing.
+  The Azure test broker (`broker/azure/`) is the secured one.
+- **Only `mqtt_smoke` and the two bridges support TLS and credentials.**
+  `inject_command.py`, `status_watch.py`, `link_test.py` and `link_shaper.py`
+  still assume a plaintext, open broker.
+- **The Azure test broker's certificate expires 2027-01-27.** Renewal is manual
+  (see `broker/azure/README.md`): certbot's auto-renew does not rebuild the Java
+  keystore HiveMQ reads.
+- **Mission upload breaks around 800 ms RTT**, with
+  `MAV_MISSION_INVALID_SEQUENCE` — ArduPilot re-requests an item before the reply
+  arrives and the transfer desynchronises. Comfortable to ~400 ms. Budget roughly
+  1.1 x RTT per waypoint. See `LINK-TESTING.md`.
+- **`TO_VEHICLE_EXPIRY` is 30 s, an interim setting.** 3 s intermittently
+  discarded legitimate commands on a stalling link (silence, not an error), so it
+  was raised. The cost: with the dwell check's `TO_VEHICLE_MAX_AGE` also at 30 s,
+  a command delayed by up to 30 s can still execute. Fine for bench and simulator work, not
+  a flight setting. See `LINK-TESTING.md` finding 3.
+- **Packet loss is tolerated well; latency is the real constraint.** Tested with
+  `tc netem` up to 5 % loss with no failures -- TCP absorbs it. The cost of loss
+  scales with RTT: 3 % loss at 200 ms made the parameter download 11x slower,
+  while 5 % loss at 25 ms barely registered. See `LINK-TESTING.md`.
+
+## Open questions carried from the brief
+
+- **Q1, where the aircraft bridge runs:** answered for the prototype. It runs
+  on the XBLink's Raspberry Pi and reads the Cube over the UART (see *The
+  XBLink as our prototype aircraft computer*). The production aircraft computer
+  is not yet chosen; the code does not depend on it.
+- **LTE without XBFirm:** XBFirm currently brings up the LTE connection. Fully
+  replacing it means bringing up the EG25-G data connection ourselves (for
+  example ModemManager or the Quectel connection manager) at boot.
+- **Power loss:** on 2026-10-28 cellular did not return after a power cut; on
+  2026-11-10 a reboot and a power pull both came back by themselves (LTE and
+  bridge). Keep testing it.
+- **Q4, two GCS paths to one flight controller:** partly answered already. The
+  STM32 bridge presents `(sysid 255, compid 0)` and Mission Planner
+  `(255, 190)` — pymavlink defaults, never overridden — and neither sends a
+  HEARTBEAT of its own. The bridge counts frames per `(sysid, compid)` so the
+  decision can be made on data. It deliberately does **not** filter: that would
+  break transparency.
+- **Q2, Q3:** File RBAC is in use on the test broker. The test broker is a
+  self-managed HiveMQ (trial licence) on an Azure VM in South Africa North, on a
+  personal student subscription, for **test data only**. Production edition,
+  hosting and sovereignty remain open.
+- **Q5, Q6** (LTE bandwidth budget, which commands the backup link may carry)
+  remain open. Real LTE measurements are next, on the bench.

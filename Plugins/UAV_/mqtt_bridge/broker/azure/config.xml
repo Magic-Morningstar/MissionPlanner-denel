@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!--
+  HiveMQ broker config for the Azure test VM (MAVLink-over-MQTT bridge, Phase 3).
+
+  Mounted read-only over /opt/hivemq/conf/config.xml in the hivemq/hivemq4 container.
+
+  - ONE listener: TLS on 8883. There is deliberately no plaintext 1883 and no
+    websocket listener; the image's defaults for those are replaced by this file.
+  - The keystore password is NOT in this file. HiveMQ fills in ENV placeholders
+    from the container environment, which comes from a chmod-600 env file on
+    the VM (see README.md). WARNING: HiveMQ substitutes placeholders inside
+    comments too, so never write the placeholder syntax in a comment here: an
+    unknown name stops the broker from starting.
+  - The Control Center listens on 8080 inside the container, but docker
+    publishes it on the VM's 127.0.0.1 only. Reach it through an SSH tunnel.
+  - Authentication and topic permissions come from the File RBAC extension.
+    The allow-all extension is removed at start (HIVEMQ_ALLOW_ALL_CLIENTS=false).
+    With no working security extension HiveMQ denies every client, so a broken
+    RBAC install fails closed, not open.
+-->
+<hivemq xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="config.xsd">
+
+    <listeners>
+        <tls-tcp-listener>
+            <port>8883</port>
+            <bind-address>0.0.0.0</bind-address>
+            <name>tls-internet</name>
+            <tls>
+                <keystore>
+                    <path>/opt/hivemq/certs/broker.jks</path>
+                    <password>${ENV:KEYSTORE_PASSWORD}</password>
+                    <private-key-password>${ENV:KEYSTORE_PASSWORD}</private-key-password>
+                </keystore>
+                <protocols>
+                    <protocol>TLSv1.3</protocol>
+                    <protocol>TLSv1.2</protocol>
+                </protocols>
+                <!-- Username/password for now. Mutual TLS (client certificates)
+                     is a later step: REQUIRED plus a truststore. -->
+                <client-authentication-mode>NONE</client-authentication-mode>
+            </tls>
+        </tls-tcp-listener>
+    </listeners>
+
+    <control-center>
+        <listeners>
+            <http>
+                <port>8080</port>
+                <bind-address>0.0.0.0</bind-address>
+            </http>
+        </listeners>
+    </control-center>
+</hivemq>
