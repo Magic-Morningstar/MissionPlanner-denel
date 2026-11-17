@@ -154,6 +154,28 @@ Known issues on the unit, for when it is fully taken over: the Wi-Fi hotspot
 uses the vendor's default password, and the vendor web page at port 80 opens a
 root terminal without a login. Debian 11 is past end of support.
 
+### On the GCS machine (Mission Planner starts the bridge)
+
+Used on the real GCS since 2026-11-12. Install the Denel MP release build (it
+ships `mqtt_bridge/`, both `requirements.txt` files and the launcher plugin),
+then in `<MP>\plugins\UAV_`:
+
+```
+pip install -r requirements.txt
+pip install -r mqtt_bridge\requirements.txt
+python -m mqtt_bridge.tools.mqtt_smoke --host <broker> --tls --username smoke-test
+```
+
+Create `mqtt_bridge\secrets.env` with **all** the settings (the launcher passes
+none on the command line): `BROKER_HOST`, `BROKER_PORT=8883`, `TLS_ENABLED=true`,
+`VEHICLE_ID`, `MQTT_USERNAME`, `MQTT_PASSWORD` (template:
+`secrets.env.example`), restrict it to the operator account
+(`icacls secrets.env /inheritance:r /grant:r "%USERNAME%:R" "Administrators:F"`),
+and create an empty `mqtt_bridge\enabled.txt` to switch the launcher on. Start
+Mission Planner, then connect with UDPCl `127.0.0.1:14570`. Logs:
+`C:\ProgramData\Denel GCS\denel_mqtt_bridge_launcher.log` and
+`denel_mqtt_bridge_gcs.log`.
+
 ### On the XBLink (aircraft side, tested 2026-10-28)
 
 The XBLink is a vendor device (Raspberry Pi, Debian 11, aarch64, Python 3.9)
@@ -467,6 +489,10 @@ last-peer policy and logs peer changes.
 - **A dead tunnel is invisible to the Python side.** Its watchdog monitors thread
   liveness, not MAVLink liveness (`MavlinkWorker._loop` pets it unconditionally),
   so `is_UAV_Command_Connection_Available` stays `True` while nothing flows.
+- **paho's internal wake-up channel can break (cause unknown).** Once, on the
+  XBLink, every publish failed with `BrokenPipeError` while the bridge stayed
+  connected. The bridge now repairs it in place and counts it as
+  `mqtt_wakeup_repairs`; see HANDOVER.md, known gaps.
 - **QoS 1 can deliver duplicates.** Not deduplicated by design: a naive dedupe
   drops legitimately repeated frames. QoS is configurable.
 - **MQTT framing costs ~190% on small frames.** The topic

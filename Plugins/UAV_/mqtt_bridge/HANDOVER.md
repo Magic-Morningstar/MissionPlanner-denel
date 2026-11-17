@@ -1,12 +1,14 @@
 # MAVLink-over-MQTT bridge — handoff
 
-**Date:** 2026-11-12 · **Branch:** `MQTT`
+**Date:** 2026-11-17 · **Branch:** `MQTT`
 **Status:** Phases 0, 1, 1b, 1c, 2 complete. **Phase 3 (security) in progress:** client-side
 TLS/credentials done, secured test broker running on Azure, 2 of 5 negative tests passed.
 **End to end with real hardware since 2026-11-11:** Cube Orange+ -> XBLink (our prototype
 aircraft computer, UART) -> LTE -> Azure -> GCS bridge -> Mission Planner + STM32 panel.
 **Direction (2026-11-10):** no XBStation cloud; own infrastructure (Azure for test, on-site later).
-**Tests:** 188 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
+**GCS machine since 2026-11-12:** Denel MP release build with the bridge started by Mission
+Planner (launcher plugin, settings in `secrets.env`), verified end to end with the aircraft.
+**Tests:** 189 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
 
 Read `README.md` for day-to-day usage and the config reference, and
 `LINK-TESTING.md` for measured behaviour under latency and loss. This file is
@@ -305,7 +307,12 @@ passes `systemd-analyze verify`) · `requirements.txt` (`pymavlink==2.4.49`,
 ### Outside the package
 
 - `Plugins/DenelMqttBridgeLauncher.cs` — starts the GCS bridge with Mission
-  Planner. **Default OFF**; enable by creating `mqtt_bridge/enabled.txt`.
+  Planner. **Default OFF**; enable by creating `mqtt_bridge/enabled.txt`. It
+  passes no settings on the command line, so on the GCS machine **all** broker
+  settings (host, port, TLS, vehicle id, username, password) go in
+  `mqtt_bridge/secrets.env` (see `secrets.env.example`). Logs:
+  `C:\ProgramData\Denel GCS\denel_mqtt_bridge_launcher.log` and
+  `denel_mqtt_bridge_gcs.log`.
   Self-contained rather than sharing code with `DenelPythonLauncher` (whose
   single-instance `_stopped` flag would orphan one of two children). Probes that
   `paho.mqtt.client` and `pymavlink` actually *import*, not just that python
@@ -434,6 +441,7 @@ Logs: `C:\ProgramData\Denel GCS\denel_mqtt_bridge_gcs.log` and
 | 1d — first run on the XBLink | done 2026-10-28/29: smoke test and aircraft bridge on the Pi; TLS round trip over LTE to Azure |
 | 1e — desk test through Azure | done 2026-11-10: SITL + both bridges + Mission Planner over the TLS broker; found and fixed the Receive Maximum disconnect loop |
 | 1f — bench, real Cube | done 2026-11-11: Cube TELEM2 -> XBLink UART -> LTE -> Azure -> Mission Planner + STM32 panel; bridge runs as a boot service on the XBLink |
+| 1g — GCS machine | done 2026-11-12: release build on the real GCS, bridge auto-started by Mission Planner, end to end with the aircraft. STM32 panel path works; the panel hardware/code itself is still being sorted by its owner |
 | **3 — security (TLS, auth, ACLs)** | **in progress**: client side done; Azure broker with File RBAC done; 2 of 5 negative tests passed |
 | 4 — semantic JSON fan-out | optional, after 3 |
 
@@ -524,6 +532,17 @@ complementary.
   and would double-bind.
 
 ### Known gaps and pre-existing defects (documented, not fixed)
+
+- **paho's wake-up socket pair can lose its read end (root cause unknown).**
+  Seen on the XBLink 2026-11-12: the aircraft bridge stayed connected but every
+  `publish()` raised `BrokenPipeError` after queueing, and the bridge mistook it
+  for a serial fault and reopened the port in a loop, publishing nothing.
+  Mitigated, not explained: `MqttLink._repair_wakeup()` swaps in a fresh pair
+  and counts `mqtt_wakeup_repairs` in the metrics. A non-zero count is a lead:
+  note what happened just before (LTE drop, Cube power-up, clock change).
+  Suspects: an fd closed twice somewhere (serial reopen path) hitting a reused
+  descriptor number. Patched on the XBLink by hand on 2026-11-12 (backup
+  `/root/mqtt_link.py.backup` on the unit).
 
 - **The UAV_ watchdog does not detect a dead MAVLink link.** `state/watchdog.py`
   monitors *thread* liveness and `MavlinkWorker._loop` pets it unconditionally,

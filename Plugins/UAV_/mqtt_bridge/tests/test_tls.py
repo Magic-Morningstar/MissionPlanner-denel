@@ -238,3 +238,43 @@ def test_receive_maximum_check(caplog):
     with caplog.at_level(logging.ERROR, logger="mqtt_bridge.mqtt_link"):
         assert _link(cfg(MAX_INFLIGHT_MESSAGES=20))._check_receive_maximum(_Props(10)) is False
     assert any("Receive Maximum" in r.getMessage() for r in caplog.records)
+
+
+# ---- broken paho wake-up channel (XBLink, 2026-11-12) -------------------
+
+def test_broken_wakeup_channel_is_repaired_not_raised(caplog):
+    """A publish whose wake-up write hits a closed socket pair must not raise.
+
+    Reproduces the real failure: paho writes one byte to _sockpairW after
+    queueing each packet. With the read end closed that raises
+    BrokenPipeError, which used to escape into the reader thread and was
+    mistaken for a flight-controller fault.
+    """
+    pytest.importorskip("paho.mqtt.client")
+    import paho.mqtt.client as pm
+    link = _link(cfg())
+    client = link.client
+    client._sockpairR, client._sockpairW = pm._socketpair_compat()
+    client._sockpairR.close()                    # read end gone, as on the XBLink
+    link._connected.set()
+    # TCP: the first write after the peer closes still "succeeds" and draws an
+    # RST; every write after that raises BrokenPipeError, as seen on the unit.
+    import time
+    client._sockpairW.send(b"\0")
+    time.sleep(0.1)
+
+    def fake_publish(*a, **k):                   # what paho does after queueing
+        client._sockpairW.send(b"\0")
+        raise AssertionError("unreachable")
+    client.publish = fake_publish
+
+    with caplog.at_level(logging.ERROR, logger="mqtt_bridge.mqtt_link"):
+        assert link.publish_frame("t", b"x", qos=0) is True
+    assert link.counters()["mqtt_wakeup_repairs"] == 1
+    assert any("wake-up channel broken" in r.getMessage() for r in caplog.records)
+
+    # The new pair works: a wake-up byte now gets through.
+    client._sockpairW.send(b"\0")
+    import select
+    assert select.select([client._sockpairR], [], [], 1.0)[0]
+    client._sockpairR.close(); client._sockpairW.close()

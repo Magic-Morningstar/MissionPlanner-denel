@@ -76,6 +76,7 @@ class MqttLink:
         self.publish_refused_queue_full = 0
         self.received = 0
         self.callback_errors = 0
+        self.wakeup_repairs = 0
         self.connect_failures = 0
         self._consecutive_connect_failures = 0
 
@@ -340,7 +341,17 @@ class MqttLink:
             # spent in a client's own out-queue or in TCP retransmission.
             props.UserProperty = [(USER_PROP_ORIGINAL_EXPIRY, str(int(expiry_s)))]
 
-        info = self.client.publish(topic, payload, qos=qos, retain=False, properties=props)
+        try:
+            info = self.client.publish(topic, payload, qos=qos, retain=False, properties=props)
+        except OSError as exc:
+            # paho has ALREADY queued the packet when this is raised: the
+            # failure is in the wake-up write that follows (see
+            # _repair_wakeup). Its network thread still sends the packet on its
+            # next pass, within about a second, so this counts as published.
+            # Retrying would send a duplicate.
+            self._repair_wakeup(exc)
+            self.published += 1
+            return True
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             # MQTT_ERR_QUEUE_SIZE means max_queued_messages was hit: the link is
             # down or far too slow for the offered rate. Counted, not raised.
@@ -349,6 +360,49 @@ class MqttLink:
 
         self.published += 1
         return True
+
+    def _repair_wakeup(self, exc):
+        """Replace paho's broken internal wake-up socket pair.
+
+        paho 2.1 wakes its network thread on every publish by writing one byte
+        to a loopback socket pair (_sockpairW -> _sockpairR). If the read end
+        is ever closed underneath it, every publish() raises BrokenPipeError
+        AFTER queueing the packet, and paho only rebuilds the pair in
+        loop_start(), so it stays broken for the life of the process.
+
+        Seen on the XBLink 2026-11-12: the bridge stayed logged in (the broker
+        showed it connected) but published nothing, and the exception was
+        mistaken for a flight-controller fault, reopening the serial port in a
+        loop. Root cause of the closed read end not yet identified.
+
+        The pair is a private attribute of the pinned paho 2.1.0; the network
+        thread rebuilds its select() list from self._sockpairR on every pass,
+        so swapping it in place takes effect on the next pass. The old read end
+        is detach()ed, never closed: its descriptor number may already belong
+        to something else, and closing it would close that instead.
+        """
+        self.wakeup_repairs += 1
+        n = self.wakeup_repairs
+        if n == 1 or n % 100 == 0:
+            logger.error("MQTT publish wake-up channel broken (%s: %s); repairing "
+                         "it (repair #%d). Messages are still sent.",
+                         type(exc).__name__, exc, n)
+        try:
+            old_r = self.client._sockpairR
+            old_w = self.client._sockpairW
+            self.client._sockpairR, self.client._sockpairW = mqtt._socketpair_compat()
+            if old_w is not None:
+                try:
+                    old_w.close()
+                except OSError:
+                    pass
+            if old_r is not None:
+                try:
+                    old_r.detach()
+                except OSError:
+                    pass
+        except Exception:
+            logger.exception("could not repair the MQTT wake-up channel")
 
     def counters(self):
         return {
@@ -360,6 +414,7 @@ class MqttLink:
             "mqtt_refused_offline": self.publish_refused_offline,
             "mqtt_refused_queue_full": self.publish_refused_queue_full,
             "mqtt_callback_errors": self.callback_errors,
+            "mqtt_wakeup_repairs": self.wakeup_repairs,
         }
 
 

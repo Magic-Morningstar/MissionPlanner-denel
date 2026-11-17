@@ -320,7 +320,7 @@ Full docs live beside the code: `mqtt_bridge/README.md` (usage, config, TLS),
 `mqtt_bridge/LINK-TESTING.md` (behaviour under latency and loss),
 `mqtt_bridge/broker/azure/README.md` (secured test broker on Azure).
 
-**Status (2026-11-12):** Phases 1-2 done. Phase 3 in progress: client-side TLS
+**Status (2026-11-17):** Phases 1-2 done. Phase 3 in progress: client-side TLS
 and credentials done (`tls.py`; flags `--tls`, `--tls-ca-file`, `--username`;
 password only from `secrets.env` or `DENEL_MQTT_MQTT_PASSWORD`, never a flag).
 A TLS-only HiveMQ with File RBAC users runs on Azure
@@ -328,7 +328,10 @@ A TLS-only HiveMQ with File RBAC users runs on Azure
 XBStation cloud; own infrastructure (on-site later). The XBLink unit is our
 prototype aircraft computer: the bridge runs there as a boot service
 (`/opt/denel-mqtt`, private `lib/` via `PYTHONPATH`) reading the Cube on the UART
-(`/dev/serial0`, 57600). Bench-verified end to end with a real Cube on 2026-11-11.
+(`/dev/serial0`, 57600). Bench-verified end to end with a real Cube on 2026-11-11,
+and from the real GCS on 2026-11-12, where Mission Planner starts the GCS bridge
+(`DenelMqttBridgeLauncher.cs`, `mqtt_bridge/enabled.txt`, all settings in
+`mqtt_bridge/secrets.env`).
 
 | Port | Owner | Notes |
 |---|---|---|
