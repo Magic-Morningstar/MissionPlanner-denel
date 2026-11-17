@@ -77,6 +77,10 @@ class MqttLink:
         self.received = 0
         self.callback_errors = 0
         self.wakeup_repairs = 0
+        # Why and when the broker last dropped us. The health reporter uses it to
+        # notice "Not authorized" right after its own publish (see aircraft_bridge).
+        self.last_disconnect_reason = None
+        self.last_disconnect_at = None
         self.connect_failures = 0
         self._consecutive_connect_failures = 0
 
@@ -277,6 +281,8 @@ class MqttLink:
     def _cb_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         self._connected.clear()
         self.disconnects += 1
+        self.last_disconnect_reason = str(reason_code)
+        self.last_disconnect_at = time.monotonic()
         logger.warning("MQTT disconnected (%s); paho will retry with backoff "
                        "%d-%ds", reason_code,
                        self.cfg.RECONNECT_MIN_DELAY, self.cfg.RECONNECT_MAX_DELAY)
@@ -360,6 +366,27 @@ class MqttLink:
 
         self.published += 1
         return True
+
+    def publish_status(self, topic, payload, expiry_s=None, retain=True):
+        """Publish a small status message (QOS_STATUS, retained by default).
+
+        Refused while disconnected, like frames. An expiry makes the broker drop
+        a retained message that stops being refreshed, so a dead aircraft's last
+        health report does not look current. Returns True if accepted.
+        """
+        if not self._connected.is_set():
+            return False
+        props = None
+        if expiry_s:
+            props = Properties(PacketTypes.PUBLISH)
+            props.MessageExpiryInterval = int(expiry_s)
+        try:
+            info = self.client.publish(topic, payload, qos=self.cfg.QOS_STATUS,
+                                       retain=retain, properties=props)
+        except OSError as exc:
+            self._repair_wakeup(exc)     # queued anyway; see publish_frame
+            return True
+        return info.rc == mqtt.MQTT_ERR_SUCCESS
 
     def _repair_wakeup(self, exc):
         """Replace paho's broken internal wake-up socket pair.

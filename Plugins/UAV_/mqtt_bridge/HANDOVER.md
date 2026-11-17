@@ -8,7 +8,7 @@ aircraft computer, UART) -> LTE -> Azure -> GCS bridge -> Mission Planner + STM3
 **Direction (2026-11-10):** no XBStation cloud; own infrastructure (Azure for test, on-site later).
 **GCS machine since 2026-11-12:** Denel MP release build with the bridge started by Mission
 Planner (launcher plugin, settings in `secrets.env`), verified end to end with the aircraft.
-**Tests:** 189 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
+**Tests:** 205 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
 
 Read `README.md` for day-to-day usage and the config reference, and
 `LINK-TESTING.md` for measured behaviour under latency and loss. This file is
@@ -214,6 +214,7 @@ ACLs. With `VEHICLE_ID=uav01` and `TOPIC_PREFIX=denel/uav`:
 | `denel/uav/uav01/mavlink/to_vehicle` | GCS to aircraft | 1 | no |
 | `denel/uav/uav01/status/link` | aircraft bridge | 1 | **yes** |
 | `denel/uav/uav01/status/gcs` | GCS bridge | 1 | **yes** |
+| `denel/uav/uav01/status/health` | aircraft bridge, JSON every `HEALTH_INTERVAL` s (30), expires after 3 intervals | 1 | **yes** |
 
 Separate from/to topics are the primary loop prevention; `noLocal=True` on every
 subscription is a second guard.
@@ -268,6 +269,7 @@ tests.
 | File | Purpose |
 |---|---|
 | `framing.py` | **The core.** Byte stream to whole MAVLink frames. `MavlinkFramer.feed()` for streams, `feed_datagram()` for UDP. v1 total = `6+len+2`; v2 = `10+len+2` (+13 when signed); max 280. Counts `bad_bytes`/`bad_events`, never silently drops. |
+| `health.py` | Aircraft health report (since 2026-11-17): stdlib-only probes (LTE address via `ip`, signal/operator via read-only `mmcli -K`, CPU temperature, uptime, NTP sync) and a pure `build_health()` that adds warning codes: `fc_port_closed`, `no_cube_data`, `weak_signal`, `no_lte_address`, `clock_not_synced`, `cpu_hot`, `mqtt_wakeup_repaired`. Never touches the modem other than reading ModemManager. |
 | `topics.py` | `TopicSet`, `parse_mavlink_topic()`, `validate_vehicle_id()` (rejects `#`, `+`, `/`, over 32 chars — the Phase 3 RBAC constraint), `topic_overhead_bytes()`. |
 | `staleness.py` | `age_from_expiry()`, `is_stale()`, `describe_posture()`. Broker-dwell only; documents what it cannot see. |
 | `tls.py` | TLS and credential rules: `tls_config_problems()` (refuse to start), `tls_config_warnings()`, `build_ssl_context()`, `describe_transport()`. Standard library only. |

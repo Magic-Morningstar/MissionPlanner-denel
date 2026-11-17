@@ -8,6 +8,7 @@ multi-aircraft support and per-vehicle access control need no rename later:
     denel/uav/{vehicle_id}/mavlink/to_vehicle     GCS -> aircraft, QoS 1
     denel/uav/{vehicle_id}/status/link            aircraft bridge, retained
     denel/uav/{vehicle_id}/status/gcs             GCS bridge, retained
+    denel/uav/{vehicle_id}/status/health          aircraft bridge, retained JSON
 
 Separate from_vehicle and to_vehicle topics are the primary loop-prevention
 mechanism: a bridge publishes to one and subscribes to the other, never both.
@@ -51,7 +52,7 @@ class TopicSet:
     """The four topics for one vehicle, plus the QoS each carries."""
 
     __slots__ = ("vehicle_id", "prefix", "from_vehicle", "to_vehicle",
-                 "status_link", "status_gcs")
+                 "status_link", "status_gcs", "status_health")
 
     def __init__(self, vehicle_id, prefix=DEFAULT_PREFIX):
         self.vehicle_id = validate_vehicle_id(vehicle_id)
@@ -61,9 +62,11 @@ class TopicSet:
         self.to_vehicle = f"{base}/mavlink/to_vehicle"
         self.status_link = f"{base}/status/link"
         self.status_gcs = f"{base}/status/gcs"
+        self.status_health = f"{base}/status/health"
 
     def all_topics(self):
-        return (self.from_vehicle, self.to_vehicle, self.status_link, self.status_gcs)
+        return (self.from_vehicle, self.to_vehicle, self.status_link,
+                self.status_gcs, self.status_health)
 
     def __repr__(self):
         return f"<TopicSet {self.prefix}/{self.vehicle_id}>"

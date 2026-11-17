@@ -154,6 +154,27 @@ Known issues on the unit, for when it is fully taken over: the Wi-Fi hotspot
 uses the vendor's default password, and the vendor web page at port 80 opens a
 root terminal without a login. Debian 11 is past end of support.
 
+### Aircraft health report (since 2026-11-17)
+
+`status/link` only says online/offline, which is how a unit that was connected
+but sending no Cube data went unnoticed on 2026-11-12. The aircraft bridge now
+also publishes a retained JSON report on `denel/uav/<vid>/status/health` every
+`HEALTH_INTERVAL` seconds (default 30, 0 = off): Cube frames/s, command
+frames/s, LTE address, signal and operator (read-only from ModemManager), CPU
+temperature, clock sync, and warning codes (`no_cube_data`, `weak_signal`, ...;
+see `health.py`). It expires at the broker after 3 intervals, so a stale report
+never looks current. Warnings are also logged when they change.
+
+The aircraft's broker user needs PUBLISH on `.../status/health` (see
+`broker/azure/credentials.xml.template`). Without it HiveMQ disconnects the
+whole client on every report; the bridge detects a "Not authorized" disconnect
+right after a report, switches health reporting off until it restarts, and logs
+an ERROR saying so, so the MAVLink link is never lost to a monitoring feature. To watch it from any PC:
+
+```
+python -m mqtt_bridge.tools.status_watch --broker-host <broker> --tls --username uav01-gcs
+```
+
 ### On the GCS machine (Mission Planner starts the bridge)
 
 Used on the real GCS since 2026-11-12. Install the Denel MP release build (it

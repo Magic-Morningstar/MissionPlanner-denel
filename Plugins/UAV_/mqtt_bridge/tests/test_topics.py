@@ -20,7 +20,8 @@ def test_from_and_to_are_distinct():
     """Separate topics per direction are the primary loop-prevention mechanism."""
     t = TopicSet("uav01")
     assert t.from_vehicle != t.to_vehicle
-    assert len(set(t.all_topics())) == 4
+    assert len(set(t.all_topics())) == 5
+    assert t.status_health == "denel/uav/uav01/status/health"
 
 
 def test_prefix_override_and_trailing_slash():

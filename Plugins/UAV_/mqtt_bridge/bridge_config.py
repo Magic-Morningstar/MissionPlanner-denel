@@ -181,6 +181,17 @@ DEFAULTS = {
     # test. Quiet by design: a line is only emitted when something changed.
     "METRICS_INTERVAL": 10,
 
+    # Health report (aircraft bridge only) --------------------------------
+    # Seconds between retained JSON health messages on .../status/health:
+    # LTE address and signal, Cube data rate, warnings. 0 disables. Each
+    # message expires at the broker after 3 intervals, so a dead aircraft's
+    # last report does not linger as if current. See health.py.
+    "HEALTH_INTERVAL": 30,
+    "HEALTH_LTE_IFACE": "wwan0",
+    # Read signal/operator from ModemManager (mmcli, read-only). Off on
+    # machines without it; it never sends anything to the modem.
+    "HEALTH_READ_MODEM": True,
+
     # Logging --------------------------------------------------------------
     "LOG_LEVEL": "INFO",
     "LOG_DIR": "",            # empty = resolve_log_path() decides
@@ -236,6 +247,9 @@ class BridgeConfig:
     RECONNECT_MIN_DELAY: int
     RECONNECT_MAX_DELAY: int
     METRICS_INTERVAL: int
+    HEALTH_INTERVAL: int
+    HEALTH_LTE_IFACE: str
+    HEALTH_READ_MODEM: bool
     LOG_LEVEL: str
     LOG_DIR: str
     TLS_ENABLED: bool

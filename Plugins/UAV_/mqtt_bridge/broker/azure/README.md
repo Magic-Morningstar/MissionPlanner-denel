@@ -191,3 +191,26 @@ Portal → VM → Network settings → delete `temp-certbot`.
 - Change users/permissions: `sudo nano ~/hivemq/extensions/hivemq-file-rbac-extension/conf/credentials.xml` (hash new passwords with `H` from step 6). Reloaded within 60 s; affects new connections only.
 - Stop when idle (saves credit): portal → VM → **Stop**. Start again before testing. The DNS name stays the same.
 - Certificate expires after 90 days. Renewal needs port 80 open briefly and the keystore rebuilt (steps 3–4), then `sudo docker restart hivemq`. To be automated later.
+
+## Control Center over HTTPS from anywhere (2026-11-17)
+
+`nginx-control-center.conf` puts nginx on 443 in front of the Control Center
+(which stays on the VM's 127.0.0.1:8080): Let's Encrypt TLS, a basic-auth
+password, rate limiting, then the Control Center's own login. Change the
+Control Center login from the default first (config.xml `<control-center><users>`,
+password = SHA-256 of username+password).
+
+```
+sudo apt -y install nginx apache2-utils
+sudo htpasswd -c /etc/nginx/.htpasswd-cc <web-username>
+sudo cp ~/hivemq/nginx-control-center.conf /etc/nginx/sites-available/hivemq-cc
+sudo ln -s /etc/nginx/sites-available/hivemq-cc /etc/nginx/sites-enabled/hivemq-cc
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Portal: TDC-Cloud-nsg -> inbound rule TCP 443 from Any. Then open
+`https://hivemq-broker.southafricanorth.cloudapp.azure.com`.
+
+Certificate renewal (before 2027-01-27) must also `sudo systemctl reload nginx`.
+To withdraw public access: delete the 443 NSG rule (instant).
