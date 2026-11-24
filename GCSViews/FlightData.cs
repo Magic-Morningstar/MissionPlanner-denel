@@ -1966,8 +1966,10 @@ namespace MissionPlanner.GCSViews
         {
             // Custom action handling
             {
-                var customAction = CustomActions[CMB_action.Text];
-                if(customAction!=null)
+                // TryGetValue: CustomActions is empty unless a plugin registers
+                // one, so the indexer threw KeyNotFoundException for every
+                // built-in action. Upstream bug (see #3744).
+                if (CustomActions.TryGetValue(CMB_action.Text, out var customAction) && customAction != null)
                 {
                     try
                     {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Becomes extensions/hivemq-file-rbac-extension/conf/config.xml on the VM. -->
+<extension-configuration>
+    <!-- credentials.xml is re-read this often (seconds). Changes apply to NEW
+         connections only; already-connected clients keep their permissions. -->
+    <credentials-reload-interval>60</credentials-reload-interval>
+    <!-- Salted hashes only. Never PLAIN on a broker reachable from the internet. -->
+    <password-type>HASHED</password-type>
+</extension-configuration>

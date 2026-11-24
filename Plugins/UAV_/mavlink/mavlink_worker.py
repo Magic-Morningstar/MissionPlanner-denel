@@ -1,5 +1,6 @@
 # mavlink/mavlink_worker.py
 
+import errno
 import threading
 import time
 from pymavlink import mavutil
@@ -24,12 +25,18 @@ class MavlinkWorker(ConnectionManager):
         PORT_MAX = 14559
         PORT_RANGE = PORT_MAX - PORT_MIN + 1
 
+        # A serial endpoint ("serial:COM7:115200", "/dev/ttyUSB0") has no port to
+        # walk. Previously this raised ValueError and the worker never connected
+        # at all; now the connection string is simply used as-is and the
+        # port-walking below is skipped.
         parts = self.connection_string.rsplit(":", 1)
         prefix = parts[0]
-        try:  
+        try:
             start_port = int(parts[1])
         except (IndexError, ValueError):
-            raise ValueError(f"Cannot parse port from: {self.connection_string}")
+            logger.info(f"  [{label}] {self.connection_string} has no port to walk; "
+                        f"using it as given.")
+            return self._connect_fixed(label, retry_delay)
 
         current_port = start_port
 
@@ -51,10 +58,39 @@ class MavlinkWorker(ConnectionManager):
                 current_port = next_port
                 time.sleep(0.3)
 
+            except OSError as e:
+                # A UDP bind clash raises EADDRINUSE here, NOT ConnectionRefused,
+                # so it never reached the port-walk above and this retried the
+                # same taken port forever with a vague message. Name it.
+                if getattr(e, "errno", None) in (errno.EADDRINUSE, 10048):
+                    logger.error(
+                        f"  [{label}] {conn_str} is already in use by another "
+                        f"process. Mission Planner's AutoConnect binds 14550 at "
+                        f"startup and never releases it; 14551 is reserved for "
+                        f"this bridge. Retrying in {retry_delay}s, but it will "
+                        f"not free up on its own.")
+                else:
+                    logger.warning(f"  [{label}] {conn_str} not available "
+                                   f"({type(e).__name__}: {e}) — waiting {retry_delay}s...")
+                time.sleep(retry_delay)
+
             except Exception as e:
                 logger.warning(f"  [{label}] {conn_str} not available ({type(e).__name__}) — waiting {retry_delay}s...")
                 time.sleep(retry_delay)
 
+        raise InterruptedError("Connection cancelled.")
+
+    def _connect_fixed(self, label, retry_delay=2):
+        """Retry one connection string unchanged, for endpoints with no port."""
+        while not self.is_cancelled():
+            try:
+                conn = mavutil.mavlink_connection(self.connection_string, wait_ready=True)
+                logger.info(f"  [{label}] connected on {self.connection_string}.")
+                return conn
+            except Exception as e:
+                logger.warning(f"  [{label}] {self.connection_string} not available "
+                               f"({type(e).__name__}: {e}) — waiting {retry_delay}s...")
+                time.sleep(retry_delay)
         raise InterruptedError("Connection cancelled.")
 
     def _heartbeat(self, connection, timeout=10, retry_delay=5):
@@ -79,7 +115,7 @@ class MavlinkWorker(ConnectionManager):
 
         raise InterruptedError("Connection cancelled while waiting for heartbeat.")
 
-    def send_ping(connection, target_system=1, target_component=1):
+    def send_ping(self, connection, target_system=1, target_component=1):
         """
         Sends a MAVLink PING request to a target system (e.g., Herelink/Autopilot).
         """

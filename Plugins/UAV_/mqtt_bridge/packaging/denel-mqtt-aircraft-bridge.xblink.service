@@ -1,0 +1,55 @@
+# Aircraft-side bridge on the XBLink unit, used as our own prototype
+# companion computer. Bench-verified 2026-11-11 with the real Cube Orange+.
+#
+# - The Cube's TELEM2 is wired to the XBLink's Raspberry Pi UART:
+#   /dev/serial0 -> /dev/ttyS0, 57600 baud (the Cube's SERIAL2_BAUD).
+# - The vendor's XBFirm (a snap) is left running, because it is what brings up
+#   the LTE connection (stopping it took wwan0 down). It has been told to leave
+#   the UART alone: in /var/snap/xbfirm/common/general.ini both serial_port
+#   lines were changed from ttyS0 to ttyNONE. Original: /root/general.ini.backup.
+#   Edit that file only with XBFirm stopped (snap stop xbfirm); it rewrites the
+#   file on shutdown.
+# - Fallback without touching XBFirm: Cube on USB, --mavlink /dev/ttyACM0,115200.
+# - Code in /opt/denel-mqtt, Python libraries in /opt/denel-mqtt/lib (private,
+#   never installed system-wide).
+# - Username and password come from /opt/denel-mqtt/mqtt_bridge/secrets.env
+#   (MQTT_USERNAME / MQTT_PASSWORD, mode 600). Nothing secret in this file.
+# - Starts at boot and waits for nothing: if LTE, the clock (NTP, needed for
+#   TLS) or the Cube is not ready yet, the bridge keeps retrying on its own.
+#   Survives a power cut (tested 2026-11-10).
+#
+# Install:
+#   cp denel-mqtt-aircraft-bridge.xblink.service /etc/systemd/system/denel-mqtt-aircraft-bridge.service
+#   systemctl daemon-reload
+#   systemctl enable --now denel-mqtt-aircraft-bridge
+#   journalctl -u denel-mqtt-aircraft-bridge -f
+# Remove:
+#   systemctl disable --now denel-mqtt-aircraft-bridge
+#   rm /etc/systemd/system/denel-mqtt-aircraft-bridge.service && systemctl daemon-reload
+
+[Unit]
+Description=Denel MAVLink-over-MQTT aircraft bridge (XBLink, Cube on UART)
+After=network-online.target
+Wants=network-online.target
+# Never give up restarting: a backup comms link that stays dead is worse
+# than one that keeps trying.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/denel-mqtt
+Environment=PYTHONPATH=/opt/denel-mqtt/lib
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -u -m mqtt_bridge.aircraft_bridge \
+    --mavlink /dev/serial0,57600 \
+    --broker-host hivemq-broker.southafricanorth.cloudapp.azure.com \
+    --broker-port 8883 --tls \
+    --vehicle-id uav01
+# Never --stdin-shutdown under systemd: stdin is /dev/null and the bridge
+# would exit immediately.
+StandardInput=null
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
