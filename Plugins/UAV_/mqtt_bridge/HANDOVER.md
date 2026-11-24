@@ -8,7 +8,7 @@ aircraft computer, UART) -> LTE -> Azure -> GCS bridge -> Mission Planner + STM3
 **Direction (2026-11-10):** no XBStation cloud; own infrastructure (Azure for test, on-site later).
 **GCS machine since 2026-11-12:** Denel MP release build with the bridge started by Mission
 Planner (launcher plugin, settings in `secrets.env`), verified end to end with the aircraft.
-**Tests:** 205 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
+**Tests:** 218 pass, 1 skipped on Linux (`cd Plugins/UAV_ && python -m pytest`)
 
 Read `README.md` for day-to-day usage and the config reference, and
 `LINK-TESTING.md` for measured behaviour under latency and loss. This file is
@@ -303,7 +303,7 @@ tests.
 passes `systemd-analyze verify`) · `requirements.txt` (`pymavlink==2.4.49`,
 `paho-mqtt==2.1.0` — deliberately no PySide6, the aircraft is headless) ·
 `requirements-dev.txt` (`pytest==8.4.2`) · `secrets.env.example` ·
-`README.md` · `LINK-TESTING.md` · `tests/` (9 files, 187 tests) ·
+`README.md` · `LINK-TESTING.md` · `tests/` (11 test files, 219 tests) · `led.py` (bench status LED on the XBLink's SYS LED; patterns in README) ·
 `broker/azure/` (HiveMQ config, File RBAC template, VM runbook for the secured test broker).
 
 ### Outside the package
@@ -337,7 +337,7 @@ passes `systemd-analyze verify`) · `requirements.txt` (`pymavlink==2.4.49`,
 
 ```
 cd C:\MissionPlanner-denel\Plugins\UAV_
-python -m pytest            # 186 pass (1 Windows-only skip elsewhere), about 6 s
+python -m pytest            # 218 pass (1 Windows-only skip elsewhere), about 6 s
 ```
 
 `pytest.ini` lives at `Plugins/UAV_` so rootdir does not walk `ExtLibs/`.
@@ -444,6 +444,7 @@ Logs: `C:\ProgramData\Denel GCS\denel_mqtt_bridge_gcs.log` and
 | 1e — desk test through Azure | done 2026-11-10: SITL + both bridges + Mission Planner over the TLS broker; found and fixed the Receive Maximum disconnect loop |
 | 1f — bench, real Cube | done 2026-11-11: Cube TELEM2 -> XBLink UART -> LTE -> Azure -> Mission Planner + STM32 panel; bridge runs as a boot service on the XBLink |
 | 1g — GCS machine | done 2026-11-12: release build on the real GCS, bridge auto-started by Mission Planner, end to end with the aircraft. STM32 panel path works; the panel hardware/code itself is still being sorted by its owner |
+| 1h — bench status LED | code done 2026-11-24: SYS LED blinks with Cube/broker state (README, "Bench status LED"); to be installed and checked on the XBLink |
 | **3 — security (TLS, auth, ACLs)** | **in progress**: client side done; Azure broker with File RBAC done; 2 of 5 negative tests passed |
 | 4 — semantic JSON fan-out | optional, after 3 |
 

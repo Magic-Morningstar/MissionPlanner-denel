@@ -37,6 +37,7 @@ print(",".join(leaked))
     "mqtt_bridge.bridge_config",
     "mqtt_bridge.tls",
     "mqtt_bridge.health",
+    "mqtt_bridge.led",
     "mqtt_bridge.mqtt_link",
     "mqtt_bridge.mavlink_endpoint",
     "mqtt_bridge.bridge_core",
@@ -64,7 +65,7 @@ def test_pure_modules_import_without_paho_or_pymavlink():
         "for name in ('paho', 'pymavlink'):\n"
         "    sys.modules[name] = None\n"   # any import of these will now fail
         "import mqtt_bridge.framing, mqtt_bridge.topics, mqtt_bridge.bridge_config\n"
-        "import mqtt_bridge.tls, mqtt_bridge.health\n"
+        "import mqtt_bridge.tls, mqtt_bridge.health, mqtt_bridge.led\n"
         "print('ok')\n"
     )
     result = subprocess.run([sys.executable, "-c", probe], cwd=str(UAV_ROOT),

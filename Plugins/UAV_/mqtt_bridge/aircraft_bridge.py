@@ -28,6 +28,7 @@ if __package__ in (None, ""):
 from mqtt_bridge import cli  # noqa: E402
 from mqtt_bridge.bridge_core import BridgeBase  # noqa: E402
 from mqtt_bridge.health import build_health, probe_system  # noqa: E402
+from mqtt_bridge.led import SysfsLed, run_status_led  # noqa: E402
 from mqtt_bridge.mavlink_endpoint import MavutilEndpoint  # noqa: E402
 from mqtt_bridge.mqtt_link import MqttLink  # noqa: E402
 from mqtt_bridge.topics import TopicSet  # noqa: E402
@@ -77,6 +78,18 @@ class AircraftBridge(BridgeBase):
         super().start()
         if self.cfg.HEALTH_INTERVAL > 0:
             self._spawn("Health", self._health_loop)
+        if self.cfg.STATUS_LED:
+            self._spawn("StatusLed", self._status_led_loop)
+
+    def _status_led_loop(self):
+        """Blink the on-board LED with the link state (see led.py)."""
+        try:
+            run_status_led(
+                SysfsLed(self.cfg.STATUS_LED), self._stop,
+                frame_count=lambda: self._out_framer.counters()["frames"],
+                broker_up=lambda: self.mqtt.connected)
+        except Exception:
+            logger.exception("status LED stopped (the link is unaffected)")
 
     def _health_snapshot(self):
         return {

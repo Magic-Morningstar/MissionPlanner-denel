@@ -192,6 +192,11 @@ DEFAULTS = {
     # machines without it; it never sends anything to the modem.
     "HEALTH_READ_MODEM": True,
 
+    # Status LED (aircraft bridge only). A /sys/class/leds/<name> directory to
+    # blink with the link state; empty = off. On the XBLink the small green
+    # "SYS" LED is /sys/class/leds/ACT. Patterns are listed in led.py.
+    "STATUS_LED": "",
+
     # Logging --------------------------------------------------------------
     "LOG_LEVEL": "INFO",
     "LOG_DIR": "",            # empty = resolve_log_path() decides
@@ -250,6 +255,7 @@ class BridgeConfig:
     HEALTH_INTERVAL: int
     HEALTH_LTE_IFACE: str
     HEALTH_READ_MODEM: bool
+    STATUS_LED: str
     LOG_LEVEL: str
     LOG_DIR: str
     TLS_ENABLED: bool

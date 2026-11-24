@@ -175,6 +175,33 @@ an ERROR saying so, so the MAVLink link is never lost to a monitoring feature. T
 python -m mqtt_bridge.tools.status_watch --broker-host <broker> --tls --username uav01-gcs
 ```
 
+### Bench status LED (since 2026-11-24)
+
+The XBLink has no screen, so the aircraft bridge blinks the small green **SYS**
+LED (`/sys/class/leds/ACT`) with what it sees. Read it at the bench with no
+laptop:
+
+| SYS LED | Meaning | Check |
+|---|---|---|
+| Slow even blink (1 s on, 1 s off) | All good: Cube data in, broker connected | — |
+| Double flash, pause | Bridge running, **no data from the Cube** | Cube power, UART wiring (TELEM2), baud 57600 |
+| Fast flicker | Cube data in, **broker not connected** | LTE signal, SIM, Azure VM running |
+| Stuck on or stuck off | Bridge frozen | Reboot the XBLink |
+| Irregular flicker (its normal storage flicker) | Bridge not running (just booted, or restarting) | Wait ~30 s after power-up; if it stays, reboot |
+
+The other LEDs are not ours: the big red LED is driven by the LTE modem (blinks
+when it has a connection) and Linux cannot control it; the red Wi-Fi LED is
+not reachable from software either (tested 2026-11-24).
+
+Set by `DENEL_MQTT_STATUS_LED=/sys/class/leds/ACT` in the XBLink service file;
+empty (the default) means off, so the GCS side and other hosts never touch an
+LED. "No Cube data" wins over "no broker", because the Cube is the first thing
+to fix at the bench. The bridge makes every blink itself, so a frozen bridge
+freezes the LED rather than showing "all good". A failed LED write is logged
+once and the LED is left alone; it never affects the link. Known gap: a link
+that is "connected" but not delivering (the 2026-11-12 wake-up stall) still
+shows a slow blink; the health report is the check for that.
+
 ### On the GCS machine (Mission Planner starts the bridge)
 
 Used on the real GCS since 2026-11-12. Install the Denel MP release build (it

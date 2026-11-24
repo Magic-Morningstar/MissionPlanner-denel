@@ -17,6 +17,10 @@
 # - Starts at boot and waits for nothing: if LTE, the clock (NTP, needed for
 #   TLS) or the Cube is not ready yet, the bridge keeps retrying on its own.
 #   Survives a power cut (tested 2026-11-10).
+# - Blinks the small green "SYS" LED (/sys/class/leds/ACT) with the link state,
+#   so the bench needs no laptop. Patterns are in led.py and README.md. When
+#   the bridge stops, ExecStopPost hands the LED back to its normal storage
+#   flicker. Remove the STATUS_LED line to switch this off.
 #
 # Install:
 #   cp denel-mqtt-aircraft-bridge.xblink.service /etc/systemd/system/denel-mqtt-aircraft-bridge.service
@@ -40,6 +44,7 @@ Type=simple
 WorkingDirectory=/opt/denel-mqtt
 Environment=PYTHONPATH=/opt/denel-mqtt/lib
 Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=DENEL_MQTT_STATUS_LED=/sys/class/leds/ACT
 ExecStart=/usr/bin/python3 -u -m mqtt_bridge.aircraft_bridge \
     --mavlink /dev/serial0,57600 \
     --broker-host hivemq-broker.southafricanorth.cloudapp.azure.com \
@@ -48,6 +53,8 @@ ExecStart=/usr/bin/python3 -u -m mqtt_bridge.aircraft_bridge \
 # Never --stdin-shutdown under systemd: stdin is /dev/null and the bridge
 # would exit immediately.
 StandardInput=null
+# Runs after every stop, crash included; "-" means a failure here is ignored.
+ExecStopPost=-/bin/sh -c 'echo mmc0 > /sys/class/leds/ACT/trigger'
 Restart=always
 RestartSec=5
 
